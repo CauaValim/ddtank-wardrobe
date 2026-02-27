@@ -2,24 +2,39 @@ import * as XLSX from "xlsx";
 import JSZip from "jszip";
 import type { GameItem } from "@/types/item";
 
-export async function parseJson(file: File): Promise<GameItem[]> {
-  const text = await file.text();
-  const data = JSON.parse(text);
-  const rows: Record<string, unknown>[] = Array.isArray(data) ? data : [];
+function findField(row: Record<string, unknown>, ...keys: string[]): unknown {
+  for (const k of keys) {
+    if (row[k] != null) return row[k];
+  }
+  return undefined;
+}
 
+const ID_KEYS = ["ID", "id", "Id", "iD"];
+const NAME_KEYS = ["Nome", "nome", "name", "Name"];
+
+function parseRows(rows: Record<string, unknown>[]): GameItem[] {
   return rows
-    .filter((row) => row["ID"] != null && row["Nome"] != null)
+    .filter((row) => findField(row, ...ID_KEYS) != null)
     .map((row) => {
-      const id = String(row["ID"]);
-      const name = String(row["Nome"]);
+      const id = String(findField(row, ...ID_KEYS));
+      const rawName = findField(row, ...NAME_KEYS);
+      const name = rawName != null ? String(rawName) : `Item #${id}`;
+      const skipKeys = new Set([...ID_KEYS, ...NAME_KEYS]);
       const attributes: Record<string, string> = {};
       Object.entries(row).forEach(([key, val]) => {
-        if (key !== "ID" && key !== "Nome" && val != null) {
+        if (!skipKeys.has(key) && val != null && String(val).length < 200) {
           attributes[key] = String(val);
         }
       });
       return { id, name, attributes };
     });
+}
+
+export async function parseJson(file: File): Promise<GameItem[]> {
+  const text = await file.text();
+  const data = JSON.parse(text);
+  const rows: Record<string, unknown>[] = Array.isArray(data) ? data : [];
+  return parseRows(rows);
 }
 
 export async function parseExcel(file: File): Promise<GameItem[]> {
@@ -28,19 +43,7 @@ export async function parseExcel(file: File): Promise<GameItem[]> {
   const sheet = wb.Sheets[wb.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet);
 
-  return rows
-    .filter((row) => row["ID"] != null && row["Nome"] != null)
-    .map((row) => {
-      const id = String(row["ID"]);
-      const name = String(row["Nome"]);
-      const attributes: Record<string, string> = {};
-      Object.entries(row).forEach(([key, val]) => {
-        if (key !== "ID" && key !== "Nome" && val != null) {
-          attributes[key] = String(val);
-        }
-      });
-      return { id, name, attributes };
-    });
+  return parseRows(rows);
 }
 
 export async function parseZipImages(
