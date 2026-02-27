@@ -10,7 +10,7 @@ interface ItemCardProps {
   categories?: Category[];
   selectionMode?: boolean;
   isSelected?: boolean;
-  onToggleSelect?: (item: GameItem) => void;
+  onToggleSelect?: (item: GameItem, shiftKey?: boolean) => void;
 }
 
 export const ItemCard = memo(function ItemCard({
@@ -22,9 +22,9 @@ export const ItemCard = memo(function ItemCard({
   isSelected,
   onToggleSelect,
 }: ItemCardProps) {
-  const handleClick = () => {
+  const handleClick = (e: React.MouseEvent) => {
     if (selectionMode && onToggleSelect) {
-      onToggleSelect(item);
+      onToggleSelect(item, e.shiftKey);
     } else {
       onClick(item);
     }
