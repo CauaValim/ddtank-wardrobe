@@ -1,5 +1,5 @@
-import { useState, useMemo, useCallback } from "react";
-import { Search, Package, Gamepad2, MousePointerClick } from "lucide-react";
+import { useState, useMemo, useCallback, useRef } from "react";
+import { Search, Package, Gamepad2, MousePointerClick, CheckSquare } from "lucide-react";
 import { useItemStore } from "@/hooks/useItemStore";
 import { useCategories } from "@/hooks/useCategories";
 import { FileImporter } from "@/components/FileImporter";
@@ -40,29 +40,6 @@ const Index = () => {
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  const toggleSelect = useCallback((item: GameItem) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(item.id)) {
-        next.delete(item.id);
-      } else {
-        next.add(item.id);
-      }
-      return next;
-    });
-  }, []);
-
-  const clearSelection = useCallback(() => {
-    setSelectedIds(new Set());
-    setSelectionMode(false);
-  }, []);
-
-  const handleBulkAssign = useCallback(async (categoryId: string) => {
-    const ids = Array.from(selectedIds);
-    await Promise.all(ids.map((id) => assignItem(Number(id), categoryId)));
-    clearSelection();
-  }, [selectedIds, assignItem, clearSelection]);
-
   // Get unique types from items
   const itemTypes = useMemo(() => {
     const types = new Map<number, string>();
@@ -89,6 +66,61 @@ const Index = () => {
     }
     return result;
   }, [items, selectedType, selectedCategory, itemCategoryMap]);
+
+  const lastSelectedIndex = useRef<number | null>(null);
+
+  const toggleSelect = useCallback((item: GameItem, shiftKey?: boolean) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (shiftKey && lastSelectedIndex.current != null) {
+        const currentIndex = filteredItems.findIndex((i) => i.id === item.id);
+        if (currentIndex >= 0) {
+          const start = Math.min(lastSelectedIndex.current, currentIndex);
+          const end = Math.max(lastSelectedIndex.current, currentIndex);
+          for (let i = start; i <= end; i++) {
+            next.add(filteredItems[i].id);
+          }
+          return next;
+        }
+      }
+      if (next.has(item.id)) {
+        next.delete(item.id);
+      } else {
+        next.add(item.id);
+      }
+      return next;
+    });
+    const idx = filteredItems.findIndex((i) => i.id === item.id);
+    if (idx >= 0) lastSelectedIndex.current = idx;
+  }, [filteredItems]);
+
+  const selectAllVisible = useCallback(() => {
+    setSelectedIds(new Set(filteredItems.map((i) => i.id)));
+    setSelectionMode(true);
+  }, [filteredItems]);
+
+  const selectAllOfType = useCallback((type: number) => {
+    const ids = filteredItems
+      .filter((item) => Number(item.attributes.type) === type)
+      .map((i) => i.id);
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => next.add(id));
+      return next;
+    });
+    setSelectionMode(true);
+  }, [filteredItems]);
+
+  const clearSelection = useCallback(() => {
+    setSelectedIds(new Set());
+    setSelectionMode(false);
+  }, []);
+
+  const handleBulkAssign = useCallback(async (categoryId: string) => {
+    const ids = Array.from(selectedIds);
+    await Promise.all(ids.map((id) => assignItem(Number(id), categoryId)));
+    clearSelection();
+  }, [selectedIds, assignItem, clearSelection]);
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -124,6 +156,15 @@ const Index = () => {
               <MousePointerClick className="h-3.5 w-3.5" />
               {selectionMode ? "Selecionando" : "Selecionar"}
             </button>
+            {selectionMode && (
+              <button
+                onClick={selectAllVisible}
+                className="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-muted transition-all"
+              >
+                <CheckSquare className="h-3.5 w-3.5" />
+                Todos ({filteredItems.length})
+              </button>
+            )}
             <FileImporter onItemsLoaded={addItems} onImagesLoaded={addImages} />
           </div>
         </div>
@@ -169,17 +210,27 @@ const Index = () => {
                 Todos
               </button>
               {itemTypes.map(([type, label]) => (
-                <button
-                  key={type}
-                  onClick={() => setSelectedType(selectedType === type ? null : type)}
-                  className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${
-                    selectedType === type
-                      ? "bg-accent text-accent-foreground"
-                      : "border border-border bg-secondary text-secondary-foreground hover:bg-muted"
-                  }`}
-                >
-                  {label}
-                </button>
+                <div key={type} className="flex items-center gap-0.5">
+                  <button
+                    onClick={() => setSelectedType(selectedType === type ? null : type)}
+                    className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${
+                      selectedType === type
+                        ? "bg-accent text-accent-foreground"
+                        : "border border-border bg-secondary text-secondary-foreground hover:bg-muted"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                  {selectionMode && (
+                    <button
+                      onClick={() => selectAllOfType(type)}
+                      className="rounded-full p-1 text-muted-foreground hover:text-primary hover:bg-muted transition-all"
+                      title={`Selecionar todos "${label}"`}
+                    >
+                      <CheckSquare className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
               ))}
             </div>
           </div>
