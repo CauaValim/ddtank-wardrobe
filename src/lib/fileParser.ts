@@ -32,7 +32,9 @@ function parseRows(rows: Record<string, unknown>[]): GameItem[] {
 
 export async function parseJson(file: File): Promise<GameItem[]> {
   const text = await file.text();
-  const data = JSON.parse(text);
+  // Replace NaN (invalid JSON) with null before parsing
+  const sanitized = text.replace(/\bNaN\b/g, "null");
+  const data = JSON.parse(sanitized);
   const rows: Record<string, unknown>[] = Array.isArray(data) ? data : [];
   return parseRows(rows);
 }
