@@ -1,11 +1,12 @@
-import { useState, useMemo } from "react";
-import { Search, Package, Gamepad2 } from "lucide-react";
+import { useState, useMemo, useCallback } from "react";
+import { Search, Package, Gamepad2, MousePointerClick } from "lucide-react";
 import { useItemStore } from "@/hooks/useItemStore";
 import { useCategories } from "@/hooks/useCategories";
 import { FileImporter } from "@/components/FileImporter";
 import { ItemCard } from "@/components/ItemCard";
 import { ItemDetailModal } from "@/components/ItemDetailModal";
 import { CategoryManager } from "@/components/CategoryManager";
+import { BulkCategoryAssigner } from "@/components/BulkCategoryAssigner";
 import { getTypeName } from "@/lib/itemTypes";
 import type { GameItem } from "@/types/item";
 
@@ -18,6 +19,7 @@ const Index = () => {
     addItems,
     addImages,
     getItemImage,
+    loading,
   } = useItemStore();
 
   const {
@@ -33,6 +35,33 @@ const Index = () => {
   const [selectedItem, setSelectedItem] = useState<GameItem | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<number | null>(null);
+
+  // Multi-select state
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const toggleSelect = useCallback((item: GameItem) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(item.id)) {
+        next.delete(item.id);
+      } else {
+        next.add(item.id);
+      }
+      return next;
+    });
+  }, []);
+
+  const clearSelection = useCallback(() => {
+    setSelectedIds(new Set());
+    setSelectionMode(false);
+  }, []);
+
+  const handleBulkAssign = useCallback(async (categoryId: string) => {
+    const ids = Array.from(selectedIds);
+    await Promise.all(ids.map((id) => assignItem(Number(id), categoryId)));
+    clearSelection();
+  }, [selectedIds, assignItem, clearSelection]);
 
   // Get unique types from items
   const itemTypes = useMemo(() => {
@@ -80,7 +109,23 @@ const Index = () => {
             </div>
           </div>
 
-          <FileImporter onItemsLoaded={addItems} onImagesLoaded={addImages} />
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                setSelectionMode(!selectionMode);
+                if (selectionMode) setSelectedIds(new Set());
+              }}
+              className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-all ${
+                selectionMode
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-secondary text-secondary-foreground hover:bg-muted"
+              }`}
+            >
+              <MousePointerClick className="h-3.5 w-3.5" />
+              {selectionMode ? "Selecionando" : "Selecionar"}
+            </button>
+            <FileImporter onItemsLoaded={addItems} onImagesLoaded={addImages} />
+          </div>
         </div>
       </header>
 
@@ -152,7 +197,11 @@ const Index = () => {
 
       {/* Content */}
       <main className="mx-auto w-full max-w-7xl flex-1 px-4 pb-8 sm:px-6">
-        {totalCount === 0 ? (
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-32 text-center">
+            <p className="text-sm text-muted-foreground">Carregando itens...</p>
+          </div>
+        ) : totalCount === 0 ? (
           <div className="flex flex-col items-center justify-center py-32 text-center">
             <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl border border-border bg-secondary">
               <Package className="h-8 w-8 text-muted-foreground/50" />
@@ -180,11 +229,22 @@ const Index = () => {
                 imageUrl={getItemImage(item.id)}
                 onClick={setSelectedItem}
                 categories={getItemCategories(Number(item.id))}
+                selectionMode={selectionMode}
+                isSelected={selectedIds.has(item.id)}
+                onToggleSelect={toggleSelect}
               />
             ))}
           </div>
         )}
       </main>
+
+      {/* Bulk Category Assigner */}
+      <BulkCategoryAssigner
+        selectedCount={selectedIds.size}
+        allCategories={categories}
+        onBulkAssign={handleBulkAssign}
+        onClearSelection={clearSelection}
+      />
 
       {/* Detail Modal */}
       <ItemDetailModal
