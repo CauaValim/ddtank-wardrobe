@@ -180,6 +180,25 @@ export function useItemStore() {
     await Promise.all(uploadPromises);
   };
 
+  const updateItemType = async (itemIds: string[], newType: number) => {
+    // Update local state
+    setItems((prev) =>
+      prev.map((item) =>
+        itemIds.includes(item.id)
+          ? { ...item, attributes: { ...item.attributes, type: String(newType) } }
+          : item
+      )
+    );
+
+    // Persist to Supabase
+    const numericIds = itemIds.map(Number);
+    const batchSize = 500;
+    for (let i = 0; i < numericIds.length; i += batchSize) {
+      const batch = numericIds.slice(i, i + batchSize);
+      await supabase.from("items").update({ type: newType }).in("id", batch);
+    }
+  };
+
   const filteredItems = useMemo(() => {
     let result = items;
     if (searchQuery.trim()) {
@@ -193,7 +212,7 @@ export function useItemStore() {
     return result;
   }, [items, searchQuery]);
 
-  const getItemImage = (id: string) => images.get(id);
+  const getItemImage = (id: string) => images.get(id) ?? "";
 
   return {
     items: filteredItems,
@@ -204,5 +223,6 @@ export function useItemStore() {
     addImages,
     getItemImage,
     loading,
+    updateItemType,
   };
 }
