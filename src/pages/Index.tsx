@@ -1,9 +1,11 @@
 import { useState } from "react";
-import { Search, Package, Gamepad2, Tag } from "lucide-react";
+import { Search, Package, Gamepad2 } from "lucide-react";
 import { useItemStore } from "@/hooks/useItemStore";
+import { useCategories } from "@/hooks/useCategories";
 import { FileImporter } from "@/components/FileImporter";
 import { ItemCard } from "@/components/ItemCard";
 import { ItemDetailModal } from "@/components/ItemDetailModal";
+import { CategoryManager } from "@/components/CategoryManager";
 import type { GameItem } from "@/types/item";
 
 const Index = () => {
@@ -12,15 +14,31 @@ const Index = () => {
     totalCount,
     searchQuery,
     setSearchQuery,
-    selectedCategory,
-    setSelectedCategory,
-    categories,
     addItems,
     addImages,
     getItemImage,
   } = useItemStore();
 
+  const {
+    categories,
+    addCategory,
+    deleteCategory,
+    assignItem,
+    unassignItem,
+    getItemCategories,
+    itemCategoryMap,
+  } = useCategories();
+
   const [selectedItem, setSelectedItem] = useState<GameItem | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+
+  // Filter items by selected category
+  const filteredItems = selectedCategory
+    ? items.filter((item) => {
+        const catIds = itemCategoryMap.get(Number(item.id)) ?? [];
+        return catIds.includes(selectedCategory);
+      })
+    : items;
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -60,42 +78,21 @@ const Index = () => {
           </div>
           {totalCount > 0 && (
             <span className="text-sm text-muted-foreground">
-              {items.length === totalCount
+              {filteredItems.length === totalCount
                 ? `${totalCount} itens`
-                : `${items.length} de ${totalCount} itens`}
+                : `${filteredItems.length} de ${totalCount} itens`}
             </span>
           )}
         </div>
 
         {/* Category Filter */}
-        {categories.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            <button
-              onClick={() => setSelectedCategory(null)}
-              className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
-                selectedCategory === null
-                  ? "bg-primary text-primary-foreground"
-                  : "border border-border bg-secondary text-secondary-foreground hover:bg-muted"
-              }`}
-            >
-              <Tag className="h-3 w-3" />
-              Todos
-            </button>
-            {categories.map((cat) => (
-              <button
-                key={cat}
-                onClick={() => setSelectedCategory(selectedCategory === cat ? null : cat)}
-                className={`rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
-                  selectedCategory === cat
-                    ? "bg-primary text-primary-foreground"
-                    : "border border-border bg-secondary text-secondary-foreground hover:bg-muted"
-                }`}
-              >
-                {cat}
-              </button>
-            ))}
-          </div>
-        )}
+        <CategoryManager
+          categories={categories}
+          selectedCategory={selectedCategory}
+          onSelectCategory={setSelectedCategory}
+          onAddCategory={addCategory}
+          onDeleteCategory={deleteCategory}
+        />
       </div>
 
       {/* Content */}
@@ -113,21 +110,22 @@ const Index = () => {
               <span className="font-mono text-primary">Nome</span>, e opcionalmente um .zip com imagens.
             </p>
           </div>
-        ) : items.length === 0 ? (
+        ) : filteredItems.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-32 text-center">
             <Search className="mb-4 h-10 w-10 text-muted-foreground/40" />
             <p className="text-sm text-muted-foreground">
-              Nenhum resultado para "{searchQuery}"
+              Nenhum resultado encontrado
             </p>
           </div>
         ) : (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-            {items.map((item) => (
+            {filteredItems.map((item) => (
               <ItemCard
                 key={item.id}
                 item={item}
                 imageUrl={getItemImage(item.id)}
                 onClick={setSelectedItem}
+                categories={getItemCategories(Number(item.id))}
               />
             ))}
           </div>
@@ -140,6 +138,10 @@ const Index = () => {
         imageUrl={selectedItem ? getItemImage(selectedItem.id) : undefined}
         open={!!selectedItem}
         onClose={() => setSelectedItem(null)}
+        allCategories={categories}
+        assignedCategories={selectedItem ? getItemCategories(Number(selectedItem.id)) : []}
+        onAssign={assignItem}
+        onUnassign={unassignItem}
       />
     </div>
   );
