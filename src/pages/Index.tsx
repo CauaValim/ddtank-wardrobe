@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Search, Package, Gamepad2 } from "lucide-react";
 import { useItemStore } from "@/hooks/useItemStore";
 import { useCategories } from "@/hooks/useCategories";
@@ -6,6 +6,7 @@ import { FileImporter } from "@/components/FileImporter";
 import { ItemCard } from "@/components/ItemCard";
 import { ItemDetailModal } from "@/components/ItemDetailModal";
 import { CategoryManager } from "@/components/CategoryManager";
+import { getTypeName } from "@/lib/itemTypes";
 import type { GameItem } from "@/types/item";
 
 const Index = () => {
@@ -31,14 +32,34 @@ const Index = () => {
 
   const [selectedItem, setSelectedItem] = useState<GameItem | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedType, setSelectedType] = useState<number | null>(null);
 
-  // Filter items by selected category
-  const filteredItems = selectedCategory
-    ? items.filter((item) => {
+  // Get unique types from items
+  const itemTypes = useMemo(() => {
+    const types = new Map<number, string>();
+    items.forEach((item) => {
+      const t = item.attributes.type != null ? Number(item.attributes.type) : null;
+      if (t != null && !isNaN(t)) {
+        types.set(t, getTypeName(t));
+      }
+    });
+    return Array.from(types.entries()).sort((a, b) => a[0] - b[0]);
+  }, [items]);
+
+  // Filter items by type and category
+  const filteredItems = useMemo(() => {
+    let result = items;
+    if (selectedType != null) {
+      result = result.filter((item) => Number(item.attributes.type) === selectedType);
+    }
+    if (selectedCategory) {
+      result = result.filter((item) => {
         const catIds = itemCategoryMap.get(Number(item.id)) ?? [];
         return catIds.includes(selectedCategory);
-      })
-    : items;
+      });
+    }
+    return result;
+  }, [items, selectedType, selectedCategory, itemCategoryMap]);
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -63,7 +84,7 @@ const Index = () => {
         </div>
       </header>
 
-      {/* Search, Categories & Stats */}
+      {/* Search, Types, Categories & Stats */}
       <div className="mx-auto w-full max-w-7xl px-4 py-4 sm:px-6 space-y-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="relative max-w-md flex-1">
@@ -84,6 +105,40 @@ const Index = () => {
             </span>
           )}
         </div>
+
+        {/* Type filter */}
+        {itemTypes.length > 0 && (
+          <div className="space-y-1.5">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Tipo
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                onClick={() => setSelectedType(null)}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${
+                  selectedType === null
+                    ? "bg-accent text-accent-foreground"
+                    : "border border-border bg-secondary text-secondary-foreground hover:bg-muted"
+                }`}
+              >
+                Todos
+              </button>
+              {itemTypes.map(([type, label]) => (
+                <button
+                  key={type}
+                  onClick={() => setSelectedType(selectedType === type ? null : type)}
+                  className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${
+                    selectedType === type
+                      ? "bg-accent text-accent-foreground"
+                      : "border border-border bg-secondary text-secondary-foreground hover:bg-muted"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Category Filter */}
         <CategoryManager
@@ -106,8 +161,7 @@ const Index = () => {
               Nenhum item carregado
             </h2>
             <p className="mt-1 max-w-sm text-sm text-muted-foreground">
-              Importe um arquivo Excel (.xlsx) com colunas <span className="font-mono text-primary">ID</span> e{" "}
-              <span className="font-mono text-primary">Nome</span>, e opcionalmente um .zip com imagens.
+              Importe um arquivo Excel (.xlsx) ou JSON com os itens, e opcionalmente um .zip com imagens.
             </p>
           </div>
         ) : filteredItems.length === 0 ? (
