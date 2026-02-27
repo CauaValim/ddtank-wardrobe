@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import type { GameItem } from "@/types/item";
 
 export function useItemStore() {
@@ -130,54 +131,75 @@ export function useItemStore() {
       return merged;
     });
 
-    // Upload each image to Supabase Storage and update item's image_url
-    const uploadPromises: Promise<void>[] = [];
-    newImages.forEach((blobUrl, itemId) => {
-      uploadPromises.push(
-        (async () => {
+    let successCount = 0;
+    let failCount = 0;
+    const total = newImages.size;
+
+    toast.info(`Iniciando upload de ${total} imagens...`);
+
+    // Process in batches of 5 to avoid overwhelming the server
+    const entries = Array.from(newImages.entries());
+    const batchSize = 5;
+
+    for (let i = 0; i < entries.length; i += batchSize) {
+      const batch = entries.slice(i, i + batchSize);
+      await Promise.all(
+        batch.map(async ([itemId, blobUrl]) => {
           try {
             const res = await fetch(blobUrl);
             const blob = await res.blob();
+            if (blob.size === 0) {
+              failCount++;
+              return;
+            }
             const ext = blob.type.split("/")[1] || "png";
             const path = `${itemId}.${ext}`;
 
-            // Upload to storage bucket
             const { error: uploadError } = await supabase.storage
               .from("item-images")
               .upload(path, blob, { upsert: true, contentType: blob.type });
 
             if (uploadError) {
               console.error(`Upload failed for ${itemId}:`, uploadError.message);
+              failCount++;
               return;
             }
 
-            // Get public URL
             const { data: urlData } = supabase.storage
               .from("item-images")
               .getPublicUrl(path);
 
             const publicUrl = urlData.publicUrl;
 
-            // Update item in DB
             await supabase
               .from("items")
               .update({ image_url: publicUrl })
               .eq("id", Number(itemId));
 
-            // Update local state with persistent URL
             setImages((prev) => {
               const next = new Map(prev);
               next.set(itemId, publicUrl);
               return next;
             });
+            successCount++;
           } catch (err) {
             console.error(`Image upload error for ${itemId}:`, err);
+            failCount++;
           }
-        })()
+        })
       );
-    });
 
-    await Promise.all(uploadPromises);
+      // Progress toast every 50 images
+      if ((i + batchSize) % 50 === 0 && i + batchSize < entries.length) {
+        toast.info(`Progresso: ${successCount + failCount}/${total} imagens processadas`);
+      }
+    }
+
+    if (failCount > 0) {
+      toast.warning(`Upload concluído: ${successCount} salvas, ${failCount} falharam`);
+    } else {
+      toast.success(`${successCount} imagens salvas com sucesso!`);
+    }
   };
 
   const updateItemType = async (itemIds: string[], newType: number) => {
