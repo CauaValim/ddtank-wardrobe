@@ -7,7 +7,7 @@ import { ItemCard } from "@/components/ItemCard";
 import { ItemDetailModal } from "@/components/ItemDetailModal";
 import { CategoryManager } from "@/components/CategoryManager";
 import { BulkCategoryAssigner } from "@/components/BulkCategoryAssigner";
-import { getTypeName } from "@/lib/itemTypes";
+import { getTypeName, getTypeGroups, HIDDEN_TYPES } from "@/lib/itemTypes";
 import type { GameItem } from "@/types/item";
 
 const Index = () => {
@@ -34,29 +34,31 @@ const Index = () => {
 
   const [selectedItem, setSelectedItem] = useState<GameItem | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [selectedType, setSelectedType] = useState<number | null>(null);
+  const [selectedType, setSelectedType] = useState<string | null>(null);
 
   // Multi-select state
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  // Get unique types from items
-  const itemTypes = useMemo(() => {
-    const types = new Map<number, string>();
+  // Get unique types from items, grouped by category name
+  const typeGroups = useMemo(() => {
+    const existingTypes = new Set<number>();
     items.forEach((item) => {
       const t = item.attributes.type != null ? Number(item.attributes.type) : null;
-      if (t != null && !isNaN(t)) {
-        types.set(t, getTypeName(t));
+      if (t != null && !isNaN(t) && !HIDDEN_TYPES.has(t)) {
+        existingTypes.add(t);
       }
     });
-    return Array.from(types.entries()).sort((a, b) => a[0] - b[0]);
+    return getTypeGroups(existingTypes);
   }, [items]);
 
   // Filter items by type and category
   const filteredItems = useMemo(() => {
     let result = items;
     if (selectedType != null) {
-      result = result.filter((item) => Number(item.attributes.type) === selectedType);
+      const matchingGroup = typeGroups.find(([name]) => name === selectedType);
+      const typeNumbers = matchingGroup ? matchingGroup[1] : [];
+      result = result.filter((item) => typeNumbers.includes(Number(item.attributes.type)));
     }
     if (selectedCategory) {
       result = result.filter((item) => {
@@ -65,7 +67,7 @@ const Index = () => {
       });
     }
     return result;
-  }, [items, selectedType, selectedCategory, itemCategoryMap]);
+  }, [items, selectedType, selectedCategory, itemCategoryMap, typeGroups]);
 
   const lastSelectedIndex = useRef<number | null>(null);
 
@@ -99,9 +101,11 @@ const Index = () => {
     setSelectionMode(true);
   }, [filteredItems]);
 
-  const selectAllOfType = useCallback((type: number) => {
+  const selectAllOfType = useCallback((typeName: string) => {
+    const matchingGroup = typeGroups.find(([name]) => name === typeName);
+    const typeNumbers = matchingGroup ? matchingGroup[1] : [];
     const ids = filteredItems
-      .filter((item) => Number(item.attributes.type) === type)
+      .filter((item) => typeNumbers.includes(Number(item.attributes.type)))
       .map((i) => i.id);
     setSelectedIds((prev) => {
       const next = new Set(prev);
@@ -109,7 +113,7 @@ const Index = () => {
       return next;
     });
     setSelectionMode(true);
-  }, [filteredItems]);
+  }, [filteredItems, typeGroups]);
 
   const clearSelection = useCallback(() => {
     setSelectedIds(new Set());
@@ -193,7 +197,7 @@ const Index = () => {
         </div>
 
         {/* Type filter */}
-        {itemTypes.length > 0 && (
+        {typeGroups.length > 0 && (
           <div className="space-y-1.5">
             <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               Tipo
@@ -209,12 +213,12 @@ const Index = () => {
               >
                 Todos
               </button>
-              {itemTypes.map(([type, label]) => (
-                <div key={type} className="flex items-center gap-0.5">
+              {typeGroups.map(([label]) => (
+                <div key={label} className="flex items-center gap-0.5">
                   <button
-                    onClick={() => setSelectedType(selectedType === type ? null : type)}
+                    onClick={() => setSelectedType(selectedType === label ? null : label)}
                     className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${
-                      selectedType === type
+                      selectedType === label
                         ? "bg-accent text-accent-foreground"
                         : "border border-border bg-secondary text-secondary-foreground hover:bg-muted"
                     }`}
@@ -223,7 +227,7 @@ const Index = () => {
                   </button>
                   {selectionMode && (
                     <button
-                      onClick={() => selectAllOfType(type)}
+                      onClick={() => selectAllOfType(label)}
                       className="rounded-full p-1 text-muted-foreground hover:text-primary hover:bg-muted transition-all"
                       title={`Selecionar todos "${label}"`}
                     >
