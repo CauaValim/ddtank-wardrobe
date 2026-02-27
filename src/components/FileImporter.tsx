@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from "react";
-import { Upload, FileSpreadsheet, Archive, CheckCircle2 } from "lucide-react";
-import { parseExcel, parseZipImages } from "@/lib/fileParser";
+import { Upload, FileSpreadsheet, Archive, CheckCircle2, FileJson } from "lucide-react";
+import { parseExcel, parseJson, parseZipImages } from "@/lib/fileParser";
 import type { GameItem } from "@/types/item";
 
 interface FileImporterProps {
@@ -16,13 +16,15 @@ export function FileImporter({ onItemsLoaded, onImagesLoaded }: FileImporterProp
   const excelRef = useRef<HTMLInputElement>(null);
   const zipRef = useRef<HTMLInputElement>(null);
 
-  const handleExcel = useCallback(
+  const handleDataFile = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
       setExcelStatus("loading");
       try {
-        const items = await parseExcel(file);
+        const items = file.name.endsWith(".json")
+          ? await parseJson(file)
+          : await parseExcel(file);
         setExcelCount(items.length);
         onItemsLoaded(items);
         setExcelStatus("done");
@@ -55,9 +57,9 @@ export function FileImporter({ onItemsLoaded, onImagesLoaded }: FileImporterProp
       <input
         ref={excelRef}
         type="file"
-        accept=".xlsx,.xls"
+        accept=".xlsx,.xls,.json"
         className="hidden"
-        onChange={handleExcel}
+        onChange={handleDataFile}
       />
       <input
         ref={zipRef}
@@ -82,7 +84,7 @@ export function FileImporter({ onItemsLoaded, onImagesLoaded }: FileImporterProp
           ? `${excelCount} itens carregados`
           : excelStatus === "loading"
           ? "Processando..."
-          : "Importar Excel (.xlsx)"}
+          : "Importar Dados (.xlsx / .json)"}
       </button>
 
       <button

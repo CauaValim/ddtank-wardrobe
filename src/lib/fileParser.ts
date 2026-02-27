@@ -2,6 +2,26 @@ import * as XLSX from "xlsx";
 import JSZip from "jszip";
 import type { GameItem } from "@/types/item";
 
+export async function parseJson(file: File): Promise<GameItem[]> {
+  const text = await file.text();
+  const data = JSON.parse(text);
+  const rows: Record<string, unknown>[] = Array.isArray(data) ? data : [];
+
+  return rows
+    .filter((row) => row["ID"] != null && row["Nome"] != null)
+    .map((row) => {
+      const id = String(row["ID"]);
+      const name = String(row["Nome"]);
+      const attributes: Record<string, string> = {};
+      Object.entries(row).forEach(([key, val]) => {
+        if (key !== "ID" && key !== "Nome" && val != null) {
+          attributes[key] = String(val);
+        }
+      });
+      return { id, name, attributes };
+    });
+}
+
 export async function parseExcel(file: File): Promise<GameItem[]> {
   const buffer = await file.arrayBuffer();
   const wb = XLSX.read(buffer, { type: "array" });
