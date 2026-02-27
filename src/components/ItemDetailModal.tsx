@@ -31,50 +31,47 @@ export function ItemDetailModal({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-md border-border bg-card">
+      <DialogContent className="max-w-xs border-border bg-card p-4">
         <DialogTitle className="sr-only">{item.name}</DialogTitle>
-        <div className="flex flex-col items-center gap-4">
-          <div className="flex h-32 w-32 items-center justify-center overflow-hidden rounded-xl bg-secondary">
+        <div className="flex flex-col items-center gap-3">
+          <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-lg bg-secondary">
             {imageUrl ? (
               <img src={imageUrl} alt={item.name} className="h-full w-full object-contain" />
             ) : (
-              <Package className="h-12 w-12 text-muted-foreground/40" />
+              <Package className="h-8 w-8 text-muted-foreground/40" />
             )}
           </div>
 
           <div className="text-center">
-            <h2 className="text-lg font-bold text-card-foreground">{item.name}</h2>
+            <h2 className="text-sm font-bold text-card-foreground">{item.name}</h2>
             <div className="mt-1 flex items-center justify-center gap-2">
-              <span className="text-sm text-muted-foreground">ID: {item.id}</span>
+              <span className="text-xs text-muted-foreground">ID: {item.id}</span>
               <button
                 onClick={copyId}
-                className="flex items-center gap-1 rounded-md border border-border bg-secondary px-2 py-0.5 text-xs text-secondary-foreground hover:bg-muted transition-colors"
+                className="flex items-center gap-1 rounded-md border border-border bg-secondary px-1.5 py-0.5 text-[10px] text-secondary-foreground hover:bg-muted transition-colors"
               >
                 {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
-                {copied ? "Copiado" : "Copiar ID"}
+                {copied ? "Copiado" : "Copiar"}
               </button>
             </div>
           </div>
 
-          {typeName && (
-            <span className="rounded-full bg-secondary px-3 py-1 text-xs font-medium text-muted-foreground">
-              {typeName}
-            </span>
-          )}
-
-          {Object.keys(item.attributes).length > 0 && (
-            <div className="w-full space-y-1.5">
-              <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Atributos</p>
-              <div className="grid grid-cols-2 gap-1.5">
-                {Object.entries(item.attributes).map(([key, val]) => (
-                  <div key={key} className="rounded-md bg-secondary px-2 py-1">
-                    <span className="text-[10px] text-muted-foreground">{key}</span>
-                    <p className="truncate text-xs font-medium text-card-foreground">{val}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          <div className="w-full grid grid-cols-2 gap-1.5">
+            {[
+              { label: "Ataque", value: item.attributes.attack },
+              { label: "Defesa", value: item.attributes.defence },
+              { label: "Agilidade", value: item.attributes.agility },
+              { label: "Sorte", value: item.attributes.luck },
+              { label: "EXP", value: item.attributes.attribute2 },
+            ]
+              .filter((s) => s.value != null)
+              .map((s) => (
+                <div key={s.label} className="rounded-md bg-secondary px-2 py-1">
+                  <span className="text-[10px] text-muted-foreground">{s.label}</span>
+                  <p className="text-xs font-medium text-card-foreground">{s.value}</p>
+                </div>
+              ))}
+          </div>
         </div>
       </DialogContent>
     </Dialog>
