@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, Package, Gamepad2 } from "lucide-react";
+import { Search, Package, Gamepad2, Tag } from "lucide-react";
 import { useItemStore } from "@/hooks/useItemStore";
 import { FileImporter } from "@/components/FileImporter";
 import { ItemCard } from "@/components/ItemCard";
@@ -12,6 +12,9 @@ const Index = () => {
     totalCount,
     searchQuery,
     setSearchQuery,
+    selectedCategory,
+    setSelectedCategory,
+    categories,
     addItems,
     addImages,
     getItemImage,
@@ -42,8 +45,8 @@ const Index = () => {
         </div>
       </header>
 
-      {/* Search & Stats */}
-      <div className="mx-auto w-full max-w-7xl px-4 py-4 sm:px-6">
+      {/* Search, Categories & Stats */}
+      <div className="mx-auto w-full max-w-7xl px-4 py-4 sm:px-6 space-y-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="relative max-w-md flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -63,6 +66,36 @@ const Index = () => {
             </span>
           )}
         </div>
+
+        {/* Category Filter */}
+        {categories.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setSelectedCategory(null)}
+              className={`flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
+                selectedCategory === null
+                  ? "bg-primary text-primary-foreground"
+                  : "border border-border bg-secondary text-secondary-foreground hover:bg-muted"
+              }`}
+            >
+              <Tag className="h-3 w-3" />
+              Todos
+            </button>
+            {categories.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setSelectedCategory(selectedCategory === cat ? null : cat)}
+                className={`rounded-full px-3 py-1.5 text-xs font-medium transition-all ${
+                  selectedCategory === cat
+                    ? "bg-primary text-primary-foreground"
+                    : "border border-border bg-secondary text-secondary-foreground hover:bg-muted"
+                }`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Content */}
