@@ -1,5 +1,5 @@
 import { memo } from "react";
-import { Package } from "lucide-react";
+import { Package, Check } from "lucide-react";
 import type { GameItem } from "@/types/item";
 import type { Category } from "@/hooks/useCategories";
 
@@ -8,14 +8,50 @@ interface ItemCardProps {
   imageUrl?: string;
   onClick: (item: GameItem) => void;
   categories?: Category[];
+  selectionMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: (item: GameItem) => void;
 }
 
-export const ItemCard = memo(function ItemCard({ item, imageUrl, onClick, categories }: ItemCardProps) {
+export const ItemCard = memo(function ItemCard({
+  item,
+  imageUrl,
+  onClick,
+  categories,
+  selectionMode,
+  isSelected,
+  onToggleSelect,
+}: ItemCardProps) {
+  const handleClick = () => {
+    if (selectionMode && onToggleSelect) {
+      onToggleSelect(item);
+    } else {
+      onClick(item);
+    }
+  };
+
   return (
     <button
-      onClick={() => onClick(item)}
-      className="group flex flex-col overflow-hidden rounded-lg border border-border bg-card text-left transition-all hover:border-primary/40 hover:glow-primary animate-fade-in"
+      onClick={handleClick}
+      className={`group relative flex flex-col overflow-hidden rounded-lg border text-left transition-all animate-fade-in ${
+        isSelected
+          ? "border-primary ring-2 ring-primary/30 bg-primary/5"
+          : "border-border bg-card hover:border-primary/40"
+      }`}
     >
+      {/* Selection checkbox */}
+      {selectionMode && (
+        <div
+          className={`absolute top-2 left-2 z-10 flex h-5 w-5 items-center justify-center rounded border transition-all ${
+            isSelected
+              ? "border-primary bg-primary"
+              : "border-muted-foreground/40 bg-card/80"
+          }`}
+        >
+          {isSelected && <Check className="h-3.5 w-3.5 text-primary-foreground" />}
+        </div>
+      )}
+
       <div className="flex aspect-square items-center justify-center bg-secondary/50 p-3">
         {imageUrl ? (
           <img
