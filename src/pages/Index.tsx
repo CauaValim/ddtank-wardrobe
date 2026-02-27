@@ -1,12 +1,10 @@
 import { useState, useMemo, useCallback, useRef } from "react";
 import { Search, Package, Gamepad2, MousePointerClick, CheckSquare } from "lucide-react";
 import { useItemStore } from "@/hooks/useItemStore";
-import { useCategories } from "@/hooks/useCategories";
 import { FileImporter } from "@/components/FileImporter";
 import { ItemCard } from "@/components/ItemCard";
 import { ItemDetailModal } from "@/components/ItemDetailModal";
-import { CategoryManager } from "@/components/CategoryManager";
-import { BulkCategoryAssigner } from "@/components/BulkCategoryAssigner";
+import { BulkTypeMover } from "@/components/BulkTypeMover";
 import { getTypeName, getTypeGroups, HIDDEN_TYPES } from "@/lib/itemTypes";
 import type { GameItem } from "@/types/item";
 
@@ -20,20 +18,10 @@ const Index = () => {
     addImages,
     getItemImage,
     loading,
+    updateItemType,
   } = useItemStore();
 
-  const {
-    categories,
-    addCategory,
-    deleteCategory,
-    assignItem,
-    unassignItem,
-    getItemCategories,
-    itemCategoryMap,
-  } = useCategories();
-
   const [selectedItem, setSelectedItem] = useState<GameItem | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedType, setSelectedType] = useState<string | null>(null);
 
   // Multi-select state
@@ -52,7 +40,7 @@ const Index = () => {
     return getTypeGroups(existingTypes);
   }, [items]);
 
-  // Filter items by type and category
+  // Filter items by type
   const filteredItems = useMemo(() => {
     let result = items;
     if (selectedType != null) {
@@ -60,14 +48,8 @@ const Index = () => {
       const typeNumbers = matchingGroup ? matchingGroup[1] : [];
       result = result.filter((item) => typeNumbers.includes(Number(item.attributes.type)));
     }
-    if (selectedCategory) {
-      result = result.filter((item) => {
-        const catIds = itemCategoryMap.get(Number(item.id)) ?? [];
-        return catIds.includes(selectedCategory);
-      });
-    }
     return result;
-  }, [items, selectedType, selectedCategory, itemCategoryMap, typeGroups]);
+  }, [items, selectedType, typeGroups]);
 
   const lastSelectedIndex = useRef<number | null>(null);
 
@@ -120,11 +102,11 @@ const Index = () => {
     setSelectionMode(false);
   }, []);
 
-  const handleBulkAssign = useCallback(async (categoryId: string) => {
+  const handleBulkMove = useCallback(async (targetType: number) => {
     const ids = Array.from(selectedIds);
-    await Promise.all(ids.map((id) => assignItem(Number(id), categoryId)));
+    await updateItemType(ids, targetType);
     clearSelection();
-  }, [selectedIds, assignItem, clearSelection]);
+  }, [selectedIds, updateItemType, clearSelection]);
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -174,7 +156,7 @@ const Index = () => {
         </div>
       </header>
 
-      {/* Search, Types, Categories & Stats */}
+      {/* Search & Types */}
       <div className="mx-auto w-full max-w-7xl px-4 py-4 sm:px-6 space-y-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="relative max-w-md flex-1">
@@ -239,15 +221,6 @@ const Index = () => {
             </div>
           </div>
         )}
-
-        {/* Category Filter */}
-        <CategoryManager
-          categories={categories}
-          selectedCategory={selectedCategory}
-          onSelectCategory={setSelectedCategory}
-          onAddCategory={addCategory}
-          onDeleteCategory={deleteCategory}
-        />
       </div>
 
       {/* Content */}
@@ -283,7 +256,6 @@ const Index = () => {
                 item={item}
                 imageUrl={getItemImage(item.id)}
                 onClick={setSelectedItem}
-                categories={getItemCategories(Number(item.id))}
                 selectionMode={selectionMode}
                 isSelected={selectedIds.has(item.id)}
                 onToggleSelect={toggleSelect}
@@ -293,11 +265,10 @@ const Index = () => {
         )}
       </main>
 
-      {/* Bulk Category Assigner */}
-      <BulkCategoryAssigner
+      {/* Bulk Type Mover */}
+      <BulkTypeMover
         selectedCount={selectedIds.size}
-        allCategories={categories}
-        onBulkAssign={handleBulkAssign}
+        onBulkMove={handleBulkMove}
         onClearSelection={clearSelection}
       />
 
@@ -307,10 +278,6 @@ const Index = () => {
         imageUrl={selectedItem ? getItemImage(selectedItem.id) : undefined}
         open={!!selectedItem}
         onClose={() => setSelectedItem(null)}
-        allCategories={categories}
-        assignedCategories={selectedItem ? getItemCategories(Number(selectedItem.id)) : []}
-        onAssign={assignItem}
-        onUnassign={unassignItem}
       />
     </div>
   );
