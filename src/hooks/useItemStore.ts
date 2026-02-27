@@ -5,6 +5,7 @@ export function useItemStore() {
   const [items, setItems] = useState<GameItem[]>([]);
   const [images, setImages] = useState<Map<string, string>>(new Map());
   const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
   const addItems = (newItems: GameItem[]) => {
     setItems((prev) => {
@@ -22,15 +23,29 @@ export function useItemStore() {
     });
   };
 
+  const categories = useMemo(() => {
+    const cats = new Set<string>();
+    items.forEach((item) => {
+      if (item.attributes.category) cats.add(item.attributes.category);
+    });
+    return Array.from(cats).sort();
+  }, [items]);
+
   const filteredItems = useMemo(() => {
-    if (!searchQuery.trim()) return items;
-    const q = searchQuery.toLowerCase();
-    return items.filter(
-      (item) =>
-        item.id.toLowerCase().includes(q) ||
-        item.name.toLowerCase().includes(q)
-    );
-  }, [items, searchQuery]);
+    let result = items;
+    if (selectedCategory) {
+      result = result.filter((i) => i.attributes.category === selectedCategory);
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(
+        (item) =>
+          item.id.toLowerCase().includes(q) ||
+          item.name.toLowerCase().includes(q)
+      );
+    }
+    return result;
+  }, [items, searchQuery, selectedCategory]);
 
   const getItemImage = (id: string) => images.get(id);
 
@@ -39,6 +54,9 @@ export function useItemStore() {
     totalCount: items.length,
     searchQuery,
     setSearchQuery,
+    selectedCategory,
+    setSelectedCategory,
+    categories,
     addItems,
     addImages,
     getItemImage,

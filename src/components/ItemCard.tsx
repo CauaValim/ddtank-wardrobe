@@ -26,13 +26,13 @@ export const ItemCard = memo(function ItemCard({ item, imageUrl, onClick }: Item
           <Package className="h-10 w-10 text-muted-foreground/40" />
         )}
       </div>
-      <div className="flex flex-col gap-1 p-3">
-        <span className="font-mono text-xs font-semibold text-primary">
-          #{item.id}
-        </span>
+      <div className="flex flex-col gap-0.5 p-3">
         <span className="text-sm font-medium text-card-foreground line-clamp-2 leading-tight">
           {item.name}
         </span>
+        {item.attributes.category && (
+          <span className="text-[11px] text-muted-foreground">{item.attributes.category}</span>
+        )}
       </div>
     </button>
   );
