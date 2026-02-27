@@ -2,16 +2,31 @@ import { X, Copy, CheckCircle2 } from "lucide-react";
 import { useState } from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Package } from "lucide-react";
+import { ItemCategoryAssigner } from "@/components/ItemCategoryAssigner";
 import type { GameItem } from "@/types/item";
+import type { Category } from "@/hooks/useCategories";
 
 interface ItemDetailModalProps {
   item: GameItem | null;
   imageUrl?: string;
   open: boolean;
   onClose: () => void;
+  allCategories: Category[];
+  assignedCategories: Category[];
+  onAssign: (itemId: number, categoryId: string) => Promise<unknown>;
+  onUnassign: (itemId: number, categoryId: string) => Promise<unknown>;
 }
 
-export function ItemDetailModal({ item, imageUrl, open, onClose }: ItemDetailModalProps) {
+export function ItemDetailModal({
+  item,
+  imageUrl,
+  open,
+  onClose,
+  allCategories,
+  assignedCategories,
+  onAssign,
+  onUnassign,
+}: ItemDetailModalProps) {
   const [copied, setCopied] = useState(false);
 
   if (!item) return null;
@@ -61,6 +76,26 @@ export function ItemDetailModal({ item, imageUrl, open, onClose }: ItemDetailMod
                 </>
               )}
             </button>
+          </div>
+
+          {/* Category assigner */}
+          <div className="flex flex-wrap items-center gap-2">
+            {assignedCategories.map((cat) => (
+              <span
+                key={cat.id}
+                className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium text-primary-foreground"
+                style={{ backgroundColor: cat.color }}
+              >
+                {cat.name}
+              </span>
+            ))}
+            <ItemCategoryAssigner
+              itemId={Number(item.id)}
+              allCategories={allCategories}
+              assignedCategories={assignedCategories}
+              onAssign={onAssign}
+              onUnassign={onUnassign}
+            />
           </div>
 
           {Object.keys(item.attributes).length > 0 && (

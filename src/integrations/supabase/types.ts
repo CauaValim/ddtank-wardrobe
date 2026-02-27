@@ -14,6 +14,63 @@ export type Database = {
   }
   public: {
     Tables: {
+      categories: {
+        Row: {
+          color: string
+          created_at: string
+          id: string
+          name: string
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          id?: string
+          name: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          id?: string
+          name?: string
+        }
+        Relationships: []
+      }
+      item_categories: {
+        Row: {
+          category_id: string
+          created_at: string
+          id: string
+          item_id: number
+        }
+        Insert: {
+          category_id: string
+          created_at?: string
+          id?: string
+          item_id: number
+        }
+        Update: {
+          category_id?: string
+          created_at?: string
+          id?: string
+          item_id?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "item_categories_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "item_categories_item_id_fkey"
+            columns: ["item_id"]
+            isOneToOne: false
+            referencedRelation: "items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       items: {
         Row: {
           agility: number | null
