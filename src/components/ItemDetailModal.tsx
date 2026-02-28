@@ -56,6 +56,13 @@ export function ItemDetailModal({
             </div>
           </div>
 
+          {item.attributes.desc && (
+            <div className="w-full rounded-md bg-secondary px-2 py-1.5">
+              <span className="text-[10px] text-muted-foreground">Descrição</span>
+              <p className="text-xs text-card-foreground whitespace-pre-wrap">{item.attributes.desc}</p>
+            </div>
+          )}
+
           <div className="w-full grid grid-cols-2 gap-1.5">
             {[
               { label: "Ataque", value: item.attributes.attack },
