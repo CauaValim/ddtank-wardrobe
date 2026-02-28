@@ -228,7 +228,8 @@ export function useItemStore() {
       result = result.filter(
         (item) =>
           item.id.toLowerCase().includes(q) ||
-          item.name.toLowerCase().includes(q)
+          item.name.toLowerCase().includes(q) ||
+          (item.attributes.desc && item.attributes.desc.toLowerCase().includes(q))
       );
     }
     return result;
