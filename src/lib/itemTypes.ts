@@ -73,6 +73,7 @@ export const ITEM_TYPE_MAP: Record<number, string> = {
   180: "Itens de Up",
   200: "Pacotes",
   201: "Ilustração de Montaria",
+  202: "Fragmentos",
 };
 
 // Types that should be hidden from the filter list
