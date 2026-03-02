@@ -19,6 +19,7 @@ const Index = () => {
     getItemImage,
     loading,
     updateItemType,
+    syncDescriptions,
   } = useItemStore();
 
   const [selectedItem, setSelectedItem] = useState<GameItem | null>(null);
@@ -151,7 +152,7 @@ const Index = () => {
                 Todos ({filteredItems.length})
               </button>
             )}
-            <FileImporter onItemsLoaded={addItems} onImagesLoaded={addImages} />
+            <FileImporter onItemsLoaded={addItems} onImagesLoaded={addImages} onSyncDescriptions={syncDescriptions} />
           </div>
         </div>
       </header>

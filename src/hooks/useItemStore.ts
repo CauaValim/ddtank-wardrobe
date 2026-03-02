@@ -202,6 +202,54 @@ export function useItemStore() {
     }
   };
 
+  const syncDescriptions = async (sourceItems: GameItem[]) => {
+    // Filter items that have a non-empty desc
+    const withDesc = sourceItems.filter(
+      (item) => item.attributes.desc && item.attributes.desc.trim().length > 0
+    );
+
+    if (withDesc.length === 0) {
+      toast.info("Nenhuma descrição encontrada nos dados importados.");
+      return;
+    }
+
+    toast.info(`Sincronizando ${withDesc.length} descrições...`);
+
+    const batchSize = 100;
+    let updated = 0;
+
+    for (let i = 0; i < withDesc.length; i += batchSize) {
+      const batch = withDesc.slice(i, i + batchSize);
+      await Promise.all(
+        batch.map(async (item) => {
+          const { error } = await supabase
+            .from("items")
+            .update({ desc: item.attributes.desc })
+            .eq("id", Number(item.id));
+          if (!error) updated++;
+        })
+      );
+
+      if ((i + batchSize) % 500 === 0 && i + batchSize < withDesc.length) {
+        toast.info(`Progresso: ${Math.min(i + batchSize, withDesc.length)}/${withDesc.length}`);
+      }
+    }
+
+    // Update local state
+    setItems((prev) => {
+      const descMap = new Map(withDesc.map((i) => [i.id, i.attributes.desc]));
+      return prev.map((item) => {
+        const newDesc = descMap.get(item.id);
+        if (newDesc) {
+          return { ...item, attributes: { ...item.attributes, desc: newDesc } };
+        }
+        return item;
+      });
+    });
+
+    toast.success(`${updated} descrições atualizadas com sucesso!`);
+  };
+
   const updateItemType = async (itemIds: string[], newType: number) => {
     // Update local state
     setItems((prev) =>
@@ -247,5 +295,6 @@ export function useItemStore() {
     getItemImage,
     loading,
     updateItemType,
+    syncDescriptions,
   };
 }
