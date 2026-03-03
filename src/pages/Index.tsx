@@ -6,7 +6,6 @@ import { ItemCard } from "@/components/ItemCard";
 import { ItemDetailModal } from "@/components/ItemDetailModal";
 import { BulkTypeMover } from "@/components/BulkTypeMover";
 import { getTypeName, getTypeGroups, HIDDEN_TYPES } from "@/lib/itemTypes";
-import { ScrollToTop } from "@/components/ScrollToTop";
 import type { GameItem } from "@/types/item";
 import type { useAuth } from "@/hooks/useAuth";
 
@@ -129,7 +128,7 @@ const Index = ({ auth }: IndexProps) => {
                 DDTank Item Panel
               </h1>
               <p className="text-xs text-muted-foreground">
-                {auth.role === "super_admin" ? "Super Admin" : auth.role === "admin" ? "ADM" : auth.role === "analista" ? "Analista" : "Moderador"}
+                {auth.role === "admin" ? "ADM" : auth.role === "analista" ? "Analista" : "Moderador"}
               </p>
             </div>
           </div>
@@ -163,11 +162,7 @@ const Index = ({ auth }: IndexProps) => {
               </>
             )}
             {auth.canImport && (
-              <FileImporter
-                onItemsLoaded={addItems}
-                onImagesLoaded={auth.canFullImport ? addImages : undefined}
-                onSyncDescriptions={auth.canFullImport ? syncDescriptions : undefined}
-              />
+              <FileImporter onItemsLoaded={addItems} onImagesLoaded={addImages} onSyncDescriptions={syncDescriptions} />
             )}
             <button
               onClick={auth.signOut}
@@ -304,7 +299,6 @@ const Index = ({ auth }: IndexProps) => {
         onClose={() => setSelectedItem(null)}
         canViewId={auth.canViewId}
       />
-      <ScrollToTop />
     </div>
   );
 };
