@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useRef } from "react";
-import { Search, Package, Gamepad2, MousePointerClick, CheckSquare } from "lucide-react";
+import { Search, Package, Gamepad2, MousePointerClick, CheckSquare, LogOut } from "lucide-react";
 import { useItemStore } from "@/hooks/useItemStore";
 import { FileImporter } from "@/components/FileImporter";
 import { ItemCard } from "@/components/ItemCard";
@@ -7,8 +7,13 @@ import { ItemDetailModal } from "@/components/ItemDetailModal";
 import { BulkTypeMover } from "@/components/BulkTypeMover";
 import { getTypeName, getTypeGroups, HIDDEN_TYPES } from "@/lib/itemTypes";
 import type { GameItem } from "@/types/item";
+import type { useAuth } from "@/hooks/useAuth";
 
-const Index = () => {
+interface IndexProps {
+  auth: ReturnType<typeof useAuth>;
+}
+
+const Index = ({ auth }: IndexProps) => {
   const {
     items,
     totalCount,
@@ -123,36 +128,49 @@ const Index = () => {
                 DDTank Item Panel
               </h1>
               <p className="text-xs text-muted-foreground">
-                Painel de Moderação
+                {auth.role === "admin" ? "ADM" : auth.role === "analista" ? "Analista" : "Moderador"}
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                setSelectionMode(!selectionMode);
-                if (selectionMode) setSelectedIds(new Set());
-              }}
-              className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-all ${
-                selectionMode
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border bg-secondary text-secondary-foreground hover:bg-muted"
-              }`}
-            >
-              <MousePointerClick className="h-3.5 w-3.5" />
-              {selectionMode ? "Selecionando" : "Selecionar"}
-            </button>
-            {selectionMode && (
-              <button
-                onClick={selectAllVisible}
-                className="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-muted transition-all"
-              >
-                <CheckSquare className="h-3.5 w-3.5" />
-                Todos ({filteredItems.length})
-              </button>
+            {auth.canSelect && (
+              <>
+                <button
+                  onClick={() => {
+                    setSelectionMode(!selectionMode);
+                    if (selectionMode) setSelectedIds(new Set());
+                  }}
+                  className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-all ${
+                    selectionMode
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-secondary text-secondary-foreground hover:bg-muted"
+                  }`}
+                >
+                  <MousePointerClick className="h-3.5 w-3.5" />
+                  {selectionMode ? "Selecionando" : "Selecionar"}
+                </button>
+                {selectionMode && (
+                  <button
+                    onClick={selectAllVisible}
+                    className="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-muted transition-all"
+                  >
+                    <CheckSquare className="h-3.5 w-3.5" />
+                    Todos ({filteredItems.length})
+                  </button>
+                )}
+              </>
             )}
-            <FileImporter onItemsLoaded={addItems} onImagesLoaded={addImages} onSyncDescriptions={syncDescriptions} />
+            {auth.canImport && (
+              <FileImporter onItemsLoaded={addItems} onImagesLoaded={addImages} onSyncDescriptions={syncDescriptions} />
+            )}
+            <button
+              onClick={auth.signOut}
+              className="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-muted transition-all"
+              title="Sair"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+            </button>
           </div>
         </div>
       </header>
@@ -208,7 +226,7 @@ const Index = () => {
                   >
                     {label}
                   </button>
-                  {selectionMode && (
+                  {selectionMode && auth.canSelect && (
                     <button
                       onClick={() => selectAllOfType(label)}
                       className="rounded-full p-1 text-muted-foreground hover:text-primary hover:bg-muted transition-all"
@@ -257,7 +275,7 @@ const Index = () => {
                 item={item}
                 imageUrl={getItemImage(item.id)}
                 onClick={setSelectedItem}
-                selectionMode={selectionMode}
+                selectionMode={auth.canSelect && selectionMode}
                 isSelected={selectedIds.has(item.id)}
                 onToggleSelect={toggleSelect}
               />
@@ -279,6 +297,7 @@ const Index = () => {
         imageUrl={selectedItem ? getItemImage(selectedItem.id) : undefined}
         open={!!selectedItem}
         onClose={() => setSelectedItem(null)}
+        canViewId={auth.canViewId}
       />
     </div>
   );

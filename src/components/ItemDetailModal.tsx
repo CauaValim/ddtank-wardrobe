@@ -9,6 +9,7 @@ interface ItemDetailModalProps {
   imageUrl?: string;
   open: boolean;
   onClose: () => void;
+  canViewId?: boolean;
 }
 
 export function ItemDetailModal({
@@ -16,6 +17,7 @@ export function ItemDetailModal({
   imageUrl,
   open,
   onClose,
+  canViewId = true,
 }: ItemDetailModalProps) {
   const [copied, setCopied] = useState(false);
 
@@ -44,16 +46,18 @@ export function ItemDetailModal({
 
           <div className="text-center">
             <h2 className="text-sm font-bold text-card-foreground">{item.name}</h2>
-            <div className="mt-1 flex items-center justify-center gap-2">
-              <span className="text-xs text-muted-foreground">ID: {item.id}</span>
-              <button
-                onClick={copyId}
-                className="flex items-center gap-1 rounded-md border border-border bg-secondary px-1.5 py-0.5 text-[10px] text-secondary-foreground hover:bg-muted transition-colors"
-              >
-                {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
-                {copied ? "Copiado" : "Copiar"}
-              </button>
-            </div>
+            {canViewId && (
+              <div className="mt-1 flex items-center justify-center gap-2">
+                <span className="text-xs text-muted-foreground">ID: {item.id}</span>
+                <button
+                  onClick={copyId}
+                  className="flex items-center gap-1 rounded-md border border-border bg-secondary px-1.5 py-0.5 text-[10px] text-secondary-foreground hover:bg-muted transition-colors"
+                >
+                  {copied ? <Check className="h-3 w-3 text-green-500" /> : <Copy className="h-3 w-3" />}
+                  {copied ? "Copiado" : "Copiar"}
+                </button>
+              </div>
+            )}
           </div>
 
           {item.attributes.desc && (
