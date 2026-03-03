@@ -20,6 +20,8 @@ export function useAuth() {
   }, []);
 
   useEffect(() => {
+    let initialSessionChecked = false;
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
         const u = session?.user ?? null;
@@ -34,12 +36,15 @@ export function useAuth() {
     );
 
     supabase.auth.getSession().then(({ data: { session } }) => {
-      const u = session?.user ?? null;
-      setUser(u);
-      if (u) {
-        fetchRole(u.id);
-      } else {
-        setLoading(false);
+      if (!initialSessionChecked) {
+        initialSessionChecked = true;
+        const u = session?.user ?? null;
+        setUser(u);
+        if (u) {
+          fetchRole(u.id).then(() => setLoading(false));
+        } else {
+          setLoading(false);
+        }
       }
     });
 
