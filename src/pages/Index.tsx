@@ -6,6 +6,7 @@ import { ItemCard } from "@/components/ItemCard";
 import { ItemDetailModal } from "@/components/ItemDetailModal";
 import { BulkTypeMover } from "@/components/BulkTypeMover";
 import { getTypeName, getTypeGroups, HIDDEN_TYPES } from "@/lib/itemTypes";
+import { ScrollToTop } from "@/components/ScrollToTop";
 import type { GameItem } from "@/types/item";
 import type { useAuth } from "@/hooks/useAuth";
 
@@ -303,6 +304,7 @@ const Index = ({ auth }: IndexProps) => {
         onClose={() => setSelectedItem(null)}
         canViewId={auth.canViewId}
       />
+      <ScrollToTop />
     </div>
   );
 };
