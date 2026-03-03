@@ -7,9 +7,11 @@ interface FileImporterProps {
   onItemsLoaded: (items: GameItem[]) => void;
   onImagesLoaded: (images: Map<string, string>) => void;
   onSyncDescriptions?: (items: GameItem[]) => void;
+  canImportImages?: boolean;
+  canSyncDescriptions?: boolean;
 }
 
-export function FileImporter({ onItemsLoaded, onImagesLoaded, onSyncDescriptions }: FileImporterProps) {
+export function FileImporter({ onItemsLoaded, onImagesLoaded, onSyncDescriptions, canImportImages = true, canSyncDescriptions = true }: FileImporterProps) {
   const [excelStatus, setExcelStatus] = useState<"idle" | "loading" | "done">("idle");
   const [zipStatus, setZipStatus] = useState<"idle" | "loading" | "done">("idle");
   const [descStatus, setDescStatus] = useState<"idle" | "loading" | "done">("idle");
@@ -120,25 +122,27 @@ export function FileImporter({ onItemsLoaded, onImagesLoaded, onSyncDescriptions
           : "Importar Dados (.xlsx / .json)"}
       </button>
 
-      <button
-        onClick={() => zipRef.current?.click()}
-        className="flex items-center gap-2 rounded-lg border border-border bg-secondary px-4 py-2.5 text-sm font-medium text-secondary-foreground transition-all hover:bg-muted hover:glow-accent"
-      >
-        {zipStatus === "done" ? (
-          <CheckCircle2 className="h-4 w-4 text-success" />
-        ) : zipStatus === "loading" ? (
-          <Upload className="h-4 w-4 animate-pulse" />
-        ) : (
-          <Archive className="h-4 w-4 text-accent" />
-        )}
-        {zipStatus === "done"
-          ? `${zipCount} imagens carregadas`
-          : zipStatus === "loading"
-          ? "Extraindo..."
-          : "Importar Imagens (.zip)"}
-      </button>
+      {canImportImages && (
+        <button
+          onClick={() => zipRef.current?.click()}
+          className="flex items-center gap-2 rounded-lg border border-border bg-secondary px-4 py-2.5 text-sm font-medium text-secondary-foreground transition-all hover:bg-muted hover:glow-accent"
+        >
+          {zipStatus === "done" ? (
+            <CheckCircle2 className="h-4 w-4 text-success" />
+          ) : zipStatus === "loading" ? (
+            <Upload className="h-4 w-4 animate-pulse" />
+          ) : (
+            <Archive className="h-4 w-4 text-accent" />
+          )}
+          {zipStatus === "done"
+            ? `${zipCount} imagens carregadas`
+            : zipStatus === "loading"
+            ? "Extraindo..."
+            : "Importar Imagens (.zip)"}
+        </button>
+      )}
 
-      {onSyncDescriptions && (
+      {canSyncDescriptions && onSyncDescriptions && (
         <button
           onClick={() => descRef.current?.click()}
           className="flex items-center gap-2 rounded-lg border border-border bg-secondary px-4 py-2.5 text-sm font-medium text-secondary-foreground transition-all hover:bg-muted hover:glow-accent"
