@@ -162,7 +162,7 @@ const Index = ({ auth }: IndexProps) => {
               </>
             )}
             {auth.canImport && (
-              <FileImporter onItemsLoaded={addItems} onImagesLoaded={addImages} onSyncDescriptions={syncDescriptions} />
+              <FileImporter onItemsLoaded={addItems} onImagesLoaded={addImages} />
             )}
             <button
               onClick={auth.signOut}
