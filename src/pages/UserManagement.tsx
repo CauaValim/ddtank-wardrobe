@@ -36,39 +36,19 @@ const ROLE_COLORS: Record<string, string> = {
 
 async function callManageUsers(action: string, method: string, body?: any) {
   const { data: { session } } = await supabase.auth.getSession();
-  const res = await supabase.functions.invoke("manage-users", {
-    method,
-    headers: { "Content-Type": "application/json" },
-    body: body ? JSON.stringify(body) : undefined,
-  } as any);
+  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/manage-users?action=${action}`;
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${session?.access_token}`,
+    apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+  };
 
-  // Use the edge function via fetch for GET with query params
-  if (method === "GET") {
-    const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/manage-users?action=${action}`;
-    const r = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${session?.access_token}`,
-        apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-      },
-    });
-    if (!r.ok) {
-      const err = await r.json();
-      throw new Error(err.error || "Erro desconhecido");
-    }
-    return r.json();
+  const options: RequestInit = { method, headers };
+  if (method === "POST" && body) {
+    headers["Content-Type"] = "application/json";
+    options.body = JSON.stringify(body);
   }
 
-  // POST
-  const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/manage-users?action=${action}`;
-  const r = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${session?.access_token}`,
-      apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
+  const r = await fetch(url, options);
   if (!r.ok) {
     const err = await r.json();
     throw new Error(err.error || "Erro desconhecido");
