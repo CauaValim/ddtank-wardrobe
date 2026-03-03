@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback, useRef } from "react";
-import { Search, Package, Gamepad2, MousePointerClick, CheckSquare, LogOut } from "lucide-react";
+import { Search, Package, Gamepad2, MousePointerClick, CheckSquare, LogOut, Users } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useItemStore } from "@/hooks/useItemStore";
 import { FileImporter } from "@/components/FileImporter";
 import { ItemCard } from "@/components/ItemCard";
@@ -14,6 +15,7 @@ interface IndexProps {
 }
 
 const Index = ({ auth }: IndexProps) => {
+  const navigate = useNavigate();
   const {
     items,
     totalCount,
@@ -163,6 +165,15 @@ const Index = ({ auth }: IndexProps) => {
             )}
             {auth.canImport && (
               <FileImporter onItemsLoaded={addItems} onImagesLoaded={addImages} onSyncDescriptions={syncDescriptions} canImportImages={auth.canImportImages} canSyncDescriptions={auth.canSyncDescriptions} />
+            )}
+            {auth.role === "super_admin" && (
+              <button
+                onClick={() => navigate("/users")}
+                className="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-muted transition-all"
+                title="Gerenciar Usuários"
+              >
+                <Users className="h-3.5 w-3.5" />
+              </button>
             )}
             <button
               onClick={auth.signOut}
