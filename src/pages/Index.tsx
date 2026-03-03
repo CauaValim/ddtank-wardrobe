@@ -128,7 +128,7 @@ const Index = ({ auth }: IndexProps) => {
                 DDTank Item Panel
               </h1>
               <p className="text-xs text-muted-foreground">
-                {auth.role === "admin" ? "ADM" : auth.role === "analista" ? "Analista" : "Moderador"}
+                {auth.role === "super_admin" ? "Super Admin" : auth.role === "admin" ? "ADM" : auth.role === "analista" ? "Analista" : "Moderador"}
               </p>
             </div>
           </div>
@@ -162,7 +162,7 @@ const Index = ({ auth }: IndexProps) => {
               </>
             )}
             {auth.canImport && (
-              <FileImporter onItemsLoaded={addItems} onImagesLoaded={addImages} onSyncDescriptions={syncDescriptions} />
+              <FileImporter onItemsLoaded={addItems} onImagesLoaded={addImages} onSyncDescriptions={syncDescriptions} canImportImages={auth.canImportImages} canSyncDescriptions={auth.canSyncDescriptions} />
             )}
             <button
               onClick={auth.signOut}
