@@ -10,42 +10,55 @@ export function useAuth() {
   const [loading, setLoading] = useState(true);
 
   const fetchRole = useCallback(async (userId: string) => {
-    const { data } = await supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", userId)
-      .limit(1)
-      .single();
-    setRole((data?.role as AppRole) ?? "user");
+    try {
+      const { data, error } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userId)
+        .limit(1)
+        .single();
+      if (error) {
+        console.warn("Erro ao buscar role:", error.message);
+        setRole("user");
+      } else {
+        setRole((data?.role as AppRole) ?? "user");
+      }
+    } catch (err) {
+      console.warn("Erro inesperado ao buscar role:", err);
+      setRole("user");
+    }
   }, []);
 
   useEffect(() => {
-    let initialSessionChecked = false;
-
+    // Set up listener FIRST (Supabase best practice)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      async (event, session) => {
         const u = session?.user ?? null;
         setUser(u);
         if (u) {
-          await fetchRole(u.id);
+          // Use setTimeout to avoid potential deadlock with Supabase internal locks
+          setTimeout(() => fetchRole(u.id).finally(() => setLoading(false)), 0);
         } else {
           setRole(null);
+          setLoading(false);
         }
-        setLoading(false);
+
+        // If token refresh failed or user was deleted, sign out cleanly
+        if (event === "TOKEN_REFRESHED" && !session) {
+          await supabase.auth.signOut();
+        }
       }
     );
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!initialSessionChecked) {
-        initialSessionChecked = true;
-        const u = session?.user ?? null;
-        setUser(u);
-        if (u) {
-          fetchRole(u.id).then(() => setLoading(false));
-        } else {
-          setLoading(false);
-        }
+    // Then check existing session
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error || !session) {
+        setUser(null);
+        setRole(null);
+        setLoading(false);
+        return;
       }
+      // onAuthStateChange will handle setting state
     });
 
     return () => subscription.unsubscribe();
