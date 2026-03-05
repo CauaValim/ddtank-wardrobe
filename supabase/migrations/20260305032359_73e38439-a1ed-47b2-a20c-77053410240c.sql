@@ -1,0 +1,1 @@
+UPDATE items SET name = 'Esfera mágica - Super Armadura Lv21' WHERE id = 313623;
