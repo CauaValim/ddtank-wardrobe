@@ -127,7 +127,7 @@ const Index = ({ auth }: IndexProps) => {
             </div>
             <div>
               <h1 className="text-lg font-bold leading-tight text-foreground">
-                DDTank Item Panel
+                Painel Staff DDTank 337
               </h1>
               <p className="text-xs text-muted-foreground">
                 {auth.role === "super_admin" ? "Super Admin" : auth.role === "admin" ? "ADM" : auth.role === "analista" ? "Analista" : "Moderador"}

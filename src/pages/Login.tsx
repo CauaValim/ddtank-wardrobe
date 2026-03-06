@@ -27,7 +27,7 @@ const Login = ({ onLogin }: LoginProps) => {
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary">
             <Gamepad2 className="h-6 w-6 text-primary-foreground" />
           </div>
-          <h1 className="text-xl font-bold text-foreground">DDTank Item Panel</h1>
+          <h1 className="text-xl font-bold text-foreground">Painel Staff DDTank 337</h1>
           <p className="text-sm text-muted-foreground">Faça login para continuar</p>
         </div>
 
