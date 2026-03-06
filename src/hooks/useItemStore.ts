@@ -21,6 +21,7 @@ export function useItemStore() {
       const { data, error } = await supabase
         .from("items")
         .select("*")
+        .order("id", { ascending: true })
         .range(from, from + pageSize - 1);
       if (error || !data) break;
       allRows = allRows.concat(data);
