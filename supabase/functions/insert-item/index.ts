@@ -12,21 +12,30 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { id, name, description } = await req.json();
+    const { id, name, description, action } = await req.json();
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? ""
     );
 
-    const { data, error } = await supabase
-      .from("items")
-      .insert({
-        id: Number(id),
-        name,
-        desc: description,
-      })
-      .select();
+    let data, error;
+
+    if (action === "update") {
+      const updateFields: Record<string, unknown> = {};
+      if (name !== undefined) updateFields.name = name;
+      if (description !== undefined) updateFields.desc = description;
+      ({ data, error } = await supabase
+        .from("items")
+        .update(updateFields)
+        .eq("id", Number(id))
+        .select());
+    } else {
+      ({ data, error } = await supabase
+        .from("items")
+        .insert({ id: Number(id), name, desc: description })
+        .select());
+    }
 
     if (error) {
       return new Response(JSON.stringify({ error: error.message }), {
