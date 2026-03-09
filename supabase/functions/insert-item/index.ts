@@ -25,6 +25,7 @@ Deno.serve(async (req) => {
       const updateFields: Record<string, unknown> = {};
       if (name !== undefined) updateFields.name = name;
       if (description !== undefined) updateFields.desc = description;
+      if (type !== undefined) updateFields.type = Number(type);
       ({ data, error } = await supabase
         .from("items")
         .update(updateFields)
