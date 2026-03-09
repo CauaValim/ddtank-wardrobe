@@ -12,7 +12,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { id, name, description, action } = await req.json();
+    const { id, name, description, action, type } = await req.json();
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
@@ -25,6 +25,7 @@ Deno.serve(async (req) => {
       const updateFields: Record<string, unknown> = {};
       if (name !== undefined) updateFields.name = name;
       if (description !== undefined) updateFields.desc = description;
+      if (type !== undefined) updateFields.type = Number(type);
       ({ data, error } = await supabase
         .from("items")
         .update(updateFields)
