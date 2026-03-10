@@ -60,6 +60,7 @@ export function EventScheduleSidebar() {
          <ScrollArea className="h-[calc(100vh-57px)]">
           <SidebarGroup>
             {!collapsed && (
+              <>
               <Collapsible defaultOpen>
                 <CollapsibleTrigger className="w-full">
                   <SidebarGroupLabel className="text-xs uppercase tracking-wider flex items-center justify-between cursor-pointer">
