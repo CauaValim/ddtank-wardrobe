@@ -16,6 +16,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { cronograma } from "@/data/cronograma";
+import { cronogramaEconomica } from "@/data/cronogramaEconomica";
 import { Badge } from "@/components/ui/badge";
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -59,6 +60,7 @@ export function EventScheduleSidebar() {
          <ScrollArea className="h-[calc(100vh-57px)]">
           <SidebarGroup>
             {!collapsed && (
+              <>
               <Collapsible defaultOpen>
                 <CollapsibleTrigger className="w-full">
                   <SidebarGroupLabel className="text-xs uppercase tracking-wider flex items-center justify-between cursor-pointer">
@@ -144,6 +146,71 @@ export function EventScheduleSidebar() {
                   </div>
                 </CollapsibleContent>
               </Collapsible>
+
+              {/* Cronograma Econômica */}
+              <Collapsible defaultOpen={false}>
+                <CollapsibleTrigger className="w-full">
+                  <SidebarGroupLabel className="text-xs uppercase tracking-wider flex items-center justify-between cursor-pointer">
+                    Cronograma Econômica
+                    <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200 [[data-state=open]>&]:rotate-180" />
+                  </SidebarGroupLabel>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  <div className="space-y-0.5 px-1 pb-4">
+                    {cronograma.map((week, idx) => {
+                      const isCurrent = idx === currentWeekIndex;
+                      const ecoEvents = cronogramaEconomica[week.startDate] || [];
+                      if (ecoEvents.length === 0) return null;
+
+                      return (
+                        <Collapsible key={idx} defaultOpen={isCurrent}>
+                          <CollapsibleTrigger className="w-full">
+                            <div
+                              className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-muted/60 ${
+                                isCurrent
+                                  ? "bg-primary/10 border border-primary/30"
+                                  : ""
+                              }`}
+                            >
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-1.5">
+                                  {isCurrent && (
+                                    <span className="inline-block h-2 w-2 rounded-full bg-primary shrink-0" />
+                                  )}
+                                  <span className="text-xs font-semibold text-foreground truncate">
+                                    {week.periodo}
+                                  </span>
+                                </div>
+                                {week.tema && (
+                                  <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                                    {week.tema}
+                                  </p>
+                                )}
+                              </div>
+                              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200 [[data-state=open]>&]:rotate-180" />
+                            </div>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent>
+                            <div className="ml-3 border-l border-border pl-3 pb-1 space-y-0.5 mt-1">
+                              <ul className="space-y-0.5">
+                                {ecoEvents.map((event, eIdx) => (
+                                  <li
+                                    key={eIdx}
+                                    className="text-[11px] text-muted-foreground leading-tight pl-1"
+                                  >
+                                    • {event}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          </CollapsibleContent>
+                        </Collapsible>
+                      );
+                    })}
+                  </div>
+                </CollapsibleContent>
+              </Collapsible>
+              </>
             )}
             {collapsed && (
               <div className="space-y-0.5 px-1 pb-4">
