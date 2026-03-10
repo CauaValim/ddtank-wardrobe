@@ -16,6 +16,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { cronograma } from "@/data/cronograma";
+import { cronogramaEconomica } from "@/data/cronogramaEconomica";
 import { Badge } from "@/components/ui/badge";
 
 const CATEGORY_COLORS: Record<string, string> = {
