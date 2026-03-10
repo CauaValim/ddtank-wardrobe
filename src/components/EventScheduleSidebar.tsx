@@ -50,7 +50,7 @@ export function EventScheduleSidebar() {
           <CalendarDays className="h-5 w-5 shrink-0 text-primary" />
           {!collapsed && (
             <span className="text-sm font-semibold text-foreground truncate">
-              Cronograma Eventos
+              Cronograma Projetos
             </span>
           )}
         </div>
