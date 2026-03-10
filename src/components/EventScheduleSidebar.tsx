@@ -210,6 +210,7 @@ export function EventScheduleSidebar() {
                   </div>
                 </CollapsibleContent>
               </Collapsible>
+              </>
             )}
             {collapsed && (
               <div className="space-y-0.5 px-1 pb-4">
