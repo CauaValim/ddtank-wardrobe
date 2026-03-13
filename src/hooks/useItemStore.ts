@@ -153,8 +153,7 @@ export function useItemStore() {
               failCount++;
               return;
             }
-            const ext = blob.type.split("/")[1] || "png";
-            const path = `${itemId}.${ext}`;
+            const path = `${itemId}.png`;
 
             const { error: uploadError } = await supabase.storage
               .from("item-images")
