@@ -36,7 +36,7 @@ export function useItemStore() {
         const { id, name, image_url, created_at, updated_at, ...rest } = row;
         const attributes: Record<string, string> = {};
         Object.entries(rest).forEach(([key, val]) => {
-          if (val != null && String(val).length < 200) {
+          if (val != null && (key === 'desc' || String(val).length < 200)) {
             attributes[key] = String(val);
           }
         });
