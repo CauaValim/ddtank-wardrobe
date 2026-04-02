@@ -93,7 +93,7 @@ export function useItemStore() {
     fetchItems();
   }, [fetchItems]);
 
-  // Save items to Supabase (upsert)
+  // Save items to Supabase (insert only NEW items, never overwrite existing)
   const addItems = async (newItems: GameItem[]) => {
     const validItems = newItems.filter((item) => {
       const numId = Number(item.id);
@@ -109,16 +109,39 @@ export function useItemStore() {
       toast.warning(`${newItems.length - validItems.length} itens ignorados por terem ID inválido.`);
     }
 
+    // Check which IDs already exist in the database
+    const allIds = validItems.map((i) => Number(i.id));
+    const existingIds = new Set<number>();
+    const checkBatchSize = 1000;
+    for (let i = 0; i < allIds.length; i += checkBatchSize) {
+      const batch = allIds.slice(i, i + checkBatchSize);
+      const { data } = await supabase
+        .from("items")
+        .select("id")
+        .in("id", batch);
+      if (data) data.forEach((row) => existingIds.add(row.id));
+    }
+
+    const onlyNewItems = validItems.filter((item) => !existingIds.has(Number(item.id)));
+
+    if (onlyNewItems.length === 0) {
+      toast.info(`Nenhum item novo encontrado. Todos os ${validItems.length} itens já existem.`);
+      return;
+    }
+
+    toast.info(`${existingIds.size} itens já existem e serão preservados. Inserindo ${onlyNewItems.length} novos...`);
+
+    // Update local state (add new, keep existing)
     setItems((prev) => {
       const map = new Map(prev.map((i) => [i.id, i]));
-      validItems.forEach((i) => map.set(i.id, i));
+      onlyNewItems.forEach((i) => map.set(i.id, i));
       return Array.from(map.values());
     });
 
     let failedBatches = 0;
     const batchSize = 500;
-    for (let i = 0; i < validItems.length; i += batchSize) {
-      const batch = validItems.slice(i, i + batchSize);
+    for (let i = 0; i < onlyNewItems.length; i += batchSize) {
+      const batch = onlyNewItems.slice(i, i + batchSize);
       const rows = batch.map((item) => {
         const row: Record<string, unknown> = {
           id: Number(item.id),
@@ -162,9 +185,9 @@ export function useItemStore() {
         return row;
       });
 
-      const { error } = await supabase.from("items").upsert(rows as any, { onConflict: "id" });
+      const { error } = await supabase.from("items").insert(rows as any);
       if (error) {
-        console.error("Upsert batch error:", error.message);
+        console.error("Insert batch error:", error.message);
         failedBatches++;
       }
     }
@@ -172,7 +195,7 @@ export function useItemStore() {
     if (failedBatches > 0) {
       toast.warning(`${failedBatches} lote(s) falharam ao salvar. Verifique o console.`);
     } else {
-      toast.success(`${validItems.length} itens salvos com sucesso!`);
+      toast.success(`${onlyNewItems.length} novos itens salvos com sucesso!`);
     }
   };
 
