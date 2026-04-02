@@ -2,6 +2,11 @@ import * as XLSX from "@e965/xlsx";
 import JSZip from "jszip";
 import type { GameItem } from "@/types/item";
 
+export interface ImportedImage {
+  blob: Blob;
+  previewUrl: string;
+}
+
 function findField(row: Record<string, unknown>, ...keys: string[]): unknown {
   for (const k of keys) {
     if (row[k] != null) return row[k];
@@ -11,6 +16,19 @@ function findField(row: Record<string, unknown>, ...keys: string[]): unknown {
 
 const ID_KEYS = ["ID", "id", "Id", "iD"];
 const NAME_KEYS = ["Nome", "nome", "name", "Name"];
+const IMAGE_MIME_TYPES: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  bmp: "image/bmp",
+};
+
+function getImageMimeType(filename: string): string {
+  const ext = filename.split(".").pop()?.toLowerCase() ?? "";
+  return IMAGE_MIME_TYPES[ext] ?? "application/octet-stream";
+}
 
 function parseRows(rows: Record<string, unknown>[]): GameItem[] {
   return rows
@@ -32,7 +50,6 @@ function parseRows(rows: Record<string, unknown>[]): GameItem[] {
 
 export async function parseJson(file: File): Promise<GameItem[]> {
   const text = await file.text();
-  // Replace NaN (invalid JSON) with null before parsing
   const sanitized = text.replace(/\bNaN\b/g, "null");
   const data = JSON.parse(sanitized);
   const rows: Record<string, unknown>[] = Array.isArray(data) ? data : [];
@@ -50,10 +67,10 @@ export async function parseExcel(file: File): Promise<GameItem[]> {
 
 export async function parseZipImages(
   file: File
-): Promise<Map<string, string>> {
+): Promise<Map<string, ImportedImage>> {
   const buffer = await file.arrayBuffer();
   const zip = await JSZip.loadAsync(buffer);
-  const imageMap = new Map<string, string>();
+  const imageMap = new Map<string, ImportedImage>();
 
   const entries = Object.entries(zip.files).filter(
     ([name, f]) =>
@@ -62,11 +79,14 @@ export async function parseZipImages(
 
   await Promise.all(
     entries.map(async ([name, zipEntry]) => {
-      const blob = await zipEntry.async("blob");
-      const url = URL.createObjectURL(blob);
-      // Extract filename without extension as the ID key
-      const basename = name.split("/").pop()?.replace(/\.[^.]+$/, "") ?? "";
-      if (basename) imageMap.set(basename, url);
+      const bytes = await zipEntry.async("uint8array");
+      const blob = new Blob([bytes], { type: getImageMimeType(name) });
+      const previewUrl = URL.createObjectURL(blob);
+      const basename = name.split("/").pop()?.replace(/\.[^.]+$/, "").trim() ?? "";
+
+      if (basename) {
+        imageMap.set(basename, { blob, previewUrl });
+      }
     })
   );
 

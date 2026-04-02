@@ -1,12 +1,12 @@
 import { useCallback, useRef, useState } from "react";
 import { Upload, FileSpreadsheet, Archive, CheckCircle2, FileText } from "lucide-react";
-import { parseExcel, parseJson, parseZipImages } from "@/lib/fileParser";
+import { parseExcel, parseJson, parseZipImages, type ImportedImage } from "@/lib/fileParser";
 import type { GameItem } from "@/types/item";
 
 interface FileImporterProps {
-  onItemsLoaded: (items: GameItem[]) => void;
-  onImagesLoaded: (images: Map<string, string>) => void;
-  onSyncDescriptions?: (items: GameItem[]) => void;
+  onItemsLoaded: (items: GameItem[]) => Promise<void> | void;
+  onImagesLoaded: (images: Map<string, ImportedImage>) => Promise<void> | void;
+  onSyncDescriptions?: (items: GameItem[]) => Promise<void> | void;
   canImportImages?: boolean;
   canSyncDescriptions?: boolean;
 }
@@ -32,7 +32,7 @@ export function FileImporter({ onItemsLoaded, onImagesLoaded, onSyncDescriptions
           ? await parseJson(file)
           : await parseExcel(file);
         setExcelCount(items.length);
-        onItemsLoaded(items);
+        await onItemsLoaded(items);
         setExcelStatus("done");
       } catch {
         setExcelStatus("idle");
@@ -49,7 +49,7 @@ export function FileImporter({ onItemsLoaded, onImagesLoaded, onSyncDescriptions
       try {
         const images = await parseZipImages(file);
         setZipCount(images.size);
-        onImagesLoaded(images);
+        await onImagesLoaded(images);
         setZipStatus("done");
       } catch {
         setZipStatus("idle");
