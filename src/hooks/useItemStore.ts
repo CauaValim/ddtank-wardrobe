@@ -66,17 +66,33 @@ export function useItemStore() {
 
   // Save items to Supabase (upsert)
   const addItems = async (newItems: GameItem[]) => {
+    // Filter out items with invalid IDs
+    const validItems = newItems.filter((item) => {
+      const numId = Number(item.id);
+      return !isNaN(numId) && numId > 0 && isFinite(numId);
+    });
+
+    if (validItems.length === 0) {
+      toast.error("Nenhum item válido encontrado para importar.");
+      return;
+    }
+
+    if (validItems.length < newItems.length) {
+      toast.warning(`${newItems.length - validItems.length} itens ignorados por terem ID inválido.`);
+    }
+
     // Update local state immediately
     setItems((prev) => {
       const map = new Map(prev.map((i) => [i.id, i]));
-      newItems.forEach((i) => map.set(i.id, i));
+      validItems.forEach((i) => map.set(i.id, i));
       return Array.from(map.values());
     });
 
     // Persist to Supabase in batches
+    let failedBatches = 0;
     const batchSize = 500;
-    for (let i = 0; i < newItems.length; i += batchSize) {
-      const batch = newItems.slice(i, i + batchSize);
+    for (let i = 0; i < validItems.length; i += batchSize) {
+      const batch = validItems.slice(i, i + batchSize);
       const rows = batch.map((item) => {
         const row: Record<string, unknown> = {
           id: Number(item.id),
@@ -120,7 +136,17 @@ export function useItemStore() {
         return row;
       });
 
-      await supabase.from("items").upsert(rows as any, { onConflict: "id" });
+      const { error } = await supabase.from("items").upsert(rows as any, { onConflict: "id" });
+      if (error) {
+        console.error("Upsert batch error:", error.message);
+        failedBatches++;
+      }
+    }
+
+    if (failedBatches > 0) {
+      toast.warning(`${failedBatches} lote(s) falharam ao salvar. Verifique o console.`);
+    } else {
+      toast.success(`${validItems.length} itens salvos com sucesso!`);
     }
   };
 
