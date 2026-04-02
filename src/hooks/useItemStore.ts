@@ -136,7 +136,17 @@ export function useItemStore() {
         return row;
       });
 
-      await supabase.from("items").upsert(rows as any, { onConflict: "id" });
+      const { error } = await supabase.from("items").upsert(rows as any, { onConflict: "id" });
+      if (error) {
+        console.error("Upsert batch error:", error.message);
+        failedBatches++;
+      }
+    }
+
+    if (failedBatches > 0) {
+      toast.warning(`${failedBatches} lote(s) falharam ao salvar. Verifique o console.`);
+    } else {
+      toast.success(`${validItems.length} itens salvos com sucesso!`);
     }
   };
 
