@@ -1,7 +1,36 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import type { ImportedImage } from "@/lib/fileParser";
 import type { GameItem } from "@/types/item";
+
+async function convertBlobToPng(blob: Blob): Promise<Blob> {
+  if (blob.type === "image/png") return blob;
+
+  const imageBitmap = await createImageBitmap(blob);
+  const canvas = document.createElement("canvas");
+  canvas.width = imageBitmap.width;
+  canvas.height = imageBitmap.height;
+
+  const context = canvas.getContext("2d");
+  if (!context) {
+    imageBitmap.close();
+    throw new Error("Não foi possível processar a imagem.");
+  }
+
+  context.drawImage(imageBitmap, 0, 0);
+  imageBitmap.close();
+
+  const pngBlob = await new Promise<Blob | null>((resolve) => {
+    canvas.toBlob(resolve, "image/png");
+  });
+
+  if (!pngBlob) {
+    throw new Error("Falha ao converter imagem para PNG.");
+  }
+
+  return pngBlob;
+}
 
 export function useItemStore() {
   const [items, setItems] = useState<GameItem[]>([]);
@@ -36,7 +65,7 @@ export function useItemStore() {
         const { id, name, image_url, created_at, updated_at, ...rest } = row;
         const attributes: Record<string, string> = {};
         Object.entries(rest).forEach(([key, val]) => {
-          if (val != null && (key === 'desc' || String(val).length < 200)) {
+          if (val != null && (key === "desc" || String(val).length < 200)) {
             attributes[key] = String(val);
           }
         });
@@ -66,7 +95,6 @@ export function useItemStore() {
 
   // Save items to Supabase (upsert)
   const addItems = async (newItems: GameItem[]) => {
-    // Filter out items with invalid IDs
     const validItems = newItems.filter((item) => {
       const numId = Number(item.id);
       return !isNaN(numId) && numId > 0 && isFinite(numId);
@@ -81,14 +109,12 @@ export function useItemStore() {
       toast.warning(`${newItems.length - validItems.length} itens ignorados por terem ID inválido.`);
     }
 
-    // Update local state immediately
     setItems((prev) => {
       const map = new Map(prev.map((i) => [i.id, i]));
       validItems.forEach((i) => map.set(i.id, i));
       return Array.from(map.values());
     });
 
-    // Persist to Supabase in batches
     let failedBatches = 0;
     const batchSize = 500;
     for (let i = 0; i < validItems.length; i += batchSize) {
@@ -98,7 +124,7 @@ export function useItemStore() {
           id: Number(item.id),
           name: item.name,
         };
-        // Map known attributes back to columns
+
         const attrs = item.attributes;
         const intFields = [
           "type", "attack", "defence", "agility", "luck", "item_grade",
@@ -150,40 +176,47 @@ export function useItemStore() {
     }
   };
 
-  const addImages = async (newImages: Map<string, string>) => {
-    // Update local state immediately for preview
+  const addImages = async (newImages: Map<string, ImportedImage>) => {
+    if (newImages.size === 0) {
+      const errorMessage = "Nenhuma imagem encontrada no arquivo ZIP.";
+      toast.info(errorMessage);
+      throw new Error(errorMessage);
+    }
+
     setImages((prev) => {
       const merged = new Map(prev);
-      newImages.forEach((v, k) => merged.set(k, v));
+      newImages.forEach(({ previewUrl }, k) => merged.set(k, previewUrl));
       return merged;
     });
 
     let successCount = 0;
     let failCount = 0;
+    let skippedCount = 0;
     const total = newImages.size;
 
     toast.info(`Iniciando upload de ${total} imagens...`);
 
-    // Process in batches of 5 to avoid overwhelming the server
     const entries = Array.from(newImages.entries());
     const batchSize = 5;
 
     for (let i = 0; i < entries.length; i += batchSize) {
       const batch = entries.slice(i, i + batchSize);
       await Promise.all(
-        batch.map(async ([itemId, blobUrl]) => {
+        batch.map(async ([itemId, imageData]) => {
+          const numericId = Number(itemId);
+          if (!Number.isFinite(numericId) || numericId <= 0) {
+            console.error(`ID de imagem inválido: ${itemId}`);
+            skippedCount++;
+            return;
+          }
+
           try {
-            const res = await fetch(blobUrl);
-            const blob = await res.blob();
-            if (blob.size === 0) {
-              failCount++;
-              return;
-            }
-            const path = `${itemId}.png`;
+            const pngBlob = await convertBlobToPng(imageData.blob);
+            const path = `${numericId}.png`;
 
             const { error: uploadError } = await supabase.storage
               .from("item-images")
-              .upload(path, blob, { upsert: true, contentType: blob.type });
+              .upload(path, pngBlob, { upsert: true, contentType: "image/png" });
 
             if (uploadError) {
               console.error(`Upload failed for ${itemId}:`, uploadError.message);
@@ -197,10 +230,21 @@ export function useItemStore() {
 
             const publicUrl = urlData.publicUrl;
 
-            await supabase
+            const { data: updatedItem, error: updateError } = await supabase
               .from("items")
               .update({ image_url: publicUrl })
-              .eq("id", Number(itemId));
+              .eq("id", numericId)
+              .select("id")
+              .maybeSingle();
+
+            if (updateError || !updatedItem) {
+              console.error(
+                `Image URL update failed for ${itemId}:`,
+                updateError?.message ?? "item não encontrado"
+              );
+              failCount++;
+              return;
+            }
 
             setImages((prev) => {
               const next = new Map(prev);
@@ -215,14 +259,26 @@ export function useItemStore() {
         })
       );
 
-      // Progress toast every 50 images
-      if ((i + batchSize) % 50 === 0 && i + batchSize < entries.length) {
-        toast.info(`Progresso: ${successCount + failCount}/${total} imagens processadas`);
+      const processed = Math.min(i + batch.length, entries.length);
+      if (processed % 50 === 0 && processed < entries.length) {
+        toast.info(`Progresso: ${processed}/${total} imagens processadas`);
       }
     }
 
-    if (failCount > 0) {
-      toast.warning(`Upload concluído: ${successCount} salvas, ${failCount} falharam`);
+    if (successCount === 0) {
+      const errorMessage =
+        skippedCount > 0 && failCount === 0
+          ? "Nenhuma imagem foi salva. Use o ID do item como nome do arquivo no ZIP."
+          : "Nenhuma imagem foi salva. Verifique se os itens já foram importados e se os arquivos do ZIP usam o ID do item.";
+
+      toast.error(errorMessage);
+      throw new Error(errorMessage);
+    }
+
+    if (failCount > 0 || skippedCount > 0) {
+      toast.warning(
+        `Upload concluído: ${successCount} salvas, ${failCount} falharam${skippedCount > 0 ? `, ${skippedCount} ignoradas por ID inválido` : ""}`
+      );
     } else {
       toast.success(`${successCount} imagens salvas com sucesso!`);
     }
