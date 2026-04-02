@@ -79,8 +79,8 @@ export async function parseZipImages(
 
   await Promise.all(
     entries.map(async ([name, zipEntry]) => {
-      const bytes = await zipEntry.async("uint8array");
-      const blob = new Blob([bytes], { type: getImageMimeType(name) });
+      const buffer = await zipEntry.async("arraybuffer");
+      const blob = new Blob([buffer], { type: getImageMimeType(name) });
       const previewUrl = URL.createObjectURL(blob);
       const basename = name.split("/").pop()?.replace(/\.[^.]+$/, "").trim() ?? "";
 
