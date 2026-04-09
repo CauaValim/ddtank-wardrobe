@@ -1,0 +1,1 @@
+UPDATE public.items SET type = 203 WHERE id IN (313511, 313623);
