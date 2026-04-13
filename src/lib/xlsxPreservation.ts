@@ -164,7 +164,8 @@ function createRun(
   doc: Document,
   text: string,
   colorRgb: string | null,
-  colorTheme: string | null
+  colorTheme: string | null,
+  bold = false
 ): Element {
   const r = doc.createElementNS(SPREADSHEET_NS, "r");
   const rPr = doc.createElementNS(SPREADSHEET_NS, "rPr");
@@ -185,6 +186,11 @@ function createRun(
   rFont.setAttribute("val", "Cambria");
   rPr.appendChild(rFont);
 
+  if (bold) {
+    const b = doc.createElementNS(SPREADSHEET_NS, "b");
+    rPr.appendChild(b);
+  }
+
   r.appendChild(rPr);
 
   const t = doc.createElementNS(SPREADSHEET_NS, "t");
@@ -198,8 +204,8 @@ function createRun(
 }
 
 /**
- * Write a rich-text ID*amount value with colors:
- * ID (black/theme1), * (black/theme1), amount (red FF0000), separators (black/theme1)
+ * Write a rich-text ID*amount value with colors and formatting:
+ * ID (black/theme1 + bold), * (black/theme1), amount (red FF0000), separators (black/theme1)
  */
 function writeRichIdAmount(sheetDoc: Document, cell: Element, text: string) {
   cell.setAttribute("t", "inlineStr");
@@ -214,18 +220,19 @@ function writeRichIdAmount(sheetDoc: Document, cell: Element, text: string) {
 
     // Check if this is a separator (comma or OR)
     if (/^,\s*$/.test(seg) || /^\s+OR\s+$/i.test(seg)) {
-      is.appendChild(createRun(sheetDoc, seg, null, "1"));
+      is.appendChild(createRun(sheetDoc, seg, null, "1", false));
       continue;
     }
 
     // Parse ID*amount pattern
     const match = seg.match(/^(\d+)(\*)(\d+)$/);
     if (match) {
-      is.appendChild(createRun(sheetDoc, match[1] + match[2], null, "1")); // ID* in black
-      is.appendChild(createRun(sheetDoc, match[3], "FFFF0000", null));     // amount in red
+      is.appendChild(createRun(sheetDoc, match[1], null, "1", true));      // ID in black + bold
+      is.appendChild(createRun(sheetDoc, match[2], null, "1", false));    // * in black
+      is.appendChild(createRun(sheetDoc, match[3], "FFFF0000", null, false)); // amount in red
     } else {
       // Fallback: just black
-      is.appendChild(createRun(sheetDoc, seg, null, "1"));
+      is.appendChild(createRun(sheetDoc, seg, null, "1", false));
     }
   }
 
