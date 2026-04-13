@@ -96,7 +96,7 @@ export function IdFillerModal({ open, onClose }: IdFillerModalProps) {
 
   const downloadResult = useCallback(() => {
     if (!resultWbRef.current) return;
-    const out = XLSX.write(resultWbRef.current, { type: "array", bookType: "xlsx" });
+    const out = XLSX.write(resultWbRef.current, { type: "array", bookType: "xlsx", cellStyles: true });
     const blob = new Blob([out], {
       type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     });
