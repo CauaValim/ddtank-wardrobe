@@ -1,4 +1,5 @@
 import * as XLSX from "@e965/xlsx";
+import JSZip from "jszip";
 
 export interface IdFillerError {
   sheet: string;
@@ -8,16 +9,15 @@ export interface IdFillerError {
 }
 
 export interface IdFillerResult {
-  workbook: XLSX.WorkBook;
+  /** The modified xlsx as an ArrayBuffer, preserving all original formatting */
+  outputBuffer: ArrayBuffer;
   errors: IdFillerError[];
   filled: number;
 }
 
 /** Strip suffixes like [Permanent] [Bound] [30 Days - renewable] etc. and trim */
 function cleanItemName(raw: string): string {
-  // Remove newlines first
   let name = raw.replace(/\n/g, " ");
-  // Remove all [...] suffixes
   name = name.replace(/\s*\[.*?\]/g, "");
   return name.trim();
 }
@@ -56,12 +56,9 @@ function lookupId(
   }
   if (ids.length > 1) {
     errors.push({
-      sheet,
-      cell,
-      itemName: cleaned,
+      sheet, cell, itemName: cleaned,
       reason: `Múltiplos IDs encontrados: ${ids.join(", ")}`,
     });
-    // Use first match anyway
   }
   return ids[0];
 }
@@ -79,35 +76,44 @@ function getCellValue(ws: XLSX.WorkSheet, r: number, c: number): string | null {
   return String(v);
 }
 
-function setCellValue(ws: XLSX.WorkSheet, r: number, c: number, value: string | number) {
-  const ref = cellRef(r, c);
-  if (!ws[ref]) {
-    ws[ref] = { t: typeof value === "number" ? "n" : "s", v: value };
-  } else {
-    ws[ref].v = value;
-    ws[ref].t = typeof value === "number" ? "n" : "s";
-  }
-}
-
 function getRange(ws: XLSX.WorkSheet): { minR: number; maxR: number; minC: number; maxC: number } {
   const range = XLSX.utils.decode_range(ws["!ref"] || "A1");
-  return {
-    minR: range.s.r + 1,
-    maxR: range.e.r + 1,
-    minC: range.s.c + 1,
-    maxC: range.e.c + 1,
-  };
+  return { minR: range.s.r + 1, maxR: range.e.r + 1, minC: range.s.c + 1, maxC: range.e.c + 1 };
 }
 
-/**
- * Pattern 1: "ID" column header - bare ID fill
- * Looks for header row with "ID" column, then fills empty ID cells from item name column
- */
-function fillBareIdColumns(
-  ws: XLSX.WorkSheet,
-  sheetName: string,
-  nameIndex: Map<string, number[]>,
-  errors: IdFillerError[]
+/** Collect all cell changes needed (cell ref → new value) without modifying the workbook */
+function collectChanges(
+  wb: XLSX.WorkBook,
+  nameIndex: Map<string, number[]>
+): { changes: Map<string, Map<string, string | number>>; errors: IdFillerError[]; filled: number } {
+  const errors: IdFillerError[] = [];
+  // sheetName → { cellRef → newValue }
+  const changes = new Map<string, Map<string, string | number>>();
+  let totalFilled = 0;
+
+  for (const sheetName of wb.SheetNames) {
+    const ws = wb.Sheets[sheetName];
+    if (!ws || !ws["!ref"]) continue;
+    const sheetChanges = new Map<string, string | number>();
+
+    const filled1 = collectBareIdColumns(ws, sheetName, nameIndex, errors, sheetChanges);
+    const filled2 = collectIdAmountColumns(ws, sheetName, nameIndex, errors, sheetChanges);
+    const filled3 = collectExchangeColumns(ws, sheetName, nameIndex, errors, sheetChanges);
+    const filled4 = collectStandaloneAmounts(ws, sheetName, nameIndex, errors, sheetChanges);
+
+    const sheetFilled = filled1 + filled2 + filled3 + filled4;
+    totalFilled += sheetFilled;
+    if (sheetChanges.size > 0) {
+      changes.set(sheetName, sheetChanges);
+    }
+  }
+
+  return { changes, errors, filled: totalFilled };
+}
+
+function collectBareIdColumns(
+  ws: XLSX.WorkSheet, sheetName: string, nameIndex: Map<string, number[]>,
+  errors: IdFillerError[], out: Map<string, string | number>
 ): number {
   let filled = 0;
   const { minR, maxR, minC, maxC } = getRange(ws);
@@ -115,36 +121,23 @@ function fillBareIdColumns(
   for (let r = minR; r <= maxR; r++) {
     for (let c = minC; c <= maxC; c++) {
       const val = getCellValue(ws, r, c);
-      if (!val) continue;
-      const trimmed = val.trim().toUpperCase();
-      if (trimmed !== "ID") continue;
+      if (!val || val.trim().toUpperCase() !== "ID") continue;
 
-      // Found an "ID" header at (r, c). Look for "Item Name" in same row
       let nameCol: number | null = null;
       for (let nc = minC; nc <= maxC; nc++) {
         const hv = getCellValue(ws, r, nc);
-        if (hv && /item\s*name/i.test(hv.trim())) {
-          nameCol = nc;
-          break;
-        }
+        if (hv && /item\s*name/i.test(hv.trim())) { nameCol = nc; break; }
       }
       if (nameCol == null) continue;
 
-      // Fill rows below this header
       for (let dr = r + 1; dr <= maxR; dr++) {
         const existingId = getCellValue(ws, dr, c);
-        if (existingId != null) continue; // already has ID
-
+        if (existingId != null) continue;
         const name = getCellValue(ws, dr, nameCol);
         if (!name) continue;
-
-        // Check if next header row
-        const checkHeader = getCellValue(ws, dr, c);
-        if (checkHeader && checkHeader.trim().toUpperCase() === "ID") break;
-
         const id = lookupId(name, nameIndex, errors, sheetName, cellRef(dr, c));
         if (id != null) {
-          setCellValue(ws, dr, c, id);
+          out.set(cellRef(dr, c), id);
           filled++;
         }
       }
@@ -153,21 +146,13 @@ function fillBareIdColumns(
   return filled;
 }
 
-/**
- * Pattern 2: "ID / AMOUNT" or "ID/ Amount" or "ID and Amount" columns
- * Cells contain "*amt,*amt,*amt" → "ID*amt,ID*amt,ID*amt"
- * Item names are in a nearby column, spanning multiple rows (one name per amount)
- */
-function fillIdAmountColumns(
-  ws: XLSX.WorkSheet,
-  sheetName: string,
-  nameIndex: Map<string, number[]>,
-  errors: IdFillerError[]
+function collectIdAmountColumns(
+  ws: XLSX.WorkSheet, sheetName: string, nameIndex: Map<string, number[]>,
+  errors: IdFillerError[], out: Map<string, string | number>
 ): number {
   let filled = 0;
   const { minR, maxR, minC, maxC } = getRange(ws);
 
-  // Find header cells matching "ID" patterns in combination with "Amount"
   for (let r = minR; r <= maxR; r++) {
     for (let c = minC; c <= maxC; c++) {
       const val = getCellValue(ws, r, c);
@@ -175,43 +160,23 @@ function fillIdAmountColumns(
       const trimmed = val.trim();
       if (!/id\s*[\/&]\s*amount/i.test(trimmed) && !/id\s+and\s+amount/i.test(trimmed)) continue;
 
-      // Found ID/Amount header at (r, c). Find name column
       let nameCol: number | null = null;
       for (let nc = minC; nc <= maxC; nc++) {
         if (nc === c) continue;
         const hv = getCellValue(ws, r, nc);
         if (!hv) continue;
         const ht = hv.trim().toLowerCase();
-        if (
-          ht.includes("item name") ||
-          ht.includes("items / validity") ||
-          ht.includes("item") ||
-          ht.includes("items")
-        ) {
-          nameCol = nc;
-          break;
-        }
+        if (ht.includes("item") || ht.includes("items")) { nameCol = nc; break; }
       }
-      if (nameCol == null) {
-        // Try the column to the left of ID/Amount
-        nameCol = c - 1;
-      }
+      if (nameCol == null) nameCol = c - 1;
 
-      // Process rows below
       for (let dr = r + 1; dr <= maxR; dr++) {
         const cellVal = getCellValue(ws, dr, c);
         if (!cellVal) continue;
-
-        // Check if it's a new header row
-        if (/id\s*[\/&]\s*amount/i.test(cellVal.trim()) || /id\s+and\s+amount/i.test(cellVal.trim())) break;
-
-        // Only process cells that start with * (unfilled)
+        if (/id\s*[\/&]\s*amount/i.test(cellVal.trim())) break;
         if (!cellVal.trim().startsWith("*")) continue;
 
-        // Split by comma to get amounts
         const amounts = cellVal.split(",").map((s: string) => s.trim());
-
-        // Collect item names from nameCol starting at this row and going down
         const names: { name: string; row: number }[] = [];
         for (let nr = dr; nr < dr + amounts.length && nr <= maxR; nr++) {
           const n = getCellValue(ws, nr, nameCol);
@@ -219,111 +184,74 @@ function fillIdAmountColumns(
         }
 
         if (names.length !== amounts.length) {
-          // Try to match what we can
-          errors.push({
-            sheet: sheetName,
-            cell: cellRef(dr, c),
+          errors.push({ sheet: sheetName, cell: cellRef(dr, c),
             itemName: `${amounts.length} quantidades vs ${names.length} nomes`,
-            reason: "Quantidade de itens não corresponde",
-          });
+            reason: "Quantidade de itens não corresponde" });
         }
 
         const idAmounts: string[] = [];
         const count = Math.min(amounts.length, names.length);
         for (let i = 0; i < count; i++) {
-          const amt = amounts[i]; // e.g. "*200"
           const id = lookupId(names[i].name, nameIndex, errors, sheetName, cellRef(dr, c));
-          if (id != null) {
-            // Replace *amount with ID*amount
-            idAmounts.push(amt.replace("*", `${id}*`));
-          } else {
-            idAmounts.push(amt); // keep original
-          }
+          if (id != null) idAmounts.push(amounts[i].replace("*", `${id}*`));
+          else idAmounts.push(amounts[i]);
         }
-        // Add any remaining amounts that didn't have names
-        for (let i = count; i < amounts.length; i++) {
-          idAmounts.push(amounts[i]);
-        }
+        for (let i = count; i < amounts.length; i++) idAmounts.push(amounts[i]);
 
         const newVal = idAmounts.join(",");
-        if (newVal !== cellVal) {
-          setCellValue(ws, dr, c, newVal);
-          filled++;
-        }
+        if (newVal !== cellVal) { out.set(cellRef(dr, c), newVal); filled++; }
       }
     }
   }
   return filled;
 }
 
-/**
- * Pattern 3: Exchange "Value" column
- * Cells have "*1" in the Value column → "exchangeItemID*1"
- * Exchange item is defined above (look for "ID: NNNN" or "EXCHANGE ITEM" section)
- */
-function fillExchangeValueColumn(
-  ws: XLSX.WorkSheet,
-  sheetName: string,
-  nameIndex: Map<string, number[]>,
-  errors: IdFillerError[]
+function collectExchangeColumns(
+  ws: XLSX.WorkSheet, sheetName: string, nameIndex: Map<string, number[]>,
+  errors: IdFillerError[], out: Map<string, string | number>
 ): number {
   let filled = 0;
   const { minR, maxR, minC, maxC } = getRange(ws);
 
-  // Find exchange item ID - look for "ID: NNNN" pattern
   let exchangeId: number | null = null;
   for (let r = minR; r <= maxR; r++) {
     for (let c = minC; c <= maxC; c++) {
       const val = getCellValue(ws, r, c);
       if (!val) continue;
       const match = val.match(/^ID:\s*(\d+)$/i);
-      if (match) {
-        exchangeId = parseInt(match[1]);
-        break;
-      }
+      if (match) { exchangeId = parseInt(match[1]); break; }
     }
     if (exchangeId) break;
   }
   if (!exchangeId) return 0;
 
-  // Find "Value" header columns
+  // Fill "Value" columns
   for (let r = minR; r <= maxR; r++) {
     for (let c = minC; c <= maxC; c++) {
       const val = getCellValue(ws, r, c);
       if (!val || val.trim().toLowerCase() !== "value") continue;
-
-      // Process rows below
       for (let dr = r + 1; dr <= maxR; dr++) {
         const cellVal = getCellValue(ws, dr, c);
         if (!cellVal) continue;
-        const trimmed = cellVal.trim();
-        if (trimmed.toLowerCase() === "value") break; // new section
-
-        // Only process cells that are just "*N" (no ID yet)
-        if (/^\*\d+$/.test(trimmed)) {
-          setCellValue(ws, dr, c, `${exchangeId}${trimmed}`);
+        if (cellVal.trim().toLowerCase() === "value") break;
+        if (/^\*\d+$/.test(cellVal.trim())) {
+          out.set(cellRef(dr, c), `${exchangeId}${cellVal.trim()}`);
           filled++;
         }
       }
     }
   }
 
-  // Also fill the "ID/ Amount" column for exchange items
+  // Fill "ID/ Amount" columns
   for (let r = minR; r <= maxR; r++) {
     for (let c = minC; c <= maxC; c++) {
       const val = getCellValue(ws, r, c);
-      if (!val) continue;
-      if (!/id\s*[\/&]\s*amount/i.test(val.trim())) continue;
-
-      // Find item name column
+      if (!val || !/id\s*[\/&]\s*amount/i.test(val.trim())) continue;
       let nameCol: number | null = null;
       for (let nc = minC; nc <= maxC; nc++) {
         if (nc === c) continue;
         const hv = getCellValue(ws, r, nc);
-        if (hv && /item\s*name/i.test(hv.trim())) {
-          nameCol = nc;
-          break;
-        }
+        if (hv && /item\s*name/i.test(hv.trim())) { nameCol = nc; break; }
       }
       if (nameCol == null) continue;
 
@@ -331,15 +259,11 @@ function fillExchangeValueColumn(
         const cellVal = getCellValue(ws, dr, c);
         if (!cellVal) continue;
         if (/id\s*[\/&]\s*amount/i.test(cellVal.trim())) break;
-
         if (/^\*\d+$/.test(cellVal.trim())) {
           const name = getCellValue(ws, dr, nameCol);
           if (!name) continue;
           const id = lookupId(name, nameIndex, errors, sheetName, cellRef(dr, c));
-          if (id != null) {
-            setCellValue(ws, dr, c, `${id}${cellVal.trim()}`);
-            filled++;
-          }
+          if (id != null) { out.set(cellRef(dr, c), `${id}${cellVal.trim()}`); filled++; }
         }
       }
     }
@@ -348,119 +272,244 @@ function fillExchangeValueColumn(
   return filled;
 }
 
-/**
- * Pattern 4: Standalone "*amount" cells that aren't in ID/Amount headers
- * Used in Daily Entry queues, Missions, etc.
- * Look for cells with "*N,*N,*N" pattern and item names in nearby cells
- */
-function fillStandaloneAmountCells(
-  ws: XLSX.WorkSheet,
-  sheetName: string,
-  nameIndex: Map<string, number[]>,
-  errors: IdFillerError[]
+function collectStandaloneAmounts(
+  ws: XLSX.WorkSheet, sheetName: string, nameIndex: Map<string, number[]>,
+  errors: IdFillerError[], out: Map<string, string | number>
 ): number {
   let filled = 0;
   const { minR, maxR, minC, maxC } = getRange(ws);
 
   for (let r = minR; r <= maxR; r++) {
     for (let c = minC; c <= maxC; c++) {
+      if (out.has(cellRef(r, c))) continue; // already handled
       const val = getCellValue(ws, r, c);
       if (!val) continue;
       const trimmed = val.trim();
-
-      // Match comma-separated *amounts pattern (already unfilled)
       if (!/^\*\d+/.test(trimmed)) continue;
-      // Skip if already has IDs (digit before *)
-      if (/\d\*\d/.test(trimmed)) continue;
+      if (/\d\*\d/.test(trimmed)) continue; // already has IDs
 
-      // Split amounts
       const parts = trimmed.split(",").map((s: string) => s.trim());
-      const amountCount = parts.length;
-
-      // Find item names - look in adjacent columns at same row and rows above
-      // The pattern is: names appear in a row above or at same row, in nearby columns
       const names: string[] = [];
 
-      // Check rows above for item names (typically 2 rows above for queues)
       for (let searchR = Math.max(minR, r - 3); searchR < r; searchR++) {
         for (let nc = c - 1; nc <= c + 10 && nc <= maxC; nc++) {
           const n = getCellValue(ws, searchR, nc);
-          if (n && /\[.*\]/.test(n)) {
-            // Has bracket suffixes → likely item name
-            names.push(n);
-          }
+          if (n && /\[.*\]/.test(n)) names.push(n);
         }
-        if (names.length >= amountCount) break;
+        if (names.length >= parts.length) break;
       }
 
       if (names.length === 0) continue;
-      if (names.length !== amountCount) {
-        errors.push({
-          sheet: sheetName,
-          cell: cellRef(r, c),
-          itemName: `${amountCount} quantidades vs ${names.length} nomes`,
-          reason: "Quantidade de nomes não corresponde (standalone)",
-        });
+      if (names.length !== parts.length) {
+        errors.push({ sheet: sheetName, cell: cellRef(r, c),
+          itemName: `${parts.length} qtd vs ${names.length} nomes`, reason: "Quantidade não corresponde (standalone)" });
       }
 
       const idAmounts: string[] = [];
       const count = Math.min(parts.length, names.length);
       for (let i = 0; i < count; i++) {
         const id = lookupId(names[i], nameIndex, errors, sheetName, cellRef(r, c));
-        if (id != null) {
-          idAmounts.push(parts[i].replace("*", `${id}*`));
-        } else {
-          idAmounts.push(parts[i]);
-        }
+        if (id != null) idAmounts.push(parts[i].replace("*", `${id}*`));
+        else idAmounts.push(parts[i]);
       }
-      for (let i = count; i < parts.length; i++) {
-        idAmounts.push(parts[i]);
-      }
+      for (let i = count; i < parts.length; i++) idAmounts.push(parts[i]);
 
       const newVal = idAmounts.join(",");
-      if (newVal !== trimmed) {
-        setCellValue(ws, r, c, newVal);
-        filled++;
-      }
+      if (newVal !== trimmed) { out.set(cellRef(r, c), newVal); filled++; }
     }
   }
   return filled;
 }
 
 /**
- * Main function: process a workbook and fill IDs
+ * Apply collected changes to the raw xlsx zip, preserving all formatting, merges, images, etc.
+ * We parse each sheet XML, find the target cells, and update only their values.
  */
-export function fillIds(
+async function applyChangesToZip(
+  originalBuffer: ArrayBuffer,
   wb: XLSX.WorkBook,
-  nameIndex: Map<string, number[]>
-): IdFillerResult {
-  const errors: IdFillerError[] = [];
-  let totalFilled = 0;
+  changes: Map<string, Map<string, string | number>>
+): Promise<ArrayBuffer> {
+  const zip = await JSZip.loadAsync(originalBuffer);
 
-  for (const sheetName of wb.SheetNames) {
-    const ws = wb.Sheets[sheetName];
-    if (!ws || !ws["!ref"]) continue;
+  // Read workbook.xml to get sheet→file mapping
+  const wbXml = await zip.file("xl/workbook.xml")?.async("string");
+  if (!wbXml) throw new Error("Invalid xlsx: no workbook.xml");
 
-    // Apply patterns in order of specificity
-    totalFilled += fillBareIdColumns(ws, sheetName, nameIndex, errors);
-    totalFilled += fillIdAmountColumns(ws, sheetName, nameIndex, errors);
-    totalFilled += fillExchangeValueColumn(ws, sheetName, nameIndex, errors);
-    totalFilled += fillStandaloneAmountCells(ws, sheetName, nameIndex, errors);
+  // Get sheet rIds from workbook.xml
+  const sheetEntries: { name: string; rId: string }[] = [];
+  const sheetRegex = /<sheet[^>]*name="([^"]*)"[^>]*r:id="([^"]*)"[^>]*\/?>/gi;
+  let m;
+  while ((m = sheetRegex.exec(wbXml)) !== null) {
+    sheetEntries.push({ name: m[1], rId: m[2] });
   }
 
-  return { workbook: wb, errors, filled: totalFilled };
+  // Read rels to map rId → file path
+  const relsXml = await zip.file("xl/_rels/workbook.xml.rels")?.async("string");
+  if (!relsXml) throw new Error("Invalid xlsx: no rels");
+
+  const relMap = new Map<string, string>();
+  const relRegex = /<Relationship[^>]*Id="([^"]*)"[^>]*Target="([^"]*)"[^>]*\/?>/gi;
+  while ((m = relRegex.exec(relsXml)) !== null) {
+    relMap.set(m[1], m[2]);
+  }
+
+  // Read shared strings
+  let sharedStrings: string[] = [];
+  let sst: string | undefined;
+  const sstFile = zip.file("xl/sharedStrings.xml");
+  if (sstFile) {
+    sst = await sstFile.async("string");
+    const siRegex = /<si>([\s\S]*?)<\/si>/gi;
+    while ((m = siRegex.exec(sst)) !== null) {
+      // Extract text from <t> tags
+      const tRegex = /<t[^>]*>([\s\S]*?)<\/t>/gi;
+      let text = "";
+      let tm;
+      while ((tm = tRegex.exec(m[1])) !== null) {
+        text += tm[1];
+      }
+      sharedStrings.push(text);
+    }
+  }
+
+  // Track new shared strings we add
+  const newStrings: string[] = [];
+
+  function getOrAddSharedString(val: string): number {
+    // Check existing
+    const idx = sharedStrings.indexOf(val);
+    if (idx >= 0) return idx;
+    // Check newly added
+    const newIdx = newStrings.indexOf(val);
+    if (newIdx >= 0) return sharedStrings.length + newIdx;
+    // Add new
+    newStrings.push(val);
+    return sharedStrings.length + newStrings.length - 1;
+  }
+
+  for (const [sheetName, cellChanges] of changes) {
+    const entry = sheetEntries.find((s) => s.name === sheetName);
+    if (!entry) continue;
+    const target = relMap.get(entry.rId);
+    if (!target) continue;
+    const filePath = `xl/${target}`;
+    const sheetFile = zip.file(filePath);
+    if (!sheetFile) continue;
+
+    let xml = await sheetFile.async("string");
+
+    for (const [ref, value] of cellChanges) {
+      const isNumber = typeof value === "number";
+      const escapedRef = ref.replace(/\$/g, "\\$");
+
+      // Try to find existing cell element
+      const cellRegex = new RegExp(
+        `(<c[^>]*\\br="${escapedRef}"[^>]*)(>(?:[\\s\\S]*?)<\\/c>|\\/>)`,
+        "i"
+      );
+      const cellMatch = cellRegex.exec(xml);
+
+      if (cellMatch) {
+        // Cell exists - update it
+        if (isNumber) {
+          // Set type to number, replace value
+          let attrs = cellMatch[1].replace(/\s+t="[^"]*"/, "");
+          xml = xml.replace(cellMatch[0], `${attrs}><v>${value}</v></c>`);
+        } else {
+          // Use shared string for text values
+          const ssIdx = getOrAddSharedString(String(value));
+          let attrs = cellMatch[1].replace(/\s+t="[^"]*"/, "");
+          attrs += ` t="s"`;
+          xml = xml.replace(cellMatch[0], `${attrs}><v>${ssIdx}</v></c>`);
+        }
+      } else {
+        // Cell doesn't exist - insert it into the correct row
+        const colRow = XLSX.utils.decode_cell(ref);
+        const rowNum = colRow.r + 1;
+        const rowRegex = new RegExp(
+          `(<row[^>]*\\br="${rowNum}"[^>]*>)([\\s\\S]*?)(<\\/row>)`,
+          "i"
+        );
+        const rowMatch = rowRegex.exec(xml);
+        if (rowMatch) {
+          let newCell: string;
+          if (isNumber) {
+            newCell = `<c r="${ref}"><v>${value}</v></c>`;
+          } else {
+            const ssIdx = getOrAddSharedString(String(value));
+            newCell = `<c r="${ref}" t="s"><v>${ssIdx}</v></c>`;
+          }
+          xml = xml.replace(rowMatch[0], `${rowMatch[1]}${rowMatch[2]}${newCell}${rowMatch[3]}`);
+        }
+      }
+    }
+
+    zip.file(filePath, xml);
+  }
+
+  // Update shared strings if we added new ones
+  if (newStrings.length > 0 && sst) {
+    // Update count and uniqueCount
+    const totalCount = sharedStrings.length + newStrings.length;
+    let updatedSst = sst.replace(
+      /(<sst[^>]*)\bcount="(\d+)"/,
+      `$1count="${totalCount}"`
+    );
+    updatedSst = updatedSst.replace(
+      /(<sst[^>]*)\buniqueCount="(\d+)"/,
+      `$1uniqueCount="${totalCount}"`
+    );
+
+    // Add new <si> entries before </sst>
+    const newEntries = newStrings
+      .map((s) => `<si><t>${escapeXml(s)}</t></si>`)
+      .join("");
+    updatedSst = updatedSst.replace("</sst>", `${newEntries}</sst>`);
+
+    zip.file("xl/sharedStrings.xml", updatedSst);
+  }
+
+  return zip.generateAsync({ type: "arraybuffer", compression: "DEFLATE" });
 }
 
-/** Generate an error report as a new workbook */
-export function createErrorReport(errors: IdFillerError[]): XLSX.WorkBook {
+function escapeXml(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+/**
+ * Main function: analyze workbook and apply changes to raw xlsx preserving formatting
+ */
+export async function fillIds(
+  originalBuffer: ArrayBuffer,
+  nameIndex: Map<string, number[]>
+): Promise<IdFillerResult> {
+  // Read with XLSX for analysis only
+  const wb = XLSX.read(new Uint8Array(originalBuffer), { type: "array" });
+
+  // Collect changes without modifying the workbook
+  const { changes, errors, filled } = collectChanges(wb, nameIndex);
+
+  // Apply changes directly to the raw xlsx zip
+  const outputBuffer = await applyChangesToZip(originalBuffer, wb, changes);
+
+  return { outputBuffer, errors, filled };
+}
+
+/** Generate an error report as xlsx ArrayBuffer */
+export function createErrorReport(errors: IdFillerError[]): ArrayBuffer {
   const wb = XLSX.utils.book_new();
   const data = [
     ["Sheet", "Célula", "Nome do Item", "Motivo"],
     ...errors.map((e) => [e.sheet, e.cell, e.itemName, e.reason]),
   ];
   const ws = XLSX.utils.aoa_to_sheet(data);
-  // Set column widths
   ws["!cols"] = [{ wch: 30 }, { wch: 10 }, { wch: 40 }, { wch: 50 }];
   XLSX.utils.book_append_sheet(wb, ws, "Erros");
-  return wb;
+  return XLSX.write(wb, { type: "array", bookType: "xlsx" });
 }
