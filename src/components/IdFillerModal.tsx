@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef } from "react";
-import { FileSpreadsheet, Download, AlertTriangle, CheckCircle2, Loader2, X } from "lucide-react";
+import { FileSpreadsheet, Download, AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
 import * as XLSX from "@e965/xlsx";
 import { supabase } from "@/integrations/supabase/client";
 import { buildNameIndex, fillIds, createErrorReport } from "@/lib/idFiller";
@@ -20,8 +20,8 @@ export function IdFillerModal({ open, onClose }: IdFillerModalProps) {
   const [filledCount, setFilledCount] = useState(0);
   const [errorCount, setErrorCount] = useState(0);
   const [fileName, setFileName] = useState("");
-  const resultWbRef = useRef<XLSX.WorkBook | null>(null);
-  const errorWbRef = useRef<XLSX.WorkBook | null>(null);
+  const resultBufRef = useRef<ArrayBuffer | null>(null);
+  const errorBufRef = useRef<ArrayBuffer | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const reset = useCallback(() => {
@@ -29,8 +29,8 @@ export function IdFillerModal({ open, onClose }: IdFillerModalProps) {
     setFilledCount(0);
     setErrorCount(0);
     setFileName("");
-    resultWbRef.current = null;
-    errorWbRef.current = null;
+    resultBufRef.current = null;
+    errorBufRef.current = null;
   }, []);
 
   const handleFile = useCallback(
@@ -41,7 +41,6 @@ export function IdFillerModal({ open, onClose }: IdFillerModalProps) {
       setFileName(file.name);
 
       try {
-        // Step 1: Load items from DB
         setStatus("loading-db");
         const allItems: { id: number; name: string | null }[] = [];
         let from = 0;
@@ -60,20 +59,16 @@ export function IdFillerModal({ open, onClose }: IdFillerModalProps) {
 
         const nameIndex = buildNameIndex(allItems);
 
-        // Step 2: Parse xlsx
         setStatus("processing");
         const ab = await file.arrayBuffer();
-        const wb = XLSX.read(ab, { type: "array" });
+        const result = await fillIds(ab, nameIndex);
 
-        // Step 3: Fill IDs
-        const result = fillIds(wb, nameIndex);
-
-        resultWbRef.current = result.workbook;
+        resultBufRef.current = result.outputBuffer;
         setFilledCount(result.filled);
         setErrorCount(result.errors.length);
 
         if (result.errors.length > 0) {
-          errorWbRef.current = createErrorReport(result.errors);
+          errorBufRef.current = createErrorReport(result.errors);
         }
 
         setStatus("done");
@@ -94,34 +89,28 @@ export function IdFillerModal({ open, onClose }: IdFillerModalProps) {
     [toast]
   );
 
-  const downloadResult = useCallback(() => {
-    if (!resultWbRef.current) return;
-    const out = XLSX.write(resultWbRef.current, { type: "array", bookType: "xlsx" });
-    const blob = new Blob([out], {
+  const downloadBlob = useCallback((buf: ArrayBuffer, name: string) => {
+    const blob = new Blob([buf], {
       type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    const baseName = fileName.replace(/\.xlsx$/i, "");
-    a.download = `${baseName}_ID.xlsx`;
+    a.download = name;
     a.click();
     URL.revokeObjectURL(url);
-  }, [fileName]);
+  }, []);
+
+  const downloadResult = useCallback(() => {
+    if (!resultBufRef.current) return;
+    const baseName = fileName.replace(/\.xlsx$/i, "");
+    downloadBlob(resultBufRef.current, `${baseName}_ID.xlsx`);
+  }, [fileName, downloadBlob]);
 
   const downloadErrors = useCallback(() => {
-    if (!errorWbRef.current) return;
-    const out = XLSX.write(errorWbRef.current, { type: "array", bookType: "xlsx" });
-    const blob = new Blob([out], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `erros_${fileName}`;
-    a.click();
-    URL.revokeObjectURL(url);
-  }, [fileName]);
+    if (!errorBufRef.current) return;
+    downloadBlob(errorBufRef.current, `erros_${fileName}`);
+  }, [fileName, downloadBlob]);
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -172,13 +161,13 @@ export function IdFillerModal({ open, onClose }: IdFillerModalProps) {
           {status === "done" && (
             <div className="space-y-4">
               <div className="flex items-center gap-2 rounded-lg bg-secondary p-3">
-                <CheckCircle2 className="h-5 w-5 text-green-500" />
+                <CheckCircle2 className="h-5 w-5 text-primary" />
                 <div>
                   <p className="text-sm font-medium">
                     {filledCount} IDs preenchidos
                   </p>
                   {errorCount > 0 && (
-                    <p className="text-xs text-amber-500">
+                    <p className="text-xs text-destructive">
                       {errorCount} itens com erro
                     </p>
                   )}
@@ -191,11 +180,7 @@ export function IdFillerModal({ open, onClose }: IdFillerModalProps) {
                   Baixar documento com IDs
                 </Button>
                 {errorCount > 0 && (
-                  <Button
-                    onClick={downloadErrors}
-                    variant="outline"
-                    className="w-full"
-                  >
+                  <Button onClick={downloadErrors} variant="outline" className="w-full">
                     <AlertTriangle className="h-4 w-4" />
                     Baixar relatório de erros
                   </Button>
