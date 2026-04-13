@@ -298,7 +298,7 @@ export async function fillIds(
     cellStyles: true,
   });
 
-  return { outputBuffer: out.buffer as ArrayBuffer, errors, filled: totalFilled };
+  return { outputBuffer: out as ArrayBuffer, errors, filled: totalFilled };
 }
 
 export function createErrorReport(errors: IdFillerError[]): ArrayBuffer {
@@ -311,5 +311,5 @@ export function createErrorReport(errors: IdFillerError[]): ArrayBuffer {
   ws["!cols"] = [{ wch: 30 }, { wch: 10 }, { wch: 40 }, { wch: 50 }];
   XLSX.utils.book_append_sheet(wb, ws, "Erros");
   const out = XLSX.write(wb, { type: "array", bookType: "xlsx" });
-  return out.buffer as ArrayBuffer;
+  return out as ArrayBuffer;
 }
