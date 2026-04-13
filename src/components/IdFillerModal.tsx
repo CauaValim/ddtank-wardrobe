@@ -63,7 +63,7 @@ export function IdFillerModal({ open, onClose }: IdFillerModalProps) {
         // Step 2: Parse xlsx
         setStatus("processing");
         const ab = await file.arrayBuffer();
-        const wb = XLSX.read(ab, { type: "array" });
+        const wb = XLSX.read(ab, { type: "array", cellStyles: true, cellNF: true, cellDates: true });
 
         // Step 3: Fill IDs
         const result = fillIds(wb, nameIndex);
