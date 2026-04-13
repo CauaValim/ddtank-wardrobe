@@ -323,6 +323,8 @@ const Index = ({ auth }: IndexProps) => {
         onClose={() => setSelectedItem(null)}
         canViewId={auth.canViewId}
       />
+
+      <IdFillerModal open={idFillerOpen} onClose={() => setIdFillerOpen(false)} />
     </div>
   );
 };
