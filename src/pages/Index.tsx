@@ -7,6 +7,7 @@ import { FileImporter } from "@/components/FileImporter";
 import { ItemCard } from "@/components/ItemCard";
 import { ItemDetailModal } from "@/components/ItemDetailModal";
 import { BulkTypeMover } from "@/components/BulkTypeMover";
+import { IdFillerModal } from "@/components/IdFillerModal";
 import { getTypeName, getTypeGroups, HIDDEN_TYPES } from "@/lib/itemTypes";
 import type { GameItem } from "@/types/item";
 import type { useAuth } from "@/hooks/useAuth";
@@ -32,6 +33,7 @@ const Index = ({ auth }: IndexProps) => {
 
   const [selectedItem, setSelectedItem] = useState<GameItem | null>(null);
   const [selectedType, setSelectedType] = useState<string | null>(null);
+  const [idFillerOpen, setIdFillerOpen] = useState(false);
 
   // Multi-select state
   const [selectionMode, setSelectionMode] = useState(false);
@@ -167,6 +169,15 @@ const Index = ({ auth }: IndexProps) => {
             )}
             {auth.canImport && (
               <FileImporter onItemsLoaded={addItems} onImagesLoaded={addImages} onSyncDescriptions={syncDescriptions} canImportImages={auth.canImportImages} canSyncDescriptions={auth.canSyncDescriptions} />
+            )}
+            {(auth.role === "super_admin" || auth.role === "admin") && (
+              <button
+                onClick={() => setIdFillerOpen(true)}
+                className="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-muted transition-all"
+                title="Preencher IDs no Documento"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5" />
+              </button>
             )}
             {auth.role === "super_admin" && (
               <button
