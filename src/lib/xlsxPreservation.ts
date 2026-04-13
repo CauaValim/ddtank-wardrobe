@@ -149,6 +149,89 @@ function getOrCreateCell(
   return cell;
 }
 
+/**
+ * Detect if a string is an ID*amount pattern like "12656*500,46077*1,12212*500"
+ * or "14654*2 OR 11412*10"
+ */
+function isIdAmountPattern(text: string): boolean {
+  return /\d+\*\d+/.test(text) && /^[\d*,\s\w]+$/.test(text);
+}
+
+/**
+ * Create a rich text run element: <r><rPr>...</rPr><t>text</t></r>
+ */
+function createRun(
+  doc: Document,
+  text: string,
+  colorRgb: string | null,
+  colorTheme: string | null
+): Element {
+  const r = doc.createElementNS(SPREADSHEET_NS, "r");
+  const rPr = doc.createElementNS(SPREADSHEET_NS, "rPr");
+
+  const sz = doc.createElementNS(SPREADSHEET_NS, "sz");
+  sz.setAttribute("val", "11");
+  rPr.appendChild(sz);
+
+  const color = doc.createElementNS(SPREADSHEET_NS, "color");
+  if (colorRgb) {
+    color.setAttribute("rgb", colorRgb);
+  } else if (colorTheme) {
+    color.setAttribute("theme", colorTheme);
+  }
+  rPr.appendChild(color);
+
+  const rFont = doc.createElementNS(SPREADSHEET_NS, "rFont");
+  rFont.setAttribute("val", "Cambria");
+  rPr.appendChild(rFont);
+
+  r.appendChild(rPr);
+
+  const t = doc.createElementNS(SPREADSHEET_NS, "t");
+  if (/^\s|\s$/.test(text)) {
+    t.setAttributeNS(XML_NS, "xml:space", "preserve");
+  }
+  t.textContent = text;
+  r.appendChild(t);
+
+  return r;
+}
+
+/**
+ * Write a rich-text ID*amount value with colors:
+ * ID (black/theme1), * (black/theme1), amount (red FF0000), separators (black/theme1)
+ */
+function writeRichIdAmount(sheetDoc: Document, cell: Element, text: string) {
+  cell.setAttribute("t", "inlineStr");
+  const is = sheetDoc.createElementNS(SPREADSHEET_NS, "is");
+
+  // Split by comma or OR, keeping separators
+  const segments = text.split(/(,\s*|\s+OR\s+)/i);
+
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i];
+    if (!seg) continue;
+
+    // Check if this is a separator (comma or OR)
+    if (/^,\s*$/.test(seg) || /^\s+OR\s+$/i.test(seg)) {
+      is.appendChild(createRun(sheetDoc, seg, null, "1"));
+      continue;
+    }
+
+    // Parse ID*amount pattern
+    const match = seg.match(/^(\d+)(\*)(\d+)$/);
+    if (match) {
+      is.appendChild(createRun(sheetDoc, match[1] + match[2], null, "1")); // ID* in black
+      is.appendChild(createRun(sheetDoc, match[3], "FFFF0000", null));     // amount in red
+    } else {
+      // Fallback: just black
+      is.appendChild(createRun(sheetDoc, seg, null, "1"));
+    }
+  }
+
+  cell.appendChild(is);
+}
+
 function writeCellValue(sheetDoc: Document, cell: Element, value: XlsxCellValue) {
   while (cell.firstChild) {
     cell.removeChild(cell.firstChild);
@@ -163,6 +246,13 @@ function writeCellValue(sheetDoc: Document, cell: Element, value: XlsxCellValue)
   }
 
   const text = String(value);
+
+  // Use rich text for ID*amount patterns
+  if (isIdAmountPattern(text)) {
+    writeRichIdAmount(sheetDoc, cell, text);
+    return;
+  }
+
   cell.setAttribute("t", "inlineStr");
   const is = sheetDoc.createElementNS(SPREADSHEET_NS, "is");
   const t = sheetDoc.createElementNS(SPREADSHEET_NS, "t");
