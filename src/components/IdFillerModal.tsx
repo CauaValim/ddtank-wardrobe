@@ -97,8 +97,12 @@ export function IdFillerModal({ open, onClose }: IdFillerModalProps) {
     const a = document.createElement("a");
     a.href = url;
     a.download = name;
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 500);
   }, []);
 
   const downloadResult = useCallback(() => {
