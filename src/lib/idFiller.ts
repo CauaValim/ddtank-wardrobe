@@ -1,5 +1,5 @@
 import * as XLSX from "@e965/xlsx";
-import JSZip from "jszip";
+import { applyWorkbookChanges, type WorksheetCellChanges } from "@/lib/xlsxPreservation";
 
 export interface IdFillerError {
   sheet: string;
@@ -34,9 +34,23 @@ export function buildNameIndex(
   return index;
 }
 
+function recordCellChange(
+  changes: WorksheetCellChanges,
+  sheetName: string,
+  cell: string,
+  value: string | number
+) {
+  const sheetChanges = changes.get(sheetName) ?? new Map<string, string | number>();
+  sheetChanges.set(cell, value);
+  changes.set(sheetName, sheetChanges);
+}
+
 function lookupId(
-  name: string, nameIndex: Map<string, number[]>,
-  errors: IdFillerError[], sheet: string, cell: string
+  name: string,
+  nameIndex: Map<string, number[]>,
+  errors: IdFillerError[],
+  sheet: string,
+  cell: string
 ): number | null {
   const cleaned = cleanItemName(name);
   const key = cleaned.toLowerCase();
@@ -46,8 +60,12 @@ function lookupId(
     return null;
   }
   if (ids.length > 1) {
-    errors.push({ sheet, cell, itemName: cleaned,
-      reason: `Múltiplos IDs encontrados: ${ids.join(", ")}` });
+    errors.push({
+      sheet,
+      cell,
+      itemName: cleaned,
+      reason: `Múltiplos IDs encontrados: ${ids.join(", ")}`,
+    });
   }
   return ids[0];
 }
@@ -65,15 +83,22 @@ function getCellValue(ws: XLSX.WorkSheet, r: number, c: number): string | null {
   return String(v);
 }
 
-function setCellValue(ws: XLSX.WorkSheet, r: number, c: number, value: string | number) {
+function setCellValue(
+  ws: XLSX.WorkSheet,
+  r: number,
+  c: number,
+  value: string | number,
+  sheetName: string,
+  changes: WorksheetCellChanges
+) {
   const ref = cellRef(r, c);
   if (!ws[ref]) {
     ws[ref] = { t: typeof value === "number" ? "n" : "s", v: value };
   } else {
     ws[ref].v = value;
     ws[ref].t = typeof value === "number" ? "n" : "s";
-    // Keep existing style index
   }
+  recordCellChange(changes, sheetName, ref, value);
 }
 
 function getRange(ws: XLSX.WorkSheet): { minR: number; maxR: number; minC: number; maxC: number } {
@@ -82,7 +107,11 @@ function getRange(ws: XLSX.WorkSheet): { minR: number; maxR: number; minC: numbe
 }
 
 function fillBareIdColumns(
-  ws: XLSX.WorkSheet, sheetName: string, nameIndex: Map<string, number[]>, errors: IdFillerError[]
+  ws: XLSX.WorkSheet,
+  sheetName: string,
+  nameIndex: Map<string, number[]>,
+  errors: IdFillerError[],
+  changes: WorksheetCellChanges
 ): number {
   let filled = 0;
   const { minR, maxR, minC, maxC } = getRange(ws);
@@ -93,7 +122,10 @@ function fillBareIdColumns(
       let nameCol: number | null = null;
       for (let nc = minC; nc <= maxC; nc++) {
         const hv = getCellValue(ws, r, nc);
-        if (hv && /item\s*name/i.test(hv.trim())) { nameCol = nc; break; }
+        if (hv && /item\s*name/i.test(hv.trim())) {
+          nameCol = nc;
+          break;
+        }
       }
       if (nameCol == null) continue;
       for (let dr = r + 1; dr <= maxR; dr++) {
@@ -102,7 +134,10 @@ function fillBareIdColumns(
         const name = getCellValue(ws, dr, nameCol);
         if (!name) continue;
         const id = lookupId(name, nameIndex, errors, sheetName, cellRef(dr, c));
-        if (id != null) { setCellValue(ws, dr, c, id); filled++; }
+        if (id != null) {
+          setCellValue(ws, dr, c, id, sheetName, changes);
+          filled++;
+        }
       }
     }
   }
@@ -110,7 +145,11 @@ function fillBareIdColumns(
 }
 
 function fillIdAmountColumns(
-  ws: XLSX.WorkSheet, sheetName: string, nameIndex: Map<string, number[]>, errors: IdFillerError[]
+  ws: XLSX.WorkSheet,
+  sheetName: string,
+  nameIndex: Map<string, number[]>,
+  errors: IdFillerError[],
+  changes: WorksheetCellChanges
 ): number {
   let filled = 0;
   const { minR, maxR, minC, maxC } = getRange(ws);
@@ -125,7 +164,10 @@ function fillIdAmountColumns(
         const hv = getCellValue(ws, r, nc);
         if (!hv) continue;
         const ht = hv.trim().toLowerCase();
-        if (ht.includes("item") || ht.includes("items")) { nameCol = nc; break; }
+        if (ht.includes("item") || ht.includes("items")) {
+          nameCol = nc;
+          break;
+        }
       }
       if (nameCol == null) nameCol = c - 1;
       for (let dr = r + 1; dr <= maxR; dr++) {
@@ -140,8 +182,12 @@ function fillIdAmountColumns(
           if (n) names.push({ name: n, row: nr });
         }
         if (names.length !== amounts.length) {
-          errors.push({ sheet: sheetName, cell: cellRef(dr, c),
-            itemName: `${amounts.length} quantidades vs ${names.length} nomes`, reason: "Quantidade não corresponde" });
+          errors.push({
+            sheet: sheetName,
+            cell: cellRef(dr, c),
+            itemName: `${amounts.length} quantidades vs ${names.length} nomes`,
+            reason: "Quantidade não corresponde",
+          });
         }
         const idAmounts: string[] = [];
         const count = Math.min(amounts.length, names.length);
@@ -152,7 +198,10 @@ function fillIdAmountColumns(
         }
         for (let i = count; i < amounts.length; i++) idAmounts.push(amounts[i]);
         const newVal = idAmounts.join(",");
-        if (newVal !== cellVal) { setCellValue(ws, dr, c, newVal); filled++; }
+        if (newVal !== cellVal) {
+          setCellValue(ws, dr, c, newVal, sheetName, changes);
+          filled++;
+        }
       }
     }
   }
@@ -160,7 +209,11 @@ function fillIdAmountColumns(
 }
 
 function fillExchangeColumns(
-  ws: XLSX.WorkSheet, sheetName: string, nameIndex: Map<string, number[]>, errors: IdFillerError[]
+  ws: XLSX.WorkSheet,
+  sheetName: string,
+  nameIndex: Map<string, number[]>,
+  errors: IdFillerError[],
+  changes: WorksheetCellChanges
 ): number {
   let filled = 0;
   const { minR, maxR, minC, maxC } = getRange(ws);
@@ -170,7 +223,10 @@ function fillExchangeColumns(
       const val = getCellValue(ws, r, c);
       if (!val) continue;
       const match = val.match(/^ID:\s*(\d+)$/i);
-      if (match) { exchangeId = parseInt(match[1]); break; }
+      if (match) {
+        exchangeId = parseInt(match[1]);
+        break;
+      }
     }
     if (exchangeId) break;
   }
@@ -184,7 +240,7 @@ function fillExchangeColumns(
         if (!cellVal) continue;
         if (cellVal.trim().toLowerCase() === "value") break;
         if (/^\*\d+$/.test(cellVal.trim())) {
-          setCellValue(ws, dr, c, `${exchangeId}${cellVal.trim()}`);
+          setCellValue(ws, dr, c, `${exchangeId}${cellVal.trim()}`, sheetName, changes);
           filled++;
         }
       }
@@ -198,7 +254,10 @@ function fillExchangeColumns(
       for (let nc = minC; nc <= maxC; nc++) {
         if (nc === c) continue;
         const hv = getCellValue(ws, r, nc);
-        if (hv && /item\s*name/i.test(hv.trim())) { nameCol = nc; break; }
+        if (hv && /item\s*name/i.test(hv.trim())) {
+          nameCol = nc;
+          break;
+        }
       }
       if (nameCol == null) continue;
       for (let dr = r + 1; dr <= maxR; dr++) {
@@ -209,7 +268,10 @@ function fillExchangeColumns(
           const name = getCellValue(ws, dr, nameCol);
           if (!name) continue;
           const id = lookupId(name, nameIndex, errors, sheetName, cellRef(dr, c));
-          if (id != null) { setCellValue(ws, dr, c, `${id}${cellVal.trim()}`); filled++; }
+          if (id != null) {
+            setCellValue(ws, dr, c, `${id}${cellVal.trim()}`, sheetName, changes);
+            filled++;
+          }
         }
       }
     }
@@ -218,8 +280,12 @@ function fillExchangeColumns(
 }
 
 function fillStandaloneAmounts(
-  ws: XLSX.WorkSheet, sheetName: string, nameIndex: Map<string, number[]>, errors: IdFillerError[],
-  alreadyFilled: Set<string>
+  ws: XLSX.WorkSheet,
+  sheetName: string,
+  nameIndex: Map<string, number[]>,
+  errors: IdFillerError[],
+  alreadyFilled: Set<string>,
+  changes: WorksheetCellChanges
 ): number {
   let filled = 0;
   const { minR, maxR, minC, maxC } = getRange(ws);
@@ -243,8 +309,12 @@ function fillStandaloneAmounts(
       }
       if (names.length === 0) continue;
       if (names.length !== parts.length) {
-        errors.push({ sheet: sheetName, cell: ref,
-          itemName: `${parts.length} qtd vs ${names.length} nomes`, reason: "Quantidade não corresponde" });
+        errors.push({
+          sheet: sheetName,
+          cell: ref,
+          itemName: `${parts.length} qtd vs ${names.length} nomes`,
+          reason: "Quantidade não corresponde",
+        });
       }
       const idAmounts: string[] = [];
       const count = Math.min(parts.length, names.length);
@@ -255,16 +325,15 @@ function fillStandaloneAmounts(
       }
       for (let i = count; i < parts.length; i++) idAmounts.push(parts[i]);
       const newVal = idAmounts.join(",");
-      if (newVal !== trimmed) { setCellValue(ws, r, c, newVal); filled++; }
+      if (newVal !== trimmed) {
+        setCellValue(ws, r, c, newVal, sheetName, changes);
+        filled++;
+      }
     }
   }
   return filled;
 }
 
-/**
- * Main: read with XLSX (for analysis + modification), then write cleanly.
- * XLSX preserves merges, column widths, row heights. Visual styles may simplify.
- */
 export async function fillIds(
   originalBuffer: ArrayBuffer,
   nameIndex: Map<string, number[]>
@@ -277,6 +346,7 @@ export async function fillIds(
   });
 
   const errors: IdFillerError[] = [];
+  const changes: WorksheetCellChanges = new Map();
   let totalFilled = 0;
 
   for (const sheetName of wb.SheetNames) {
@@ -284,21 +354,15 @@ export async function fillIds(
     if (!ws || !ws["!ref"]) continue;
 
     const alreadyFilled = new Set<string>();
-    const f1 = fillBareIdColumns(ws, sheetName, nameIndex, errors);
-    const f2 = fillIdAmountColumns(ws, sheetName, nameIndex, errors);
-    const f3 = fillExchangeColumns(ws, sheetName, nameIndex, errors);
-    const f4 = fillStandaloneAmounts(ws, sheetName, nameIndex, errors, alreadyFilled);
+    const f1 = fillBareIdColumns(ws, sheetName, nameIndex, errors, changes);
+    const f2 = fillIdAmountColumns(ws, sheetName, nameIndex, errors, changes);
+    const f3 = fillExchangeColumns(ws, sheetName, nameIndex, errors, changes);
+    const f4 = fillStandaloneAmounts(ws, sheetName, nameIndex, errors, alreadyFilled, changes);
     totalFilled += f1 + f2 + f3 + f4;
   }
 
-  // Write back using XLSX - preserves merges, structure
-  const out = XLSX.write(wb, {
-    type: "array",
-    bookType: "xlsx",
-    cellStyles: true,
-  });
-
-  return { outputBuffer: out as ArrayBuffer, errors, filled: totalFilled };
+  const outputBuffer = await applyWorkbookChanges(originalBuffer, changes);
+  return { outputBuffer, errors, filled: totalFilled };
 }
 
 export function createErrorReport(errors: IdFillerError[]): ArrayBuffer {
