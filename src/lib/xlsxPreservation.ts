@@ -8,7 +8,7 @@ const SPREADSHEET_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/mai
 const DOCUMENT_REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
 const XML_NS = "http://www.w3.org/XML/1998/namespace";
 
-function getDescendantsByLocalName(parent: ParentNode, localName: string): Element[] {
+function getDescendantsByLocalName(parent: Document | Element, localName: string): Element[] {
   return Array.from(parent.getElementsByTagNameNS("*", localName));
 }
 
@@ -19,8 +19,7 @@ function getChildElementsByLocalName(parent: Element, localName: string): Elemen
 }
 
 function getFirstByLocalName(node: Document | Element, localName: string): Element | null {
-  const scope = node instanceof Document ? node : node;
-  return getDescendantsByLocalName(scope, localName)[0] ?? null;
+  return getDescendantsByLocalName(node, localName)[0] ?? null;
 }
 
 function assertValidXml(doc: Document, filePath: string) {
@@ -163,15 +162,16 @@ function writeCellValue(sheetDoc: Document, cell: Element, value: XlsxCellValue)
     return;
   }
 
+  const text = String(value);
   cell.setAttribute("t", "inlineStr");
   const is = sheetDoc.createElementNS(SPREADSHEET_NS, "is");
   const t = sheetDoc.createElementNS(SPREADSHEET_NS, "t");
 
-  if (/^\s|\s$|\n/.test(value)) {
+  if (/^\s|\s$|\n/.test(text)) {
     t.setAttributeNS(XML_NS, "xml:space", "preserve");
   }
 
-  t.textContent = value;
+  t.textContent = text;
   is.appendChild(t);
   cell.appendChild(is);
 }
