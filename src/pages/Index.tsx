@@ -3,10 +3,12 @@ import { Search, Package, Gamepad2, MousePointerClick, CheckSquare, LogOut, User
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useNavigate } from "react-router-dom";
 import { useItemStore } from "@/hooks/useItemStore";
+import { useCategories } from "@/hooks/useCategories";
 import { FileImporter } from "@/components/FileImporter";
 import { ItemCard } from "@/components/ItemCard";
 import { ItemDetailModal } from "@/components/ItemDetailModal";
 import { BulkTypeMover } from "@/components/BulkTypeMover";
+import { CategoryManager } from "@/components/CategoryManager";
 import { IdFillerModal } from "@/components/IdFillerModal";
 import { getTypeName, getTypeGroups, HIDDEN_TYPES } from "@/lib/itemTypes";
 import type { GameItem } from "@/types/item";
