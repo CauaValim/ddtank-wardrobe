@@ -62,7 +62,7 @@ const Index = ({ auth }: IndexProps) => {
     return getTypeGroups(existingTypes);
   }, [items]);
 
-  // Filter items by type
+  // Filter items by type and category
   const filteredItems = useMemo(() => {
     let result = items;
     if (selectedType != null) {
@@ -70,8 +70,14 @@ const Index = ({ auth }: IndexProps) => {
       const typeNumbers = matchingGroup ? matchingGroup[1] : [];
       result = result.filter((item) => typeNumbers.includes(Number(item.attributes.type)));
     }
+    if (selectedCategory != null) {
+      result = result.filter((item) => {
+        const catIds = itemCategoryMap.get(Number(item.id)) ?? [];
+        return catIds.includes(selectedCategory);
+      });
+    }
     return result;
-  }, [items, selectedType, typeGroups]);
+  }, [items, selectedType, typeGroups, selectedCategory, itemCategoryMap]);
 
   const lastSelectedIndex = useRef<number | null>(null);
 
