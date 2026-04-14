@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useRef } from "react";
-import { Search, Package, Gamepad2, MousePointerClick, CheckSquare, LogOut, Users, FileSpreadsheet } from "lucide-react";
+import { Search, Package, Gamepad2, MousePointerClick, CheckSquare, LogOut, Users, FileSpreadsheet, Tag } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useNavigate } from "react-router-dom";
 import { useItemStore } from "@/hooks/useItemStore";
@@ -9,6 +9,7 @@ import { ItemDetailModal } from "@/components/ItemDetailModal";
 import { BulkTypeMover } from "@/components/BulkTypeMover";
 import { IdFillerModal } from "@/components/IdFillerModal";
 import { getTypeName, getTypeGroups, HIDDEN_TYPES } from "@/lib/itemTypes";
+import { useCategories } from "@/hooks/useCategories";
 import type { GameItem } from "@/types/item";
 import type { useAuth } from "@/hooks/useAuth";
 
@@ -31,8 +32,11 @@ const Index = ({ auth }: IndexProps) => {
     syncDescriptions,
   } = useItemStore();
 
+  const { categories, getItemCategories, itemCategoryMap } = useCategories();
+
   const [selectedItem, setSelectedItem] = useState<GameItem | null>(null);
   const [selectedType, setSelectedType] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [idFillerOpen, setIdFillerOpen] = useState(false);
 
   // Multi-select state
@@ -51,7 +55,7 @@ const Index = ({ auth }: IndexProps) => {
     return getTypeGroups(existingTypes);
   }, [items]);
 
-  // Filter items by type
+  // Filter items by type and category
   const filteredItems = useMemo(() => {
     let result = items;
     if (selectedType != null) {
@@ -59,8 +63,23 @@ const Index = ({ auth }: IndexProps) => {
       const typeNumbers = matchingGroup ? matchingGroup[1] : [];
       result = result.filter((item) => typeNumbers.includes(Number(item.attributes.type)));
     }
+    if (selectedCategory != null) {
+      result = result.filter((item) => {
+        const catIds = itemCategoryMap.get(Number(item.id)) ?? [];
+        return catIds.includes(selectedCategory);
+      });
+    }
     return result;
-  }, [items, selectedType, typeGroups]);
+  }, [items, selectedType, typeGroups, selectedCategory, itemCategoryMap]);
+
+  // Categories that have items
+  const activeCategories = useMemo(() => {
+    const catItemCounts = new Map<string, number>();
+    itemCategoryMap.forEach((catIds) => {
+      catIds.forEach((cid) => catItemCounts.set(cid, (catItemCounts.get(cid) ?? 0) + 1));
+    });
+    return categories.filter((c) => (catItemCounts.get(c.id) ?? 0) > 0);
+  }, [categories, itemCategoryMap]);
 
   const lastSelectedIndex = useRef<number | null>(null);
 
@@ -264,6 +283,42 @@ const Index = ({ auth }: IndexProps) => {
             </div>
           </div>
         )}
+
+        {/* Category filter */}
+        {activeCategories.length > 0 && (
+          <div className="space-y-1.5">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+              <Tag className="h-3 w-3" />
+              Categoria
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                onClick={() => setSelectedCategory(null)}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${
+                  selectedCategory === null
+                    ? "bg-accent text-accent-foreground"
+                    : "border border-border bg-secondary text-secondary-foreground hover:bg-muted"
+                }`}
+              >
+                Todas
+              </button>
+              {activeCategories.map((cat) => (
+                <button
+                  key={cat.id}
+                  onClick={() => setSelectedCategory(selectedCategory === cat.id ? null : cat.id)}
+                  className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${
+                    selectedCategory === cat.id
+                      ? "text-white"
+                      : "border border-border bg-secondary text-secondary-foreground hover:bg-muted"
+                  }`}
+                  style={selectedCategory === cat.id ? { backgroundColor: cat.color } : undefined}
+                >
+                  {cat.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Content */}
@@ -299,6 +354,7 @@ const Index = ({ auth }: IndexProps) => {
                 item={item}
                 imageUrl={getItemImage(item.id)}
                 onClick={setSelectedItem}
+                categories={getItemCategories(Number(item.id))}
                 selectionMode={auth.canSelect && selectionMode}
                 isSelected={selectedIds.has(item.id)}
                 onToggleSelect={toggleSelect}
