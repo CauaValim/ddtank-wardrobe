@@ -281,6 +281,22 @@ const Index = ({ auth }: IndexProps) => {
             </div>
           </div>
         )}
+
+        {/* Category filter */}
+        {categories.length > 0 && (
+          <div className="space-y-1.5">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Categoria
+            </span>
+            <CategoryManager
+              categories={categories}
+              selectedCategory={selectedCategory}
+              onSelectCategory={setSelectedCategory}
+              onAddCategory={addCategory}
+              onDeleteCategory={deleteCategory}
+            />
+          </div>
+        )}
       </div>
 
       {/* Content */}
