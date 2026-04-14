@@ -359,7 +359,6 @@ const Index = ({ auth }: IndexProps) => {
                 isSelected={selectedIds.has(item.id)}
                 onToggleSelect={toggleSelect}
               />
-              />
             ))}
           </div>
         )}
