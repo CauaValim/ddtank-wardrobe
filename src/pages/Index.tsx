@@ -354,9 +354,11 @@ const Index = ({ auth }: IndexProps) => {
                 item={item}
                 imageUrl={getItemImage(item.id)}
                 onClick={setSelectedItem}
+                categories={getItemCategories(Number(item.id))}
                 selectionMode={auth.canSelect && selectionMode}
                 isSelected={selectedIds.has(item.id)}
                 onToggleSelect={toggleSelect}
+              />
               />
             ))}
           </div>
