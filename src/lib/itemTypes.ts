@@ -75,6 +75,7 @@ export const ITEM_TYPE_MAP: Record<number, string> = {
   201: "Ilustração de Montaria",
   202: "Fragmentos",
   203: "Pérolas",
+  204: "Cadastros Manuais",
 };
 
 // Types that should be hidden from the filter list
