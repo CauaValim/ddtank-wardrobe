@@ -1,13 +1,11 @@
 import { memo } from "react";
 import { Package, Check } from "lucide-react";
 import type { GameItem } from "@/types/item";
-import type { Category } from "@/hooks/useCategories";
 
 interface ItemCardProps {
   item: GameItem;
   imageUrl?: string;
   onClick: (item: GameItem) => void;
-  categories?: Category[];
   selectionMode?: boolean;
   isSelected?: boolean;
   onToggleSelect?: (item: GameItem, shiftKey?: boolean) => void;
@@ -17,7 +15,6 @@ export const ItemCard = memo(function ItemCard({
   item,
   imageUrl,
   onClick,
-  categories,
   selectionMode,
   isSelected,
   onToggleSelect,
@@ -68,19 +65,6 @@ export const ItemCard = memo(function ItemCard({
         <span className="text-sm font-medium text-card-foreground line-clamp-2 leading-tight">
           {item.name}
         </span>
-        {categories && categories.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {categories.map((cat) => (
-              <span
-                key={cat.id}
-                className="inline-block rounded-full px-1.5 py-0.5 text-[10px] font-medium text-primary-foreground"
-                style={{ backgroundColor: cat.color }}
-              >
-                {cat.name}
-              </span>
-            ))}
-          </div>
-        )}
       </div>
     </button>
   );
