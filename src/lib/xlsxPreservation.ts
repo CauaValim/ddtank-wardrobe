@@ -228,8 +228,8 @@ function writeRichIdAmount(sheetDoc: Document, cell: Element, text: string) {
     const match = seg.match(/^(\d+)(\*)(\d+)$/);
     if (match) {
       is.appendChild(createRun(sheetDoc, match[1], null, "1", true));      // ID in black + bold
-      is.appendChild(createRun(sheetDoc, match[2], null, "1", false));    // * in black
-      is.appendChild(createRun(sheetDoc, match[3], "FFFF0000", null, false)); // amount in red
+      is.appendChild(createRun(sheetDoc, match[2], null, "1", true));      // * in black + bold
+      is.appendChild(createRun(sheetDoc, match[3], "FFFF0000", null, true)); // amount in red + bold
     } else {
       // Fallback: just black
       is.appendChild(createRun(sheetDoc, seg, null, "1", false));
