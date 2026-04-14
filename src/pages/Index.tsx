@@ -283,6 +283,42 @@ const Index = ({ auth }: IndexProps) => {
             </div>
           </div>
         )}
+
+        {/* Category filter */}
+        {activeCategories.length > 0 && (
+          <div className="space-y-1.5">
+            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+              <Tag className="h-3 w-3" />
+              Categoria
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              <button
+                onClick={() => setSelectedCategory(null)}
+                className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${
+                  selectedCategory === null
+                    ? "bg-accent text-accent-foreground"
+                    : "border border-border bg-secondary text-secondary-foreground hover:bg-muted"
+                }`}
+              >
+                Todas
+              </button>
+              {activeCategories.map((cat) => (
+                <button
+                  key={cat.id}
+                  onClick={() => setSelectedCategory(selectedCategory === cat.id ? null : cat.id)}
+                  className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${
+                    selectedCategory === cat.id
+                      ? "text-white"
+                      : "border border-border bg-secondary text-secondary-foreground hover:bg-muted"
+                  }`}
+                  style={selectedCategory === cat.id ? { backgroundColor: cat.color } : undefined}
+                >
+                  {cat.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Content */}
