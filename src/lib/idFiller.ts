@@ -70,6 +70,7 @@ function lookupId(
       itemName: cleaned,
       reason: `Múltiplos IDs encontrados: ${ids.join(", ")}`,
     });
+    return null;
   }
   return ids[0];
 }
