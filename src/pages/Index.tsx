@@ -32,8 +32,11 @@ const Index = ({ auth }: IndexProps) => {
     syncDescriptions,
   } = useItemStore();
 
+  const { categories, getItemCategories, itemCategoryMap } = useCategories();
+
   const [selectedItem, setSelectedItem] = useState<GameItem | null>(null);
   const [selectedType, setSelectedType] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [idFillerOpen, setIdFillerOpen] = useState(false);
 
   // Multi-select state
