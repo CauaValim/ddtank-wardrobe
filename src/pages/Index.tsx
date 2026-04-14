@@ -3,12 +3,10 @@ import { Search, Package, Gamepad2, MousePointerClick, CheckSquare, LogOut, User
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useNavigate } from "react-router-dom";
 import { useItemStore } from "@/hooks/useItemStore";
-import { useCategories } from "@/hooks/useCategories";
 import { FileImporter } from "@/components/FileImporter";
 import { ItemCard } from "@/components/ItemCard";
 import { ItemDetailModal } from "@/components/ItemDetailModal";
 import { BulkTypeMover } from "@/components/BulkTypeMover";
-import { CategoryManager } from "@/components/CategoryManager";
 import { IdFillerModal } from "@/components/IdFillerModal";
 import { getTypeName, getTypeGroups, HIDDEN_TYPES } from "@/lib/itemTypes";
 import type { GameItem } from "@/types/item";
@@ -33,17 +31,8 @@ const Index = ({ auth }: IndexProps) => {
     syncDescriptions,
   } = useItemStore();
 
-  const {
-    categories,
-    addCategory,
-    deleteCategory,
-    getItemCategories,
-    itemCategoryMap,
-  } = useCategories();
-
   const [selectedItem, setSelectedItem] = useState<GameItem | null>(null);
   const [selectedType, setSelectedType] = useState<string | null>(null);
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [idFillerOpen, setIdFillerOpen] = useState(false);
 
   // Multi-select state
@@ -62,7 +51,7 @@ const Index = ({ auth }: IndexProps) => {
     return getTypeGroups(existingTypes);
   }, [items]);
 
-  // Filter items by type and category
+  // Filter items by type
   const filteredItems = useMemo(() => {
     let result = items;
     if (selectedType != null) {
@@ -70,14 +59,8 @@ const Index = ({ auth }: IndexProps) => {
       const typeNumbers = matchingGroup ? matchingGroup[1] : [];
       result = result.filter((item) => typeNumbers.includes(Number(item.attributes.type)));
     }
-    if (selectedCategory != null) {
-      result = result.filter((item) => {
-        const catIds = itemCategoryMap.get(Number(item.id)) ?? [];
-        return catIds.includes(selectedCategory);
-      });
-    }
     return result;
-  }, [items, selectedType, typeGroups, selectedCategory, itemCategoryMap]);
+  }, [items, selectedType, typeGroups]);
 
   const lastSelectedIndex = useRef<number | null>(null);
 
@@ -281,22 +264,6 @@ const Index = ({ auth }: IndexProps) => {
             </div>
           </div>
         )}
-
-        {/* Category filter */}
-        {categories.length > 0 && (
-          <div className="space-y-1.5">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Categoria
-            </span>
-            <CategoryManager
-              categories={categories}
-              selectedCategory={selectedCategory}
-              onSelectCategory={setSelectedCategory}
-              onAddCategory={addCategory}
-              onDeleteCategory={deleteCategory}
-            />
-          </div>
-        )}
       </div>
 
       {/* Content */}
@@ -332,7 +299,6 @@ const Index = ({ auth }: IndexProps) => {
                 item={item}
                 imageUrl={getItemImage(item.id)}
                 onClick={setSelectedItem}
-                categories={getItemCategories(Number(item.id))}
                 selectionMode={auth.canSelect && selectionMode}
                 isSelected={selectedIds.has(item.id)}
                 onToggleSelect={toggleSelect}
