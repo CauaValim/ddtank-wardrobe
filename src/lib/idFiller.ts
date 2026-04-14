@@ -174,29 +174,38 @@ function fillIdAmountColumns(
         const cellVal = getCellValue(ws, dr, c);
         if (!cellVal) continue;
         if (/id\s*[\/&]\s*amount/i.test(cellVal.trim())) break;
-        if (!cellVal.trim().startsWith("*")) continue;
-        const amounts = cellVal.split(",").map((s: string) => s.trim());
+        // Check if cell contains any *amount pattern (with or without existing IDs)
+        if (!/\*\d/.test(cellVal.trim())) continue;
+        const segments = cellVal.split(",").map((s: string) => s.trim());
+        // Count only segments that still need an ID (start with *)
+        const needsId = segments.some((s: string) => s.startsWith("*"));
+        if (!needsId) continue;
+        // Collect names from the name column for segments missing IDs
         const names: { name: string; row: number }[] = [];
-        for (let nr = dr; nr < dr + amounts.length && nr <= maxR; nr++) {
+        for (let nr = dr; nr < dr + segments.length && nr <= maxR; nr++) {
           const n = getCellValue(ws, nr, nameCol);
           if (n) names.push({ name: n, row: nr });
         }
-        if (names.length !== amounts.length) {
-          errors.push({
-            sheet: sheetName,
-            cell: cellRef(dr, c),
-            itemName: `${amounts.length} quantidades vs ${names.length} nomes`,
-            reason: "Quantidade não corresponde",
-          });
-        }
         const idAmounts: string[] = [];
-        const count = Math.min(amounts.length, names.length);
-        for (let i = 0; i < count; i++) {
-          const id = lookupId(names[i].name, nameIndex, errors, sheetName, cellRef(dr, c));
-          if (id != null) idAmounts.push(amounts[i].replace("*", `${id}*`));
-          else idAmounts.push(amounts[i]);
+        let nameIdx = 0;
+        for (let i = 0; i < segments.length; i++) {
+          const seg = segments[i];
+          if (seg.startsWith("*")) {
+            // This segment needs an ID
+            if (nameIdx < names.length) {
+              const id = lookupId(names[nameIdx].name, nameIndex, errors, sheetName, cellRef(dr, c));
+              if (id != null) idAmounts.push(seg.replace("*", `${id}*`));
+              else idAmounts.push(seg);
+              nameIdx++;
+            } else {
+              idAmounts.push(seg);
+            }
+          } else {
+            // Already has an ID (e.g. "201304*1"), keep as-is
+            idAmounts.push(seg);
+            nameIdx++;
+          }
         }
-        for (let i = count; i < amounts.length; i++) idAmounts.push(amounts[i]);
         const newVal = idAmounts.join(",");
         if (newVal !== cellVal) {
           setCellValue(ws, dr, c, newVal, sheetName, changes);
