@@ -110,29 +110,38 @@ function getRange(ws: XLSX.WorkSheet): { minR: number; maxR: number; minC: numbe
   return { minR: range.s.r + 1, maxR: range.e.r + 1, minC: range.s.c + 1, maxC: range.e.c + 1 };
 }
 
+function getMergedRangeEndRow(ws: XLSX.WorkSheet, r: number, c: number): number | null {
+  const merges = ws["!merges"];
+  if (!merges) return null;
+
+  const mergedRange = merges.find((merge) => {
+    const startRow = merge.s.r + 1;
+    const endRow = merge.e.r + 1;
+    const startCol = merge.s.c + 1;
+    const endCol = merge.e.c + 1;
+    return r >= startRow && r <= endRow && c >= startCol && c <= endCol;
+  });
+
+  return mergedRange ? mergedRange.e.r + 1 : null;
+}
+
 function collectSegmentNameCandidates(
   ws: XLSX.WorkSheet,
   nameCol: number,
   startRow: number,
   maxR: number,
-  segmentCount: number
+  segmentCount: number,
+  searchEndRow?: number
 ): SegmentNameCandidate[] {
   const candidates: SegmentNameCandidate[] = [];
-  const searchLimit = Math.min(maxR, startRow + Math.max(segmentCount * 2, 6));
-  let blankRun = 0;
+  const searchLimit = Math.min(maxR, searchEndRow ?? startRow + Math.max(segmentCount * 4, 12));
 
   for (let row = startRow; row <= searchLimit; row++) {
     const name = getCellValue(ws, row, nameCol);
-    if (name) {
-      candidates.push({ row, name });
-      blankRun = 0;
-      if (candidates.length >= segmentCount && row >= startRow + segmentCount - 1) break;
-      continue;
-    }
+    if (!name) continue;
 
-    if (candidates.length === 0) continue;
-    blankRun++;
-    if (blankRun >= 2 && row >= startRow + segmentCount - 1) break;
+    candidates.push({ row, name });
+    if (candidates.length >= segmentCount) break;
   }
 
   return candidates;
@@ -212,7 +221,14 @@ function fillIdAmountColumns(
         // Count only segments that still need an ID (start with *)
         const needsId = segments.some((s: string) => s.startsWith("*"));
         if (!needsId) continue;
-        const names = collectSegmentNameCandidates(ws, nameCol, dr, maxR, segments.length);
+        const names = collectSegmentNameCandidates(
+          ws,
+          nameCol,
+          dr,
+          maxR,
+          segments.length,
+          getMergedRangeEndRow(ws, dr, c) ?? undefined
+        );
         const resolvedNames = resolveSegmentNamesForMissingIds(segments, names, dr);
         const idAmounts: string[] = [];
         for (let i = 0; i < segments.length; i++) {
