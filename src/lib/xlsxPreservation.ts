@@ -224,16 +224,32 @@ function writeRichIdAmount(sheetDoc: Document, cell: Element, text: string) {
       continue;
     }
 
-    // Parse ID*amount pattern
-    const match = seg.match(/^(\d+)(\*)(\d+)$/);
-    if (match) {
-      is.appendChild(createRun(sheetDoc, match[1], null, "1", true));      // ID in black + bold
-      is.appendChild(createRun(sheetDoc, match[2], null, "1", true));      // * in black + bold
-      is.appendChild(createRun(sheetDoc, match[3], "FFFF0000", null, true)); // amount in red + bold
-    } else {
-      // Fallback: just black
-      is.appendChild(createRun(sheetDoc, seg, null, "1", false));
+    // Parse ID*amount pattern (e.g., "12656*500")
+    const matchFull = seg.match(/^(\d+)(\*)(\d+)$/);
+    if (matchFull) {
+      is.appendChild(createRun(sheetDoc, matchFull[1], null, "1", true));      // ID in black + bold
+      is.appendChild(createRun(sheetDoc, matchFull[2], null, "1", true));      // * in black + bold
+      is.appendChild(createRun(sheetDoc, matchFull[3], "FFFF0000", null, true)); // amount in red + bold
+      continue;
     }
+
+    // Parse *amount pattern without ID (e.g., "*100")
+    const matchNoId = seg.match(/^(\*)(\d+)$/);
+    if (matchNoId) {
+      is.appendChild(createRun(sheetDoc, matchNoId[1], null, "1", true));      // * in black + bold
+      is.appendChild(createRun(sheetDoc, matchNoId[2], "FFFF0000", null, true)); // amount in red + bold
+      continue;
+    }
+
+    // Plain number (e.g., standalone ID like "3")
+    const matchNum = seg.match(/^(\d+)$/);
+    if (matchNum) {
+      is.appendChild(createRun(sheetDoc, matchNum[1], null, "1", true));       // number in black + bold
+      continue;
+    }
+
+    // Fallback: just black bold
+    is.appendChild(createRun(sheetDoc, seg, null, "1", true));
   }
 
   cell.appendChild(is);
