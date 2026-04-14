@@ -1,4 +1,8 @@
 import * as XLSX from "@e965/xlsx";
+import {
+  resolveSegmentNamesForMissingIds,
+  type SegmentNameCandidate,
+} from "@/lib/idFillerSegmentMapping";
 import { applyWorkbookChanges, type WorksheetCellChanges } from "@/lib/xlsxPreservation";
 
 export interface IdFillerError {
@@ -106,6 +110,34 @@ function getRange(ws: XLSX.WorkSheet): { minR: number; maxR: number; minC: numbe
   return { minR: range.s.r + 1, maxR: range.e.r + 1, minC: range.s.c + 1, maxC: range.e.c + 1 };
 }
 
+function collectSegmentNameCandidates(
+  ws: XLSX.WorkSheet,
+  nameCol: number,
+  startRow: number,
+  maxR: number,
+  segmentCount: number
+): SegmentNameCandidate[] {
+  const candidates: SegmentNameCandidate[] = [];
+  const searchLimit = Math.min(maxR, startRow + Math.max(segmentCount * 2, 6));
+  let blankRun = 0;
+
+  for (let row = startRow; row <= searchLimit; row++) {
+    const name = getCellValue(ws, row, nameCol);
+    if (name) {
+      candidates.push({ row, name });
+      blankRun = 0;
+      if (candidates.length >= segmentCount && row >= startRow + segmentCount - 1) break;
+      continue;
+    }
+
+    if (candidates.length === 0) continue;
+    blankRun++;
+    if (blankRun >= 2 && row >= startRow + segmentCount - 1) break;
+  }
+
+  return candidates;
+}
+
 function fillBareIdColumns(
   ws: XLSX.WorkSheet,
   sheetName: string,
@@ -180,30 +212,22 @@ function fillIdAmountColumns(
         // Count only segments that still need an ID (start with *)
         const needsId = segments.some((s: string) => s.startsWith("*"));
         if (!needsId) continue;
-        // Collect names from the name column for segments missing IDs
-        const names: { name: string; row: number }[] = [];
-        for (let nr = dr; nr < dr + segments.length && nr <= maxR; nr++) {
-          const n = getCellValue(ws, nr, nameCol);
-          if (n) names.push({ name: n, row: nr });
-        }
+        const names = collectSegmentNameCandidates(ws, nameCol, dr, maxR, segments.length);
+        const resolvedNames = resolveSegmentNamesForMissingIds(segments, names, dr);
         const idAmounts: string[] = [];
-        let nameIdx = 0;
         for (let i = 0; i < segments.length; i++) {
           const seg = segments[i];
           if (seg.startsWith("*")) {
-            // This segment needs an ID
-            if (nameIdx < names.length) {
-              const id = lookupId(names[nameIdx].name, nameIndex, errors, sheetName, cellRef(dr, c));
+            const name = resolvedNames[i];
+            if (name) {
+              const id = lookupId(name, nameIndex, errors, sheetName, cellRef(dr, c));
               if (id != null) idAmounts.push(seg.replace("*", `${id}*`));
               else idAmounts.push(seg);
-              nameIdx++;
             } else {
               idAmounts.push(seg);
             }
           } else {
-            // Already has an ID (e.g. "201304*1"), keep as-is
             idAmounts.push(seg);
-            nameIdx++;
           }
         }
         const newVal = idAmounts.join(",");
