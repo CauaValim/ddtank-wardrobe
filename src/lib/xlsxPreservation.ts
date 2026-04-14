@@ -154,7 +154,8 @@ function getOrCreateCell(
  * or "14654*2 OR 11412*10"
  */
 function isIdAmountPattern(text: string): boolean {
-  return /\d+\*\d+/.test(text) && /^[\d*,\s\w]+$/.test(text);
+  // Match patterns like "12656*500", "*100,*200", "3,123180*10,*400"
+  return /\d+\*\d+|\*\d+/.test(text) && /^[\d*,\s\w]+$/.test(text);
 }
 
 /**
