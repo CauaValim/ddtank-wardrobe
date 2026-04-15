@@ -178,6 +178,31 @@ function collectLikelyNameCandidatesInColumn(
   return candidates;
 }
 
+function collectLikelyNameCandidatesInRows(
+  ws: XLSX.WorkSheet,
+  startRow: number,
+  endRow: number,
+  startCol: number,
+  endCol: number,
+  segmentCount: number,
+  requireBracketed = false
+): SegmentNameCandidate[] {
+  const candidates: SegmentNameCandidate[] = [];
+
+  for (let row = startRow; row <= endRow; row++) {
+    for (let col = startCol; col <= endCol; col++) {
+      const name = getCellValue(ws, row, col);
+      if (!name || !isLikelyItemName(name)) continue;
+      if (requireBracketed && !/\[.*\]/.test(name)) continue;
+
+      candidates.push({ row, name });
+      if (candidates.length >= segmentCount) return candidates;
+    }
+  }
+
+  return candidates;
+}
+
 function findStandaloneNameCandidates(
   ws: XLSX.WorkSheet,
   r: number,
@@ -214,9 +239,51 @@ function findStandaloneNameCandidates(
     }
   }
 
-  if (bestCandidates.length > 0) return bestCandidates;
+  if (bestCandidates.length >= segmentCount) return bestCandidates;
 
-  const fallbackStartRow = Math.max(minR, r - Math.max(segmentCount * 4, 12));
+  const currentBlockRowCandidates = collectLikelyNameCandidatesInRows(
+    ws,
+    r,
+    blockEndRow,
+    minC,
+    c - 1,
+    segmentCount,
+    true
+  );
+  if (currentBlockRowCandidates.length >= segmentCount) return currentBlockRowCandidates;
+  if (currentBlockRowCandidates.length > bestCandidates.length) {
+    bestCandidates = currentBlockRowCandidates;
+  }
+
+  const immediateAboveStartRow = Math.max(minR, r - 2);
+  const immediateAboveCandidates = collectLikelyNameCandidatesInRows(
+    ws,
+    immediateAboveStartRow,
+    r - 1,
+    minC,
+    maxC,
+    segmentCount,
+    true
+  );
+  if (immediateAboveCandidates.length >= segmentCount) return immediateAboveCandidates;
+  if (immediateAboveCandidates.length > bestCandidates.length) {
+    bestCandidates = immediateAboveCandidates;
+  }
+
+  const looseAboveCandidates = collectLikelyNameCandidatesInRows(
+    ws,
+    immediateAboveStartRow,
+    r - 1,
+    minC,
+    maxC,
+    segmentCount
+  );
+  if (looseAboveCandidates.length >= segmentCount) return looseAboveCandidates;
+  if (looseAboveCandidates.length > bestCandidates.length) {
+    bestCandidates = looseAboveCandidates;
+  }
+
+  const fallbackStartRow = Math.max(minR, r - Math.max(segmentCount * 2, 4));
 
   for (let nameCol = minC; nameCol < c; nameCol++) {
     const candidates = collectLikelyNameCandidatesInColumn(
