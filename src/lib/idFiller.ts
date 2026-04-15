@@ -148,6 +148,100 @@ function collectSegmentNameCandidates(
   return candidates;
 }
 
+const NON_ITEM_TEXT_PATTERN = /^(?:item\s*name|id(?:\s*[/:&]|\s+and\s+amount)?|value|cannot be repeated|recharge(?:\s+of)?\b)/i;
+
+function isLikelyItemName(value: string): boolean {
+  const trimmed = value.trim();
+  if (!trimmed) return false;
+  if (NON_ITEM_TEXT_PATTERN.test(trimmed)) return false;
+  if (/^\*?\d+(?:\*\d+)?(?:\s*,\s*\*?\d+(?:\*\d+)?)*$/.test(trimmed)) return false;
+  return /[A-Za-zÀ-ÿ]/.test(trimmed);
+}
+
+function collectLikelyNameCandidatesInColumn(
+  ws: XLSX.WorkSheet,
+  nameCol: number,
+  startRow: number,
+  endRow: number,
+  segmentCount: number
+): SegmentNameCandidate[] {
+  const candidates: SegmentNameCandidate[] = [];
+
+  for (let row = startRow; row <= endRow; row++) {
+    const name = getCellValue(ws, row, nameCol);
+    if (!name || !isLikelyItemName(name)) continue;
+
+    candidates.push({ row, name });
+    if (candidates.length >= segmentCount) break;
+  }
+
+  return candidates;
+}
+
+function findStandaloneNameCandidates(
+  ws: XLSX.WorkSheet,
+  r: number,
+  c: number,
+  segmentCount: number,
+  minR: number,
+  maxR: number,
+  minC: number
+): SegmentNameCandidate[] {
+  const blockEndRow =
+    getMergedRangeEndRow(ws, r, c) ?? Math.min(maxR, r + Math.max(segmentCount * 4, 12));
+
+  let bestCandidates: SegmentNameCandidate[] = [];
+  let bestDistance = Number.POSITIVE_INFINITY;
+
+  for (let nameCol = minC; nameCol < c; nameCol++) {
+    const candidates = collectLikelyNameCandidatesInColumn(
+      ws,
+      nameCol,
+      r,
+      blockEndRow,
+      segmentCount
+    );
+    const distance = c - nameCol;
+
+    if (
+      candidates.length > bestCandidates.length ||
+      (candidates.length > 0 &&
+        candidates.length === bestCandidates.length &&
+        distance < bestDistance)
+    ) {
+      bestCandidates = candidates;
+      bestDistance = distance;
+    }
+  }
+
+  if (bestCandidates.length > 0) return bestCandidates;
+
+  const fallbackStartRow = Math.max(minR, r - Math.max(segmentCount * 4, 12));
+
+  for (let nameCol = minC; nameCol < c; nameCol++) {
+    const candidates = collectLikelyNameCandidatesInColumn(
+      ws,
+      nameCol,
+      fallbackStartRow,
+      r - 1,
+      segmentCount
+    );
+    const distance = c - nameCol;
+
+    if (
+      candidates.length > bestCandidates.length ||
+      (candidates.length > 0 &&
+        candidates.length === bestCandidates.length &&
+        distance < bestDistance)
+    ) {
+      bestCandidates = candidates;
+      bestDistance = distance;
+    }
+  }
+
+  return bestCandidates;
+}
+
 function fillBareIdColumns(
   ws: XLSX.WorkSheet,
   sheetName: string,
@@ -358,14 +452,7 @@ function fillStandaloneAmounts(
       if (!/^\*\d+/.test(trimmed)) continue;
       if (/\d\*\d/.test(trimmed)) continue;
       const parts = trimmed.split(",").map((s: string) => s.trim());
-      const names: string[] = [];
-      for (let searchR = Math.max(minR, r - 3); searchR < r; searchR++) {
-        for (let nc = c - 1; nc <= c + 10 && nc <= maxC; nc++) {
-          const n = getCellValue(ws, searchR, nc);
-          if (n && /\[.*\]/.test(n)) names.push(n);
-        }
-        if (names.length >= parts.length) break;
-      }
+      const names = findStandaloneNameCandidates(ws, r, c, parts.length, minR, maxR, minC);
       if (names.length === 0) continue;
       if (names.length !== parts.length) {
         errors.push({
@@ -375,17 +462,23 @@ function fillStandaloneAmounts(
           reason: "Quantidade não corresponde",
         });
       }
+      const resolvedNames = resolveSegmentNamesForMissingIds(parts, names, r);
       const idAmounts: string[] = [];
-      const count = Math.min(parts.length, names.length);
-      for (let i = 0; i < count; i++) {
-        const id = lookupId(names[i], nameIndex, errors, sheetName, ref);
+      for (let i = 0; i < parts.length; i++) {
+        const name = resolvedNames[i];
+        if (!name) {
+          idAmounts.push(parts[i]);
+          continue;
+        }
+
+        const id = lookupId(name, nameIndex, errors, sheetName, ref);
         if (id != null) idAmounts.push(parts[i].replace("*", `${id}*`));
         else idAmounts.push(parts[i]);
       }
-      for (let i = count; i < parts.length; i++) idAmounts.push(parts[i]);
       const newVal = idAmounts.join(",");
       if (newVal !== trimmed) {
         setCellValue(ws, r, c, newVal, sheetName, changes);
+        alreadyFilled.add(ref);
         filled++;
       }
     }
