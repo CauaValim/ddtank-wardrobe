@@ -153,7 +153,8 @@ function fillBareIdColumns(
   sheetName: string,
   nameIndex: Map<string, number[]>,
   errors: IdFillerError[],
-  changes: WorksheetCellChanges
+  changes: WorksheetCellChanges,
+  alreadyFilled: Set<string>
 ): number {
   let filled = 0;
   const { minR, maxR, minC, maxC } = getRange(ws);
@@ -171,11 +172,13 @@ function fillBareIdColumns(
       }
       if (nameCol == null) continue;
       for (let dr = r + 1; dr <= maxR; dr++) {
+        const ref = cellRef(dr, c);
         const existingId = getCellValue(ws, dr, c);
         if (existingId != null) continue;
         const name = getCellValue(ws, dr, nameCol);
         if (!name) continue;
-        const id = lookupId(name, nameIndex, errors, sheetName, cellRef(dr, c));
+        alreadyFilled.add(ref);
+        const id = lookupId(name, nameIndex, errors, sheetName, ref);
         if (id != null) {
           setCellValue(ws, dr, c, id, sheetName, changes);
           filled++;
@@ -191,7 +194,8 @@ function fillIdAmountColumns(
   sheetName: string,
   nameIndex: Map<string, number[]>,
   errors: IdFillerError[],
-  changes: WorksheetCellChanges
+  changes: WorksheetCellChanges,
+  alreadyFilled: Set<string>
 ): number {
   let filled = 0;
   const { minR, maxR, minC, maxC } = getRange(ws);
@@ -218,6 +222,8 @@ function fillIdAmountColumns(
         if (/id\s*[\/&]\s*amount/i.test(cellVal.trim())) break;
         // Check if cell contains any *amount pattern (with or without existing IDs)
         if (!/\*\d/.test(cellVal.trim())) continue;
+        const ref = cellRef(dr, c);
+        alreadyFilled.add(ref);
         const segments = cellVal.split(",").map((s: string) => s.trim());
         // Count only segments that still need an ID (start with *)
         const needsId = segments.some((s: string) => s.startsWith("*"));
@@ -263,7 +269,8 @@ function fillExchangeColumns(
   sheetName: string,
   nameIndex: Map<string, number[]>,
   errors: IdFillerError[],
-  changes: WorksheetCellChanges
+  changes: WorksheetCellChanges,
+  alreadyFilled: Set<string>
 ): number {
   let filled = 0;
   const { minR, maxR, minC, maxC } = getRange(ws);
@@ -290,6 +297,7 @@ function fillExchangeColumns(
         if (!cellVal) continue;
         if (cellVal.trim().toLowerCase() === "value") break;
         if (/^\*\d+$/.test(cellVal.trim())) {
+          alreadyFilled.add(cellRef(dr, c));
           setCellValue(ws, dr, c, `${exchangeId}${cellVal.trim()}`, sheetName, changes);
           filled++;
         }
@@ -315,6 +323,7 @@ function fillExchangeColumns(
         if (!cellVal) continue;
         if (/id\s*[\/&]\s*amount/i.test(cellVal.trim())) break;
         if (/^\*\d+$/.test(cellVal.trim())) {
+          alreadyFilled.add(cellRef(dr, c));
           const name = getCellValue(ws, dr, nameCol);
           if (!name) continue;
           const id = lookupId(name, nameIndex, errors, sheetName, cellRef(dr, c));
@@ -404,9 +413,9 @@ export async function fillIds(
     if (!ws || !ws["!ref"]) continue;
 
     const alreadyFilled = new Set<string>();
-    const f1 = fillBareIdColumns(ws, sheetName, nameIndex, errors, changes);
-    const f2 = fillIdAmountColumns(ws, sheetName, nameIndex, errors, changes);
-    const f3 = fillExchangeColumns(ws, sheetName, nameIndex, errors, changes);
+    const f1 = fillBareIdColumns(ws, sheetName, nameIndex, errors, changes, alreadyFilled);
+    const f2 = fillIdAmountColumns(ws, sheetName, nameIndex, errors, changes, alreadyFilled);
+    const f3 = fillExchangeColumns(ws, sheetName, nameIndex, errors, changes, alreadyFilled);
     const f4 = fillStandaloneAmounts(ws, sheetName, nameIndex, errors, alreadyFilled, changes);
     totalFilled += f1 + f2 + f3 + f4;
   }
