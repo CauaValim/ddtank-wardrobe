@@ -83,4 +83,46 @@ describe("fillIds", () => {
     expect(getCellText(output.Sheets["Recarga"]["C2"])).toBe("85151*1,313622*1,12269*1");
     expect(getCellText(output.Sheets["Recarga"]["C5"])).toBe("94101*1,94102*1,94103*1");
   });
+
+  it("preenche quantias isoladas quando os nomes estão distribuídos horizontalmente acima", async () => {
+    const wb = XLSX.utils.book_new();
+    const ws: XLSX.WorkSheet = {} as XLSX.WorkSheet;
+
+    ws["A1"] = { t: "s", v: "Queue 3" };
+    ws["B1"] = { t: "s", v: "Fragmentos brocas [Permanent] [Bound]" };
+    ws["C1"] = { t: "s", v: "Figurinos ilustrados com cupons [Permanent] [Bound]" };
+    ws["D1"] = { t: "s", v: "Amor permanente [Permanent] [Bound]" };
+    ws["B2"] = { t: "s", v: "*30,*100,*2" };
+
+    ws["A3"] = { t: "s", v: "Queue 14" };
+    ws["B3"] = { t: "s", v: "Pontos de atualização do Totem [Permanent] [Bound]" };
+    ws["C3"] = { t: "s", v: "Comprar caixa de soldados 5 deuse [Permanent] [Bound]" };
+    ws["D3"] = { t: "s", v: "Pérola Mágica-DanoLv19 [Permanent] [Bound]" };
+    ws["B4"] = { t: "s", v: "*6000,*3,*1" };
+
+    ws["!merges"] = [XLSX.utils.decode_range("B2:D2"), XLSX.utils.decode_range("B4:D4")];
+    ws["!ref"] = "A1:D4";
+
+    XLSX.utils.book_append_sheet(wb, ws, "Entrada Diária");
+
+    const originalBuffer = XLSX.write(wb, { type: "array", bookType: "xlsx" }) as ArrayBuffer;
+    const nameIndex = new Map<string, number[]>([
+      ["fragmentos brocas", [7001]],
+      ["figurinos ilustrados com cupons", [7002]],
+      ["amor permanente", [7003]],
+      ["pontos de atualização do totem", [8001]],
+      ["comprar caixa de soldados 5 deuse", [8002]],
+      ["pérola mágica-danolv19", [313511]],
+    ]);
+
+    const result = await fillIds(originalBuffer, nameIndex);
+    const output = XLSX.read(new Uint8Array(result.outputBuffer), { type: "array" });
+
+    expect(result.errors).toEqual([]);
+    expect(result.filled).toBe(2);
+    expect(getCellText(output.Sheets["Entrada Diária"]["B2"])).toBe("7001*30,7002*100,7003*2");
+    expect(getCellText(output.Sheets["Entrada Diária"]["B4"])).toBe(
+      "8001*6000,8002*3,313511*1"
+    );
+  });
 });
