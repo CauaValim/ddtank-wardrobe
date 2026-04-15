@@ -210,7 +210,8 @@ function findStandaloneNameCandidates(
   segmentCount: number,
   minR: number,
   maxR: number,
-  minC: number
+  minC: number,
+  maxC: number
 ): SegmentNameCandidate[] {
   const blockEndRow =
     getMergedRangeEndRow(ws, r, c) ?? Math.min(maxR, r + Math.max(segmentCount * 4, 12));
@@ -519,7 +520,7 @@ function fillStandaloneAmounts(
       if (!/^\*\d+/.test(trimmed)) continue;
       if (/\d\*\d/.test(trimmed)) continue;
       const parts = trimmed.split(",").map((s: string) => s.trim());
-      const names = findStandaloneNameCandidates(ws, r, c, parts.length, minR, maxR, minC);
+      const names = findStandaloneNameCandidates(ws, r, c, parts.length, minR, maxR, minC, maxC);
       if (names.length === 0) continue;
       if (names.length !== parts.length) {
         errors.push({
