@@ -223,7 +223,6 @@ function fillIdAmountColumns(
         // Check if cell contains any *amount pattern (with or without existing IDs)
         if (!/\*\d/.test(cellVal.trim())) continue;
         const ref = cellRef(dr, c);
-        alreadyFilled.add(ref);
         const segments = cellVal.split(",").map((s: string) => s.trim());
         // Count only segments that still need an ID (start with *)
         const needsId = segments.some((s: string) => s.startsWith("*"));
@@ -256,6 +255,7 @@ function fillIdAmountColumns(
         const newVal = idAmounts.join(",");
         if (newVal !== cellVal) {
           setCellValue(ws, dr, c, newVal, sheetName, changes);
+          alreadyFilled.add(ref);
           filled++;
         }
       }
@@ -323,11 +323,11 @@ function fillExchangeColumns(
         if (!cellVal) continue;
         if (/id\s*[\/&]\s*amount/i.test(cellVal.trim())) break;
         if (/^\*\d+$/.test(cellVal.trim())) {
-          alreadyFilled.add(cellRef(dr, c));
           const name = getCellValue(ws, dr, nameCol);
           if (!name) continue;
           const id = lookupId(name, nameIndex, errors, sheetName, cellRef(dr, c));
           if (id != null) {
+            alreadyFilled.add(cellRef(dr, c));
             setCellValue(ws, dr, c, `${id}${cellVal.trim()}`, sheetName, changes);
             filled++;
           }
