@@ -269,7 +269,8 @@ function fillExchangeColumns(
   sheetName: string,
   nameIndex: Map<string, number[]>,
   errors: IdFillerError[],
-  changes: WorksheetCellChanges
+  changes: WorksheetCellChanges,
+  alreadyFilled: Set<string>
 ): number {
   let filled = 0;
   const { minR, maxR, minC, maxC } = getRange(ws);
@@ -410,9 +411,9 @@ export async function fillIds(
     if (!ws || !ws["!ref"]) continue;
 
     const alreadyFilled = new Set<string>();
-    const f1 = fillBareIdColumns(ws, sheetName, nameIndex, errors, changes);
-    const f2 = fillIdAmountColumns(ws, sheetName, nameIndex, errors, changes);
-    const f3 = fillExchangeColumns(ws, sheetName, nameIndex, errors, changes);
+    const f1 = fillBareIdColumns(ws, sheetName, nameIndex, errors, changes, alreadyFilled);
+    const f2 = fillIdAmountColumns(ws, sheetName, nameIndex, errors, changes, alreadyFilled);
+    const f3 = fillExchangeColumns(ws, sheetName, nameIndex, errors, changes, alreadyFilled);
     const f4 = fillStandaloneAmounts(ws, sheetName, nameIndex, errors, alreadyFilled, changes);
     totalFilled += f1 + f2 + f3 + f4;
   }
