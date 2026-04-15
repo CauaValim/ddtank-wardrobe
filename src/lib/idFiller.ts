@@ -323,11 +323,11 @@ function fillExchangeColumns(
         if (!cellVal) continue;
         if (/id\s*[\/&]\s*amount/i.test(cellVal.trim())) break;
         if (/^\*\d+$/.test(cellVal.trim())) {
-          alreadyFilled.add(cellRef(dr, c));
           const name = getCellValue(ws, dr, nameCol);
           if (!name) continue;
           const id = lookupId(name, nameIndex, errors, sheetName, cellRef(dr, c));
           if (id != null) {
+            alreadyFilled.add(cellRef(dr, c));
             setCellValue(ws, dr, c, `${id}${cellVal.trim()}`, sheetName, changes);
             filled++;
           }
