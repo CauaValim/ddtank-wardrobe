@@ -153,7 +153,8 @@ function fillBareIdColumns(
   sheetName: string,
   nameIndex: Map<string, number[]>,
   errors: IdFillerError[],
-  changes: WorksheetCellChanges
+  changes: WorksheetCellChanges,
+  alreadyFilled: Set<string>
 ): number {
   let filled = 0;
   const { minR, maxR, minC, maxC } = getRange(ws);
@@ -171,11 +172,13 @@ function fillBareIdColumns(
       }
       if (nameCol == null) continue;
       for (let dr = r + 1; dr <= maxR; dr++) {
+        const ref = cellRef(dr, c);
         const existingId = getCellValue(ws, dr, c);
         if (existingId != null) continue;
         const name = getCellValue(ws, dr, nameCol);
         if (!name) continue;
-        const id = lookupId(name, nameIndex, errors, sheetName, cellRef(dr, c));
+        alreadyFilled.add(ref);
+        const id = lookupId(name, nameIndex, errors, sheetName, ref);
         if (id != null) {
           setCellValue(ws, dr, c, id, sheetName, changes);
           filled++;
