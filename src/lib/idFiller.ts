@@ -194,7 +194,8 @@ function fillIdAmountColumns(
   sheetName: string,
   nameIndex: Map<string, number[]>,
   errors: IdFillerError[],
-  changes: WorksheetCellChanges
+  changes: WorksheetCellChanges,
+  alreadyFilled: Set<string>
 ): number {
   let filled = 0;
   const { minR, maxR, minC, maxC } = getRange(ws);
@@ -221,6 +222,8 @@ function fillIdAmountColumns(
         if (/id\s*[\/&]\s*amount/i.test(cellVal.trim())) break;
         // Check if cell contains any *amount pattern (with or without existing IDs)
         if (!/\*\d/.test(cellVal.trim())) continue;
+        const ref = cellRef(dr, c);
+        alreadyFilled.add(ref);
         const segments = cellVal.split(",").map((s: string) => s.trim());
         // Count only segments that still need an ID (start with *)
         const needsId = segments.some((s: string) => s.startsWith("*"));
