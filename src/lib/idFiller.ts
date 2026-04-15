@@ -297,6 +297,7 @@ function fillExchangeColumns(
         if (!cellVal) continue;
         if (cellVal.trim().toLowerCase() === "value") break;
         if (/^\*\d+$/.test(cellVal.trim())) {
+          alreadyFilled.add(cellRef(dr, c));
           setCellValue(ws, dr, c, `${exchangeId}${cellVal.trim()}`, sheetName, changes);
           filled++;
         }
@@ -322,6 +323,7 @@ function fillExchangeColumns(
         if (!cellVal) continue;
         if (/id\s*[\/&]\s*amount/i.test(cellVal.trim())) break;
         if (/^\*\d+$/.test(cellVal.trim())) {
+          alreadyFilled.add(cellRef(dr, c));
           const name = getCellValue(ws, dr, nameCol);
           if (!name) continue;
           const id = lookupId(name, nameIndex, errors, sheetName, cellRef(dr, c));
