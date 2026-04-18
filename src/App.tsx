@@ -39,7 +39,8 @@ function AppRoutes() {
         <EventScheduleSidebar />
         <div className="flex-1 flex flex-col min-w-0">
           <Routes>
-            <Route path="/" element={<Index auth={auth} />} />
+            <Route path="/" element={<Index auth={auth} realm="br" />} />
+            <Route path="/turco" element={<Index auth={auth} realm="turco" />} />
             {auth.role === "super_admin" && (
               <Route path="/users" element={<UserManagement />} />
             )}

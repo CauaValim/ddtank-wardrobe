@@ -10,11 +10,13 @@ import { useToast } from "@/hooks/use-toast";
 interface IdFillerModalProps {
   open: boolean;
   onClose: () => void;
+  realm?: "br" | "turco";
 }
 
 type Status = "idle" | "loading-db" | "processing" | "done" | "error";
 
-export function IdFillerModal({ open, onClose }: IdFillerModalProps) {
+export function IdFillerModal({ open, onClose, realm = "br" }: IdFillerModalProps) {
+  const tableName = (realm === "turco" ? "items_turco" : "items") as "items";
   const { toast } = useToast();
   const [status, setStatus] = useState<Status>("idle");
   const [filledCount, setFilledCount] = useState(0);
@@ -47,7 +49,7 @@ export function IdFillerModal({ open, onClose }: IdFillerModalProps) {
         const pageSize = 1000;
         while (true) {
           const { data, error } = await supabase
-            .from("items")
+            .from(tableName)
             .select("id, name")
             .range(from, from + pageSize - 1);
           if (error) throw error;
