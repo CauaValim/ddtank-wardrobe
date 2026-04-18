@@ -32,7 +32,11 @@ async function convertBlobToPng(blob: Blob): Promise<Blob> {
   return pngBlob;
 }
 
-export function useItemStore() {
+export type Realm = "br" | "turco";
+
+export function useItemStore(realm: Realm = "br") {
+  const tableName = (realm === "turco" ? "items_turco" : "items") as "items";
+  const bucketName = realm === "turco" ? "item-images-turco" : "item-images";
   const [items, setItems] = useState<GameItem[]>([]);
   const [images, setImages] = useState<Map<string, string>>(new Map());
   const [searchQuery, setSearchQuery] = useState("");
