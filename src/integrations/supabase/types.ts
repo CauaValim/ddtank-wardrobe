@@ -224,6 +224,159 @@ export type Database = {
         }
         Relationships: []
       }
+      items_turco: {
+        Row: {
+          agility: number | null
+          attack: number | null
+          attribute1: string | null
+          attribute2: string | null
+          attribute3: string | null
+          attribute4: string | null
+          attribute5: string | null
+          attribute6: string | null
+          attribute7: string | null
+          attribute8: string | null
+          beset: string | null
+          bind_type: number | null
+          can_send: boolean | null
+          can_transfer: boolean | null
+          color: number | null
+          created_at: string
+          data: string | null
+          defence: number | null
+          desc: string | null
+          floor_price: number | null
+          id: number
+          image_url: string | null
+          is_callback: boolean | null
+          is_compose: boolean | null
+          is_delete: boolean | null
+          is_equip: boolean | null
+          is_strengthen: boolean | null
+          is_throw: boolean | null
+          is_use: boolean | null
+          item_grade: number | null
+          luck: number | null
+          melt_grade: number | null
+          melt_type: number | null
+          name: string | null
+          need_grade: number | null
+          need_sex: number | null
+          pic_path: string | null
+          pile_count: number | null
+          price: number | null
+          price_type: number | null
+          profile: string | null
+          remark: string | null
+          script: string | null
+          success_modulus: number | null
+          success_rate: number | null
+          suit_id: number | null
+          type: number | null
+          updated_at: string
+        }
+        Insert: {
+          agility?: number | null
+          attack?: number | null
+          attribute1?: string | null
+          attribute2?: string | null
+          attribute3?: string | null
+          attribute4?: string | null
+          attribute5?: string | null
+          attribute6?: string | null
+          attribute7?: string | null
+          attribute8?: string | null
+          beset?: string | null
+          bind_type?: number | null
+          can_send?: boolean | null
+          can_transfer?: boolean | null
+          color?: number | null
+          created_at?: string
+          data?: string | null
+          defence?: number | null
+          desc?: string | null
+          floor_price?: number | null
+          id: number
+          image_url?: string | null
+          is_callback?: boolean | null
+          is_compose?: boolean | null
+          is_delete?: boolean | null
+          is_equip?: boolean | null
+          is_strengthen?: boolean | null
+          is_throw?: boolean | null
+          is_use?: boolean | null
+          item_grade?: number | null
+          luck?: number | null
+          melt_grade?: number | null
+          melt_type?: number | null
+          name?: string | null
+          need_grade?: number | null
+          need_sex?: number | null
+          pic_path?: string | null
+          pile_count?: number | null
+          price?: number | null
+          price_type?: number | null
+          profile?: string | null
+          remark?: string | null
+          script?: string | null
+          success_modulus?: number | null
+          success_rate?: number | null
+          suit_id?: number | null
+          type?: number | null
+          updated_at?: string
+        }
+        Update: {
+          agility?: number | null
+          attack?: number | null
+          attribute1?: string | null
+          attribute2?: string | null
+          attribute3?: string | null
+          attribute4?: string | null
+          attribute5?: string | null
+          attribute6?: string | null
+          attribute7?: string | null
+          attribute8?: string | null
+          beset?: string | null
+          bind_type?: number | null
+          can_send?: boolean | null
+          can_transfer?: boolean | null
+          color?: number | null
+          created_at?: string
+          data?: string | null
+          defence?: number | null
+          desc?: string | null
+          floor_price?: number | null
+          id?: number
+          image_url?: string | null
+          is_callback?: boolean | null
+          is_compose?: boolean | null
+          is_delete?: boolean | null
+          is_equip?: boolean | null
+          is_strengthen?: boolean | null
+          is_throw?: boolean | null
+          is_use?: boolean | null
+          item_grade?: number | null
+          luck?: number | null
+          melt_grade?: number | null
+          melt_type?: number | null
+          name?: string | null
+          need_grade?: number | null
+          need_sex?: number | null
+          pic_path?: string | null
+          pile_count?: number | null
+          price?: number | null
+          price_type?: number | null
+          profile?: string | null
+          remark?: string | null
+          script?: string | null
+          success_modulus?: number | null
+          success_rate?: number | null
+          suit_id?: number | null
+          type?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string

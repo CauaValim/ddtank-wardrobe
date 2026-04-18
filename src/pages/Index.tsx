@@ -14,9 +14,10 @@ import type { useAuth } from "@/hooks/useAuth";
 
 interface IndexProps {
   auth: ReturnType<typeof useAuth>;
+  realm?: "br" | "turco";
 }
 
-const Index = ({ auth }: IndexProps) => {
+const Index = ({ auth, realm = "br" }: IndexProps) => {
   const navigate = useNavigate();
   const {
     items,
@@ -29,7 +30,7 @@ const Index = ({ auth }: IndexProps) => {
     loading,
     updateItemType,
     syncDescriptions,
-  } = useItemStore();
+  } = useItemStore(realm);
 
   const [selectedItem, setSelectedItem] = useState<GameItem | null>(null);
   const [selectedType, setSelectedType] = useState<string | null>(null);
@@ -131,11 +132,29 @@ const Index = ({ auth }: IndexProps) => {
             </div>
             <div>
               <h1 className="text-lg font-bold leading-tight text-foreground">
-                Painel Staff DDTank 337
+                {realm === "turco" ? "Painel Staff DDTank Turco" : "Painel Staff DDTank 337"}
               </h1>
               <p className="text-xs text-muted-foreground">
                 {auth.role === "super_admin" ? "Super Admin" : auth.role === "admin" ? "ADM" : auth.role === "analista" ? "Analista" : "Moderador"}
               </p>
+            </div>
+            <div className="ml-2 flex items-center gap-1 rounded-md border border-border bg-secondary p-0.5">
+              <button
+                onClick={() => navigate("/")}
+                className={`rounded px-2 py-0.5 text-xs font-semibold transition-colors ${
+                  realm === "br" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                BR
+              </button>
+              <button
+                onClick={() => navigate("/turco")}
+                className={`rounded px-2 py-0.5 text-xs font-semibold transition-colors ${
+                  realm === "turco" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                TR
+              </button>
             </div>
           </div>
 
@@ -324,7 +343,7 @@ const Index = ({ auth }: IndexProps) => {
         canViewId={auth.canViewId}
       />
 
-      <IdFillerModal open={idFillerOpen} onClose={() => setIdFillerOpen(false)} />
+      <IdFillerModal open={idFillerOpen} onClose={() => setIdFillerOpen(false)} realm={realm} />
     </div>
   );
 };
