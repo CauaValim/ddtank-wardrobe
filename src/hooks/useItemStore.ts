@@ -93,7 +93,7 @@ export function useItemStore(realm: Realm = "br") {
       });
     }
     setLoading(false);
-  }, []);
+  }, [tableName]);
 
   useEffect(() => {
     fetchItems();
