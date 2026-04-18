@@ -52,7 +52,7 @@ export function useItemStore(realm: Realm = "br") {
 
     while (hasMore) {
       const { data, error } = await supabase
-        .from("items")
+        .from(tableName)
         .select("*")
         .order("id", { ascending: true })
         .range(from, from + pageSize - 1);
@@ -120,7 +120,7 @@ export function useItemStore(realm: Realm = "br") {
     for (let i = 0; i < allIds.length; i += checkBatchSize) {
       const batch = allIds.slice(i, i + checkBatchSize);
       const { data } = await supabase
-        .from("items")
+        .from(tableName)
         .select("id")
         .in("id", batch);
       if (data) data.forEach((row) => existingIds.add(row.id));
@@ -189,7 +189,7 @@ export function useItemStore(realm: Realm = "br") {
         return row;
       });
 
-      const { error } = await supabase.from("items").insert(rows as any);
+      const { error } = await supabase.from(tableName).insert(rows as any);
       if (error) {
         console.error("Insert batch error:", error.message);
         failedBatches++;
@@ -242,7 +242,7 @@ export function useItemStore(realm: Realm = "br") {
             const path = `${numericId}.png`;
 
             const { error: uploadError } = await supabase.storage
-              .from("item-images")
+              .from(bucketName)
               .upload(path, pngBlob, { upsert: true, contentType: "image/png" });
 
             if (uploadError) {
@@ -252,13 +252,13 @@ export function useItemStore(realm: Realm = "br") {
             }
 
             const { data: urlData } = supabase.storage
-              .from("item-images")
+              .from(bucketName)
               .getPublicUrl(path);
 
             const publicUrl = urlData.publicUrl;
 
             const { data: updatedItem, error: updateError } = await supabase
-              .from("items")
+              .from(tableName)
               .update({ image_url: publicUrl })
               .eq("id", numericId)
               .select("id")
@@ -332,7 +332,7 @@ export function useItemStore(realm: Realm = "br") {
       await Promise.all(
         batch.map(async (item) => {
           const { error } = await supabase
-            .from("items")
+            .from(tableName)
             .update({ desc: item.attributes.desc })
             .eq("id", Number(item.id));
           if (!error) updated++;
@@ -374,7 +374,7 @@ export function useItemStore(realm: Realm = "br") {
     const batchSize = 500;
     for (let i = 0; i < numericIds.length; i += batchSize) {
       const batch = numericIds.slice(i, i + batchSize);
-      await supabase.from("items").update({ type: newType }).in("id", batch);
+      await supabase.from(tableName).update({ type: newType }).in("id", batch);
     }
   };
 
