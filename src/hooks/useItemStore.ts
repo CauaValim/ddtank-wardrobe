@@ -44,6 +44,8 @@ export function useItemStore(realm: Realm = "br") {
 
   // Load items from Supabase on mount
   const fetchItems = useCallback(async () => {
+    setItems([]);
+    setImages(new Map());
     setLoading(true);
     let allRows: any[] = [];
     let from = 0;
