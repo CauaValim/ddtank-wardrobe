@@ -41,6 +41,7 @@ export function useItemStore(realm: Realm = "br") {
   const [images, setImages] = useState<Map<string, string>>(new Map());
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
+  const [crossRealmIds, setCrossRealmIds] = useState<Set<string>>(new Set());
 
   // Load items from Supabase on mount
   const fetchItems = useCallback(async () => {
@@ -98,6 +99,40 @@ export function useItemStore(realm: Realm = "br") {
   useEffect(() => {
     fetchItems();
   }, [fetchItems]);
+
+  // Cross-realm search: when in TR, also look up items by name in BR table
+  // and include the matching IDs in the TR results.
+  useEffect(() => {
+    if (realm !== "turco") {
+      if (crossRealmIds.size > 0) setCrossRealmIds(new Set());
+      return;
+    }
+    const q = searchQuery.trim();
+    if (!q) {
+      if (crossRealmIds.size > 0) setCrossRealmIds(new Set());
+      return;
+    }
+
+    let cancelled = false;
+    const handle = setTimeout(async () => {
+      const { data, error } = await supabase
+        .from("items")
+        .select("id")
+        .ilike("name", `%${q}%`)
+        .limit(1000);
+      if (cancelled) return;
+      if (error || !data) {
+        setCrossRealmIds(new Set());
+        return;
+      }
+      setCrossRealmIds(new Set(data.map((r: any) => String(r.id))));
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [realm, searchQuery]);
 
   // Save items to Supabase (insert only NEW items, never overwrite existing)
   const addItems = async (newItems: GameItem[]) => {
@@ -388,11 +423,12 @@ export function useItemStore(realm: Realm = "br") {
         (item) =>
           item.id.toLowerCase().includes(q) ||
           item.name.toLowerCase().includes(q) ||
-          (item.attributes.desc && item.attributes.desc.toLowerCase().includes(q))
+          (item.attributes.desc && item.attributes.desc.toLowerCase().includes(q)) ||
+          crossRealmIds.has(item.id)
       );
     }
     return result;
-  }, [items, searchQuery]);
+  }, [items, searchQuery, crossRealmIds]);
 
   const getItemImage = (id: string) => images.get(id) ?? "";
 
