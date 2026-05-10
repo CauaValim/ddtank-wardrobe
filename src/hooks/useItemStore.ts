@@ -276,11 +276,13 @@ export function useItemStore(realm: Realm = "br") {
 
           try {
             const pngBlob = await convertBlobToPng(imageData.blob);
-            const path = `${numericId}.png`;
+            // Diretório único por upload para evitar cache do navegador/CDN
+            const uniqueDir = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+            const path = `${numericId}/${uniqueDir}.png`;
 
             const { error: uploadError } = await supabase.storage
               .from(bucketName)
-              .upload(path, pngBlob, { upsert: true, contentType: "image/png" });
+              .upload(path, pngBlob, { upsert: false, contentType: "image/png" });
 
             if (uploadError) {
               console.error(`Upload failed for ${itemId}:`, uploadError.message);
