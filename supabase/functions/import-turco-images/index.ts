@@ -31,7 +31,9 @@ Deno.serve(async (req) => {
       try {
         // Use first id as canonical filename; all items with this URL share it
         const canonicalId = ids[0];
-        const path = `${canonicalId}.png`;
+        // Diretório único para evitar cache do navegador/CDN
+        const uniqueDir = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const path = `${canonicalId}/${uniqueDir}.png`;
 
         // Download
         const resp = await fetch(url);
