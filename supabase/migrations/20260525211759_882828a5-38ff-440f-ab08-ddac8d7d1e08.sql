@@ -1,0 +1,1 @@
+UPDATE public.items_turco SET type = 201, updated_at = now() WHERE id = 12901;
