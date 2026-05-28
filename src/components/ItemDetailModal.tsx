@@ -11,6 +11,7 @@ interface ItemDetailModalProps {
   open: boolean;
   onClose: () => void;
   canViewId?: boolean;
+  realm?: "br" | "turco";
 }
 
 export function ItemDetailModal({
@@ -19,6 +20,7 @@ export function ItemDetailModal({
   open,
   onClose,
   canViewId = true,
+  realm = "br",
 }: ItemDetailModalProps) {
   const [copied, setCopied] = useState(false);
 
@@ -31,7 +33,7 @@ export function ItemDetailModal({
   };
 
   const typeName = getTypeName(item.attributes.type != null ? Number(item.attributes.type) : null);
-  const ilustracaoAttrs = ILUSTRACOES_ATTRIBUTES[Number(item.id)];
+  const ilustracaoAttrs = realm === "br" ? ILUSTRACOES_ATTRIBUTES[Number(item.id)] : undefined;
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
