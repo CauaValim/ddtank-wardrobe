@@ -341,6 +341,7 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
         open={!!selectedItem}
         onClose={() => setSelectedItem(null)}
         canViewId={auth.canViewId}
+        realm={realm}
       />
 
       <IdFillerModal open={idFillerOpen} onClose={() => setIdFillerOpen(false)} realm={realm} />
