@@ -3,6 +3,7 @@ import { Package, Copy, Check } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { getTypeName } from "@/lib/itemTypes";
 import type { GameItem } from "@/types/item";
+import { ILUSTRACOES_ATTRIBUTES } from "@/data/ilustracoesAttributes";
 
 interface ItemDetailModalProps {
   item: GameItem | null;
@@ -30,6 +31,7 @@ export function ItemDetailModal({
   };
 
   const typeName = getTypeName(item.attributes.type != null ? Number(item.attributes.type) : null);
+  const ilustracaoAttrs = ILUSTRACOES_ATTRIBUTES[Number(item.id)];
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -67,6 +69,22 @@ export function ItemDetailModal({
             </div>
           )}
 
+          {ilustracaoAttrs ? (
+            <div className="w-full grid grid-cols-2 gap-1.5">
+              {[
+                { label: "Dano", value: ilustracaoAttrs.dano },
+                { label: "Armadura", value: ilustracaoAttrs.armadura },
+                { label: "Ataque Mágico", value: ilustracaoAttrs.atkMag },
+                { label: "Resistência Mágica", value: ilustracaoAttrs.resistMag },
+                { label: "Vida", value: ilustracaoAttrs.vida },
+              ].map((s) => (
+                <div key={s.label} className="rounded-md bg-secondary px-2 py-1">
+                  <span className="text-[10px] text-muted-foreground">{s.label}</span>
+                  <p className="text-xs font-medium text-card-foreground">{s.value}</p>
+                </div>
+              ))}
+            </div>
+          ) : (
           <div className="w-full grid grid-cols-2 gap-1.5">
             {[
               { label: "Ataque", value: item.attributes.attack },
@@ -83,6 +101,7 @@ export function ItemDetailModal({
                 </div>
               ))}
           </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>
