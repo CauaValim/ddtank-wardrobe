@@ -3,7 +3,7 @@ import { Package, Copy, Check } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { getTypeName } from "@/lib/itemTypes";
 import type { GameItem } from "@/types/item";
-import { ILUSTRACOES_ATTRIBUTES } from "@/data/ilustracoesAttributes";
+import { ILUSTRACOES_ATTRIBUTES_BR, ILUSTRACOES_ATTRIBUTES_TR } from "@/data/ilustracoesAttributes";
 
 interface ItemDetailModalProps {
   item: GameItem | null;
@@ -33,7 +33,7 @@ export function ItemDetailModal({
   };
 
   const typeName = getTypeName(item.attributes.type != null ? Number(item.attributes.type) : null);
-  const ilustracaoAttrs = realm === "br" ? ILUSTRACOES_ATTRIBUTES[Number(item.id)] : undefined;
+  const ilustracaoAttrs = (realm === "turco" ? ILUSTRACOES_ATTRIBUTES_TR : ILUSTRACOES_ATTRIBUTES_BR)[Number(item.id)];
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
