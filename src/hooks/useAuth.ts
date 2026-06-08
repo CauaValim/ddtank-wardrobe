@@ -45,7 +45,8 @@ export function useAuth() {
 
         // If token refresh failed or user was deleted, sign out cleanly
         if (event === "TOKEN_REFRESHED" && !session) {
-          await supabase.auth.signOut();
+          // Defer to avoid deadlock inside the auth state listener
+          setTimeout(() => { supabase.auth.signOut(); }, 0);
         }
       }
     );
