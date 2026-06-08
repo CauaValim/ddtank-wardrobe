@@ -34,6 +34,22 @@ async function convertBlobToPng(blob: Blob): Promise<Blob> {
 
 export type Realm = "br" | "turco";
 
+// Module-level cache per realm to reduce Supabase egress when navigating
+// between routes (BR <-> TR). Items are re-used until TTL expires or a
+// write operation invalidates the cache.
+type RealmCache = {
+  items: GameItem[];
+  images: Map<string, string>;
+  fetchedAt: number;
+};
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const realmCache: Partial<Record<Realm, RealmCache>> = {};
+const inflight: Partial<Record<Realm, Promise<RealmCache> | null>> = {};
+
+function invalidateRealmCache(realm: Realm) {
+  delete realmCache[realm];
+}
+
 export function useItemStore(realm: Realm = "br") {
   const tableName = (realm === "turco" ? "items_turco" : "items") as "items";
   const bucketName = realm === "turco" ? "item-images-turco" : "item-images";
@@ -45,56 +61,79 @@ export function useItemStore(realm: Realm = "br") {
 
   // Load items from Supabase on mount
   const fetchItems = useCallback(async () => {
-    setItems([]);
-    setImages(new Map());
-    setLoading(true);
-    let allRows: any[] = [];
-    let from = 0;
-    const pageSize = 1000;
-    let hasMore = true;
-
-    while (hasMore) {
-      const { data, error } = await supabase
-        .from(tableName)
-        .select("*")
-        .order("id", { ascending: true })
-        .range(from, from + pageSize - 1);
-      if (error || !data) break;
-      allRows = allRows.concat(data);
-      hasMore = data.length === pageSize;
-      from += pageSize;
+    // Serve from cache if fresh
+    const cached = realmCache[realm];
+    if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
+      setItems(cached.items);
+      setImages(new Map(cached.images));
+      setLoading(false);
+      return;
     }
 
-    if (allRows.length > 0) {
-      const parsed: GameItem[] = [];
-      const loadedImages = new Map<string, string>();
-      allRows.forEach((row) => {
-        const { id, name, image_url, created_at, updated_at, ...rest } = row;
-        const attributes: Record<string, string> = {};
-        Object.entries(rest).forEach(([key, val]) => {
-          if (val != null && (key === "desc" || String(val).length < 200)) {
-            attributes[key] = String(val);
+    // Deduplicate concurrent fetches for the same realm
+    if (!inflight[realm]) {
+      inflight[realm] = (async () => {
+        let allRows: any[] = [];
+        let from = 0;
+        const pageSize = 1000;
+        let hasMore = true;
+
+        while (hasMore) {
+          const { data, error } = await supabase
+            .from(tableName)
+            .select("*")
+            .order("id", { ascending: true })
+            .range(from, from + pageSize - 1);
+          if (error || !data) break;
+          allRows = allRows.concat(data);
+          hasMore = data.length === pageSize;
+          from += pageSize;
+        }
+
+        const parsed: GameItem[] = [];
+        const loadedImages = new Map<string, string>();
+        allRows.forEach((row) => {
+          const { id, name, image_url, created_at, updated_at, ...rest } = row;
+          const attributes: Record<string, string> = {};
+          Object.entries(rest).forEach(([key, val]) => {
+            if (val != null && (key === "desc" || String(val).length < 200)) {
+              attributes[key] = String(val);
+            }
+          });
+          parsed.push({
+            id: String(id),
+            name: name ?? `Item #${id}`,
+            imageUrl: image_url ?? undefined,
+            attributes,
+          });
+          if (image_url) {
+            loadedImages.set(String(id), image_url);
           }
         });
-        parsed.push({
-          id: String(id),
-          name: name ?? `Item #${id}`,
-          imageUrl: image_url ?? undefined,
-          attributes,
-        });
-        if (image_url) {
-          loadedImages.set(String(id), image_url);
-        }
-      });
-      setItems(parsed);
-      setImages((prev) => {
-        const merged = new Map(prev);
-        loadedImages.forEach((v, k) => merged.set(k, v));
-        return merged;
+
+        const entry: RealmCache = {
+          items: parsed,
+          images: loadedImages,
+          fetchedAt: Date.now(),
+        };
+        realmCache[realm] = entry;
+        return entry;
+      })().finally(() => {
+        inflight[realm] = null;
       });
     }
-    setLoading(false);
-  }, [tableName]);
+
+    setLoading(true);
+    try {
+      const entry = await inflight[realm]!;
+      setItems(entry.items);
+      setImages(new Map(entry.images));
+    } catch (err) {
+      console.warn("Falha ao carregar itens:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [tableName, realm]);
 
   useEffect(() => {
     fetchItems();
@@ -178,6 +217,7 @@ export function useItemStore(realm: Realm = "br") {
       onlyNewItems.forEach((i) => map.set(i.id, i));
       return Array.from(map.values());
     });
+    invalidateRealmCache(realm);
 
     let failedBatches = 0;
     const batchSize = 500;
@@ -317,6 +357,8 @@ export function useItemStore(realm: Realm = "br") {
               next.set(itemId, publicUrl);
               return next;
             });
+            const c = realmCache[realm];
+            if (c) c.images.set(itemId, publicUrl);
             successCount++;
           } catch (err) {
             console.error(`Image upload error for ${itemId}:`, err);
@@ -394,6 +436,7 @@ export function useItemStore(realm: Realm = "br") {
         return item;
       });
     });
+    invalidateRealmCache(realm);
 
     toast.success(`${updated} descrições atualizadas com sucesso!`);
   };
@@ -415,6 +458,7 @@ export function useItemStore(realm: Realm = "br") {
       const batch = numericIds.slice(i, i + batchSize);
       await supabase.from(tableName).update({ type: newType }).in("id", batch);
     }
+    invalidateRealmCache(realm);
   };
 
   const filteredItems = useMemo(() => {
