@@ -158,6 +158,28 @@ function isLikelyItemName(value: string): boolean {
   return /[A-Za-zÀ-ÿ]/.test(trimmed);
 }
 
+// Words that indicate a cell is a price/currency, not an item amount.
+// Cells in these columns must NOT be prefixed with an item ID.
+const PRICE_COLUMN_HEADER_PATTERN = /\b(value|price|cost|preço|preco|valor|custo)\b/i;
+const CURRENCY_UNIT_PATTERN = /\b(coupons?|lcps|gold|diamond|diamante|cupons|cupom|ouro)\b/i;
+
+function findColumnHeader(
+  ws: XLSX.WorkSheet,
+  row: number,
+  col: number,
+  minR: number
+): string | null {
+  // Walk upward from the row looking for a likely header (alphabetic text)
+  for (let r = row - 1; r >= minR; r--) {
+    const v = getCellValue(ws, r, col);
+    if (!v) continue;
+    const trimmed = v.trim();
+    if (!/[A-Za-zÀ-ÿ]/.test(trimmed)) continue;
+    return trimmed;
+  }
+  return null;
+}
+
 function collectLikelyNameCandidatesInColumn(
   ws: XLSX.WorkSheet,
   nameCol: number,
