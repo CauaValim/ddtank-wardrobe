@@ -158,6 +158,28 @@ function isLikelyItemName(value: string): boolean {
   return /[A-Za-zÀ-ÿ]/.test(trimmed);
 }
 
+// Words that indicate a cell is a price/currency, not an item amount.
+// Cells in these columns must NOT be prefixed with an item ID.
+const PRICE_COLUMN_HEADER_PATTERN = /\b(value|price|cost|preço|preco|valor|custo)\b/i;
+const CURRENCY_UNIT_PATTERN = /\b(coupons?|lcps|gold|diamond|diamante|cupons|cupom|ouro)\b/i;
+
+function findColumnHeader(
+  ws: XLSX.WorkSheet,
+  row: number,
+  col: number,
+  minR: number
+): string | null {
+  // Walk upward from the row looking for a likely header (alphabetic text)
+  for (let r = row - 1; r >= minR; r--) {
+    const v = getCellValue(ws, r, col);
+    if (!v) continue;
+    const trimmed = v.trim();
+    if (!/[A-Za-zÀ-ÿ]/.test(trimmed)) continue;
+    return trimmed;
+  }
+  return null;
+}
+
 function collectLikelyNameCandidatesInColumn(
   ws: XLSX.WorkSheet,
   nameCol: number,
@@ -386,9 +408,13 @@ function fillIdAmountColumns(
         if (!/\*\d/.test(cellVal.trim())) continue;
         const ref = cellRef(dr, c);
         const segments = cellVal.split(",").map((s: string) => s.trim());
-        // Count only segments that still need an ID (start with *)
-        const needsId = segments.some((s: string) => s.startsWith("*"));
-        if (!needsId) continue;
+        // A segment "needs an ID" if it starts with "*" (e.g. "*5") OR if it's a
+        // bare number alongside other "*N" segments — the cell rich-text often
+        // hides the first "*" inside a separator run, so "10,*1,*5" is really
+        // three amounts (*10, *1, *5) all needing IDs.
+        const hasStar = segments.some((s: string) => s.startsWith("*"));
+        if (!hasStar) continue;
+        const bareNumberNeedsId = (s: string) => /^\d+$/.test(s);
         const names = collectSegmentNameCandidates(
           ws,
           nameCol,
@@ -406,6 +432,15 @@ function fillIdAmountColumns(
             if (name) {
               const id = lookupId(name, nameIndex, errors, sheetName, cellRef(dr, c));
               if (id != null) idAmounts.push(seg.replace("*", `${id}*`));
+              else idAmounts.push(seg);
+            } else {
+              idAmounts.push(seg);
+            }
+          } else if (bareNumberNeedsId(seg)) {
+            const name = resolvedNames[i];
+            if (name) {
+              const id = lookupId(name, nameIndex, errors, sheetName, cellRef(dr, c));
+              if (id != null) idAmounts.push(`${id}*${seg}`);
               else idAmounts.push(seg);
             } else {
               idAmounts.push(seg);
@@ -519,6 +554,11 @@ function fillStandaloneAmounts(
       const trimmed = val.trim();
       if (!/^\*\d+/.test(trimmed)) continue;
       if (/\d\*\d/.test(trimmed)) continue;
+      // Skip price/currency cells: e.g. "*30.000 Coupons" in a "Value" column
+      // is a price, not an item amount, and must NOT receive an item ID prefix.
+      if (CURRENCY_UNIT_PATTERN.test(trimmed)) continue;
+      const header = findColumnHeader(ws, r, c, minR);
+      if (header && PRICE_COLUMN_HEADER_PATTERN.test(header)) continue;
       const parts = trimmed.split(",").map((s: string) => s.trim());
       const names = findStandaloneNameCandidates(ws, r, c, parts.length, minR, maxR, minC, maxC);
       if (names.length === 0) continue;

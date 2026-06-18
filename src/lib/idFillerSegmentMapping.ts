@@ -15,7 +15,12 @@ export function resolveSegmentNamesForMissingIds(
     const candidate = candidates[candidateIndex];
     if (!candidate) break;
 
-    if (segments[index].startsWith("*")) {
+    // Assign candidate name to segments that need an ID:
+    // - "*N" segments (amount needs ID prefix)
+    // - bare-number segments like "10" alongside "*N" siblings (rich-text
+    //   often hides the leading "*" of the first amount in a separator run)
+    const seg = segments[index];
+    if (seg.startsWith("*") || /^\d+$/.test(seg)) {
       resolved[index] = candidate.name;
     }
 
