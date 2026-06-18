@@ -386,9 +386,13 @@ function fillIdAmountColumns(
         if (!/\*\d/.test(cellVal.trim())) continue;
         const ref = cellRef(dr, c);
         const segments = cellVal.split(",").map((s: string) => s.trim());
-        // Count only segments that still need an ID (start with *)
-        const needsId = segments.some((s: string) => s.startsWith("*"));
-        if (!needsId) continue;
+        // A segment "needs an ID" if it starts with "*" (e.g. "*5") OR if it's a
+        // bare number alongside other "*N" segments — the cell rich-text often
+        // hides the first "*" inside a separator run, so "10,*1,*5" is really
+        // three amounts (*10, *1, *5) all needing IDs.
+        const hasStar = segments.some((s: string) => s.startsWith("*"));
+        if (!hasStar) continue;
+        const bareNumberNeedsId = (s: string) => /^\d+$/.test(s);
         const names = collectSegmentNameCandidates(
           ws,
           nameCol,
@@ -406,6 +410,15 @@ function fillIdAmountColumns(
             if (name) {
               const id = lookupId(name, nameIndex, errors, sheetName, cellRef(dr, c));
               if (id != null) idAmounts.push(seg.replace("*", `${id}*`));
+              else idAmounts.push(seg);
+            } else {
+              idAmounts.push(seg);
+            }
+          } else if (bareNumberNeedsId(seg)) {
+            const name = resolvedNames[i];
+            if (name) {
+              const id = lookupId(name, nameIndex, errors, sheetName, cellRef(dr, c));
+              if (id != null) idAmounts.push(`${id}*${seg}`);
               else idAmounts.push(seg);
             } else {
               idAmounts.push(seg);
