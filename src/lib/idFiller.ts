@@ -554,6 +554,11 @@ function fillStandaloneAmounts(
       const trimmed = val.trim();
       if (!/^\*\d+/.test(trimmed)) continue;
       if (/\d\*\d/.test(trimmed)) continue;
+      // Skip price/currency cells: e.g. "*30.000 Coupons" in a "Value" column
+      // is a price, not an item amount, and must NOT receive an item ID prefix.
+      if (CURRENCY_UNIT_PATTERN.test(trimmed)) continue;
+      const header = findColumnHeader(ws, r, c, minR);
+      if (header && PRICE_COLUMN_HEADER_PATTERN.test(header)) continue;
       const parts = trimmed.split(",").map((s: string) => s.trim());
       const names = findStandaloneNameCandidates(ws, r, c, parts.length, minR, maxR, minC, maxC);
       if (names.length === 0) continue;
