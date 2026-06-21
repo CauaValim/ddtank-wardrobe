@@ -9,6 +9,7 @@ import { EventScheduleSidebar } from "@/components/EventScheduleSidebar";
 import Index from "./pages/Index";
 import Login from "./pages/Login";
 import UserManagement from "./pages/UserManagement";
+import Trust from "./pages/Trust";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -28,6 +29,7 @@ function AppRoutes() {
     return (
       <Routes>
         <Route path="/login" element={<Login onLogin={auth.signIn} />} />
+        <Route path="/trust" element={<Trust />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     );
@@ -44,6 +46,7 @@ function AppRoutes() {
             {auth.role === "super_admin" && (
               <Route path="/users" element={<UserManagement />} />
             )}
+            <Route path="/trust" element={<Trust />} />
             <Route path="/login" element={<Navigate to="/" replace />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
