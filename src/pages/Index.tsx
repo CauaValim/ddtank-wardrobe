@@ -42,7 +42,6 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
   const [selectedItem, setSelectedItem] = useState<GameItem | null>(null);
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [idFillerOpen, setIdFillerOpen] = useState(false);
-  const [showFuguras, setShowFuguras] = useState(false);
 
   // Multi-select state
   const [selectionMode, setSelectionMode] = useState(false);
@@ -60,25 +59,16 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
     return getTypeGroups(existingTypes);
   }, [items]);
 
-  // Fuguras seed set
-  const fugurasSet = useMemo(
-    () => new Set(FUGURAS_SEED[realm]?.ids ?? []),
-    [realm]
-  );
-  const fugurasCount = fugurasSet.size;
-
-  // Filter items by type / fuguras / novidades
+  // Filter items by type
   const filteredItems = useMemo(() => {
     let result = items;
-    if (showFuguras) {
-      result = result.filter((item) => fugurasSet.has(String(item.id)));
-    } else if (selectedType != null) {
+    if (selectedType != null) {
       const matchingGroup = typeGroups.find(([name]) => name === selectedType);
       const typeNumbers = matchingGroup ? matchingGroup[1] : [];
       result = result.filter((item) => typeNumbers.includes(Number(item.attributes.type)));
     }
     return result;
-  }, [items, selectedType, typeGroups, showFuguras, fugurasSet]);
+  }, [items, selectedType, typeGroups]);
 
   const lastSelectedIndex = useRef<number | null>(null);
 
