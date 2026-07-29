@@ -3,6 +3,28 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { ImportedImage } from "@/lib/fileParser";
 import type { GameItem } from "@/types/item";
+import { LAST_UPDATE_SEED } from "@/data/lastUpdateNovidades";
+
+function loadNovidades(realm: Realm): Set<string> {
+  try {
+    const seed = LAST_UPDATE_SEED[realm];
+    const seedKey = `novidades-seed-${realm}`;
+    const raw = localStorage.getItem(`novidades-${realm}`);
+    const existing: string[] = raw ? (JSON.parse(raw) ?? []) : [];
+    const set = new Set(existing.map(String));
+    if (seed && seed.key && seed.ids.length > 0) {
+      const applied = localStorage.getItem(seedKey);
+      if (applied !== seed.key) {
+        seed.ids.forEach((id) => set.add(String(id)));
+        localStorage.setItem(`novidades-${realm}`, JSON.stringify(Array.from(set)));
+        localStorage.setItem(seedKey, seed.key);
+      }
+    }
+    return set;
+  } catch {
+    return new Set();
+  }
+}
 
 async function convertBlobToPng(blob: Blob): Promise<Blob> {
   if (blob.type === "image/png") return blob;
@@ -59,26 +81,11 @@ export function useItemStore(realm: Realm = "br") {
   const [loading, setLoading] = useState(true);
   const [crossRealmIds, setCrossRealmIds] = useState<Set<string>>(new Set());
   const novidadesKey = `novidades-${realm}`;
-  const [novidadesIds, setNovidadesIds] = useState<Set<string>>(() => {
-    try {
-      const raw = localStorage.getItem(`novidades-${realm}`);
-      if (!raw) return new Set();
-      const arr = JSON.parse(raw);
-      return new Set(Array.isArray(arr) ? arr.map(String) : []);
-    } catch {
-      return new Set();
-    }
-  });
+  const [novidadesIds, setNovidadesIds] = useState<Set<string>>(() => loadNovidades(realm));
   const [showNovidades, setShowNovidades] = useState(false);
 
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem(`novidades-${realm}`);
-      const arr = raw ? JSON.parse(raw) : [];
-      setNovidadesIds(new Set(Array.isArray(arr) ? arr.map(String) : []));
-    } catch {
-      setNovidadesIds(new Set());
-    }
+    setNovidadesIds(loadNovidades(realm));
     setShowNovidades(false);
   }, [realm]);
 
