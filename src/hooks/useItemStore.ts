@@ -528,7 +528,9 @@ export function useItemStore(realm: Realm = "br") {
 
   const filteredItems = useMemo(() => {
     let result = items;
-    if (showNovidades && novidadesIds.size > 0) {
+    if (showFuguras && fugurasIds.size > 0) {
+      result = result.filter((item) => fugurasIds.has(item.id));
+    } else if (showNovidades && novidadesIds.size > 0) {
       result = result.filter((item) => novidadesIds.has(item.id));
     }
     if (searchQuery.trim()) {
@@ -542,7 +544,7 @@ export function useItemStore(realm: Realm = "br") {
       );
     }
     return result;
-  }, [items, searchQuery, crossRealmIds, showNovidades, novidadesIds]);
+  }, [items, searchQuery, crossRealmIds, showNovidades, novidadesIds, showFuguras, fugurasIds]);
 
   const getItemImage = (id: string) => images.get(id) ?? "";
 
