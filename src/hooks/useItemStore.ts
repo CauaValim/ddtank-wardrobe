@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import type { ImportedImage } from "@/lib/fileParser";
 import type { GameItem } from "@/types/item";
 import { LAST_UPDATE_SEED } from "@/data/lastUpdateNovidades";
+import { FUGURAS_SEED } from "@/data/fuguras";
 
 function loadNovidades(realm: Realm): Set<string> {
   try {
