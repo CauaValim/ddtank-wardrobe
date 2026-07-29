@@ -58,6 +58,29 @@ export function useItemStore(realm: Realm = "br") {
   const [searchQuery, setSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
   const [crossRealmIds, setCrossRealmIds] = useState<Set<string>>(new Set());
+  const novidadesKey = `novidades-${realm}`;
+  const [novidadesIds, setNovidadesIds] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem(`novidades-${realm}`);
+      if (!raw) return new Set();
+      const arr = JSON.parse(raw);
+      return new Set(Array.isArray(arr) ? arr.map(String) : []);
+    } catch {
+      return new Set();
+    }
+  });
+  const [showNovidades, setShowNovidades] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(`novidades-${realm}`);
+      const arr = raw ? JSON.parse(raw) : [];
+      setNovidadesIds(new Set(Array.isArray(arr) ? arr.map(String) : []));
+    } catch {
+      setNovidadesIds(new Set());
+    }
+    setShowNovidades(false);
+  }, [realm]);
 
   // Load items from Supabase on mount
   const fetchItems = useCallback(async () => {
@@ -210,6 +233,15 @@ export function useItemStore(realm: Realm = "br") {
     }
 
     toast.info(`${existingIds.size} itens já existem e serão preservados. Inserindo ${onlyNewItems.length} novos...`);
+
+    // Salvar IDs recém-adicionados como "Novidades" (substitui a lista anterior)
+    try {
+      const ids = onlyNewItems.map((i) => String(i.id));
+      localStorage.setItem(novidadesKey, JSON.stringify(ids));
+      setNovidadesIds(new Set(ids));
+    } catch (e) {
+      console.warn("Falha ao salvar Novidades:", e);
+    }
 
     // Update local state (add new, keep existing)
     setItems((prev) => {
@@ -463,6 +495,9 @@ export function useItemStore(realm: Realm = "br") {
 
   const filteredItems = useMemo(() => {
     let result = items;
+    if (showNovidades && novidadesIds.size > 0) {
+      result = result.filter((item) => novidadesIds.has(item.id));
+    }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       result = result.filter(
@@ -474,7 +509,7 @@ export function useItemStore(realm: Realm = "br") {
       );
     }
     return result;
-  }, [items, searchQuery, crossRealmIds]);
+  }, [items, searchQuery, crossRealmIds, showNovidades, novidadesIds]);
 
   const getItemImage = (id: string) => images.get(id) ?? "";
 
@@ -489,5 +524,8 @@ export function useItemStore(realm: Realm = "br") {
     loading,
     updateItemType,
     syncDescriptions,
+    novidadesCount: novidadesIds.size,
+    showNovidades,
+    setShowNovidades,
   };
 }
