@@ -562,5 +562,8 @@ export function useItemStore(realm: Realm = "br") {
     novidadesCount: novidadesIds.size,
     showNovidades,
     setShowNovidades,
+    fugurasCount: fugurasIds.size,
+    showFuguras,
+    setShowFuguras,
   };
 }
