@@ -105,10 +105,14 @@ export function useItemStore(realm: Realm = "br") {
   const novidadesKey = `novidades-${realm}`;
   const [novidadesIds, setNovidadesIds] = useState<Set<string>>(() => loadNovidades(realm));
   const [showNovidades, setShowNovidades] = useState(false);
+  const [fugurasIds, setFugurasIds] = useState<Set<string>>(() => loadFuguras(realm));
+  const [showFuguras, setShowFuguras] = useState(false);
 
   useEffect(() => {
     setNovidadesIds(loadNovidades(realm));
     setShowNovidades(false);
+    setFugurasIds(loadFuguras(realm));
+    setShowFuguras(false);
   }, [realm]);
 
   // Load items from Supabase on mount
