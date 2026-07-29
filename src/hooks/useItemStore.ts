@@ -4,6 +4,7 @@ import { toast } from "sonner";
 import type { ImportedImage } from "@/lib/fileParser";
 import type { GameItem } from "@/types/item";
 import { LAST_UPDATE_SEED } from "@/data/lastUpdateNovidades";
+import { FUGURAS_SEED } from "@/data/fuguras";
 
 function loadNovidades(realm: Realm): Set<string> {
   try {
@@ -17,6 +18,27 @@ function loadNovidades(realm: Realm): Set<string> {
       if (applied !== seed.key) {
         seed.ids.forEach((id) => set.add(String(id)));
         localStorage.setItem(`novidades-${realm}`, JSON.stringify(Array.from(set)));
+        localStorage.setItem(seedKey, seed.key);
+      }
+    }
+    return set;
+  } catch {
+    return new Set();
+  }
+}
+
+function loadFuguras(realm: Realm): Set<string> {
+  try {
+    const seed = FUGURAS_SEED[realm];
+    const seedKey = `fuguras-seed-${realm}`;
+    const raw = localStorage.getItem(`fuguras-${realm}`);
+    const existing: string[] = raw ? (JSON.parse(raw) ?? []) : [];
+    const set = new Set(existing.map(String));
+    if (seed && seed.key && seed.ids.length > 0) {
+      const applied = localStorage.getItem(seedKey);
+      if (applied !== seed.key) {
+        seed.ids.forEach((id) => set.add(String(id)));
+        localStorage.setItem(`fuguras-${realm}`, JSON.stringify(Array.from(set)));
         localStorage.setItem(seedKey, seed.key);
       }
     }
@@ -83,10 +105,14 @@ export function useItemStore(realm: Realm = "br") {
   const novidadesKey = `novidades-${realm}`;
   const [novidadesIds, setNovidadesIds] = useState<Set<string>>(() => loadNovidades(realm));
   const [showNovidades, setShowNovidades] = useState(false);
+  const [fugurasIds, setFugurasIds] = useState<Set<string>>(() => loadFuguras(realm));
+  const [showFuguras, setShowFuguras] = useState(false);
 
   useEffect(() => {
     setNovidadesIds(loadNovidades(realm));
     setShowNovidades(false);
+    setFugurasIds(loadFuguras(realm));
+    setShowFuguras(false);
   }, [realm]);
 
   // Load items from Supabase on mount
@@ -502,7 +528,9 @@ export function useItemStore(realm: Realm = "br") {
 
   const filteredItems = useMemo(() => {
     let result = items;
-    if (showNovidades && novidadesIds.size > 0) {
+    if (showFuguras && fugurasIds.size > 0) {
+      result = result.filter((item) => fugurasIds.has(item.id));
+    } else if (showNovidades && novidadesIds.size > 0) {
       result = result.filter((item) => novidadesIds.has(item.id));
     }
     if (searchQuery.trim()) {
@@ -516,7 +544,7 @@ export function useItemStore(realm: Realm = "br") {
       );
     }
     return result;
-  }, [items, searchQuery, crossRealmIds, showNovidades, novidadesIds]);
+  }, [items, searchQuery, crossRealmIds, showNovidades, novidadesIds, showFuguras, fugurasIds]);
 
   const getItemImage = (id: string) => images.get(id) ?? "";
 
@@ -534,5 +562,8 @@ export function useItemStore(realm: Realm = "br") {
     novidadesCount: novidadesIds.size,
     showNovidades,
     setShowNovidades,
+    fugurasCount: fugurasIds.size,
+    showFuguras,
+    setShowFuguras,
   };
 }
