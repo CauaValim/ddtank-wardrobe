@@ -9,6 +9,7 @@ import { ItemDetailModal } from "@/components/ItemDetailModal";
 import { BulkTypeMover } from "@/components/BulkTypeMover";
 import { IdFillerModal } from "@/components/IdFillerModal";
 import { getTypeName, getTypeGroups, HIDDEN_TYPES } from "@/lib/itemTypes";
+import { FUGURAS_SEED } from "@/data/fuguras";
 import type { GameItem } from "@/types/item";
 import type { useAuth } from "@/hooks/useAuth";
 
