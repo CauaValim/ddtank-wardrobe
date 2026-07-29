@@ -57,16 +57,25 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
     return getTypeGroups(existingTypes);
   }, [items]);
 
-  // Filter items by type
+  // Fuguras seed set
+  const fugurasSet = useMemo(
+    () => new Set(FUGURAS_SEED[realm]?.ids ?? []),
+    [realm]
+  );
+  const fugurasCount = fugurasSet.size;
+
+  // Filter items by type / fuguras / novidades
   const filteredItems = useMemo(() => {
     let result = items;
-    if (selectedType != null) {
+    if (showFuguras) {
+      result = result.filter((item) => fugurasSet.has(String(item.id)));
+    } else if (selectedType != null) {
       const matchingGroup = typeGroups.find(([name]) => name === selectedType);
       const typeNumbers = matchingGroup ? matchingGroup[1] : [];
       result = result.filter((item) => typeNumbers.includes(Number(item.attributes.type)));
     }
     return result;
-  }, [items, selectedType, typeGroups]);
+  }, [items, selectedType, typeGroups, showFuguras, fugurasSet]);
 
   const lastSelectedIndex = useRef<number | null>(null);
 
