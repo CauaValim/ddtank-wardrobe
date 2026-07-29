@@ -27,6 +27,27 @@ function loadNovidades(realm: Realm): Set<string> {
   }
 }
 
+function loadFuguras(realm: Realm): Set<string> {
+  try {
+    const seed = FUGURAS_SEED[realm];
+    const seedKey = `fuguras-seed-${realm}`;
+    const raw = localStorage.getItem(`fuguras-${realm}`);
+    const existing: string[] = raw ? (JSON.parse(raw) ?? []) : [];
+    const set = new Set(existing.map(String));
+    if (seed && seed.key && seed.ids.length > 0) {
+      const applied = localStorage.getItem(seedKey);
+      if (applied !== seed.key) {
+        seed.ids.forEach((id) => set.add(String(id)));
+        localStorage.setItem(`fuguras-${realm}`, JSON.stringify(Array.from(set)));
+        localStorage.setItem(seedKey, seed.key);
+      }
+    }
+    return set;
+  } catch {
+    return new Set();
+  }
+}
+
 async function convertBlobToPng(blob: Blob): Promise<Blob> {
   if (blob.type === "image/png") return blob;
 
