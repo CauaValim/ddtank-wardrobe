@@ -34,6 +34,9 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
     novidadesCount,
     showNovidades,
     setShowNovidades,
+    fugurasCount,
+    showFuguras,
+    setShowFuguras,
   } = useItemStore(realm);
 
   const [selectedItem, setSelectedItem] = useState<GameItem | null>(null);
