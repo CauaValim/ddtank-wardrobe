@@ -39,6 +39,7 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
   const [selectedItem, setSelectedItem] = useState<GameItem | null>(null);
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [idFillerOpen, setIdFillerOpen] = useState(false);
+  const [showFuguras, setShowFuguras] = useState(false);
 
   // Multi-select state
   const [selectionMode, setSelectionMode] = useState(false);
