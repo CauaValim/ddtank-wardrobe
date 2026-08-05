@@ -36,6 +36,20 @@ jobs:
             RewriteCond %{REQUEST_FILENAME} !-d
             RewriteRule . /index.html [L]
           </IfModule>
+
+          # Nunca cachear o HTML de entrada: garante que a versao nova apareca
+          <IfModule mod_headers.c>
+            <FilesMatch "\.(html)$">
+              Header set Cache-Control "no-cache, no-store, must-revalidate"
+              Header set Pragma "no-cache"
+              Header set Expires "0"
+            </FilesMatch>
+
+            # Assets com hash no nome podem ser cacheados agressivamente
+            <FilesMatch "\.(js|css|woff2?|ttf|otf|eot|svg|png|jpe?g|gif|webp|avif|ico)$">
+              Header set Cache-Control "public, max-age=31536000, immutable"
+            </FilesMatch>
+          </IfModule>
           EOF
 
       - name: Deploy via FTP
