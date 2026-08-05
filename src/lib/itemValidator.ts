@@ -121,14 +121,26 @@ export function extractPairsFromGrid(grid: Grid, sheet: string): ExtractedPair[]
       if (!v || !ID_AMOUNT_CELL.test(v)) continue;
       const ids = v.split(",").map((s) => s.trim().split("*")[0]);
 
-      const candidates: string[] = [];
+      const candidates: { name: string; row: number; col: number }[] = [];
       for (let rr = Math.max(0, r - 3); rr <= r; rr++) {
         for (let cc = 0; cc < maxCol; cc++) {
           const cv = cellAt(grid, rr, cc);
-          if (cv && isBracketedName(cv)) candidates.push(cv);
+          if (cv && isBracketedName(cv)) candidates.push({ name: cv, row: rr, col: cc });
         }
       }
-      const names = candidates.slice(-ids.length);
+      let names: string[];
+      if (ids.length === 1) {
+        // pick the closest name (same row wins, then nearest column)
+        const nearest = candidates
+          .slice()
+          .sort(
+            (a, b) =>
+              (r - a.row) * 100 + Math.abs(a.col - c) - ((r - b.row) * 100 + Math.abs(b.col - c))
+          )[0];
+        names = nearest ? [nearest.name] : [];
+      } else {
+        names = candidates.slice(-ids.length).map((x) => x.name);
+      }
       ids.forEach((id, i) => {
         const name = names[i];
         if (!name) return;
