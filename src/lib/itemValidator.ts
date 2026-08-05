@@ -81,6 +81,41 @@ function isBracketedName(v: string): boolean {
 const ID_AMOUNT_CELL = /^\d+\*\d+(?:\s*,\s*\d+\*\d+)*$/;
 
 /**
+ * Finds the N item names that belong to a multi-id cell:
+ *  - vertically: names stacked in a column to the left, starting at the same row
+ *  - horizontally: names in the row(s) above, starting at the same column
+ */
+function matchMultiNames(
+  grid: Grid,
+  r: number,
+  c: number,
+  count: number,
+  maxRow: number,
+  maxCol: number
+): string[] {
+  for (let nameCol = c - 1; nameCol >= 0; nameCol--) {
+    const found: string[] = [];
+    for (let rr = r; rr < Math.min(maxRow, r + count * 2); rr++) {
+      const v = cellAt(grid, rr, nameCol);
+      if (v && isBracketedName(v)) found.push(v);
+      if (found.length === count) return found;
+    }
+  }
+
+  for (const rr of [r - 1, r - 2]) {
+    if (rr < 0) continue;
+    const found: string[] = [];
+    for (let cc = c; cc < maxCol; cc++) {
+      const v = cellAt(grid, rr, cc);
+      if (v && isBracketedName(v)) found.push(v);
+      if (found.length === count) return found;
+    }
+  }
+
+  return [];
+}
+
+/**
  * Extracts (name, id) pairs from an event spreadsheet sheet.
  * Supports two layouts:
  *  - tables with "Item Name" + "ID" headers (value on the same row)
