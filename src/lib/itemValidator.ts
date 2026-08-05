@@ -80,6 +80,18 @@ function isBracketedName(v: string): boolean {
 
 const ID_AMOUNT_CELL = /^\d+\*\d+(?:\s*,\s*\d+\*\d+)*$/;
 
+const VALUE_HEADER = /\bvalue\b|\bcost\b|valor|custo|pre[çc]o/i;
+
+function headerAbove(grid: Grid, r: number, c: number): string | null {
+  for (let rr = r - 1; rr >= 0 && rr >= r - 12; rr--) {
+    const v = cellAt(grid, rr, c);
+    if (!v) continue;
+    if (!/[A-Za-zÀ-ÿ]/.test(v)) continue;
+    return v;
+  }
+  return null;
+}
+
 /**
  * Finds the N item names that belong to a multi-id cell:
  *  - vertically: names stacked in a column to the left, starting at the same row
@@ -154,6 +166,9 @@ export function extractPairsFromGrid(grid: Grid, sheet: string): ExtractedPair[]
     for (let c = 0; c < maxCol; c++) {
       const v = cellAt(grid, r, c);
       if (!v || !ID_AMOUNT_CELL.test(v)) continue;
+      const header = headerAbove(grid, r, c);
+      // Cost/price columns hold the currency item, not the reward — skip them.
+      if (header && VALUE_HEADER.test(header)) continue;
       const ids = v.split(",").map((s) => s.trim().split("*")[0]);
 
       const candidates: { name: string; row: number; col: number }[] = [];
