@@ -139,7 +139,10 @@ export function extractPairsFromGrid(grid: Grid, sheet: string): ExtractedPair[]
           )[0];
         names = nearest ? [nearest.name] : [];
       } else {
-        names = candidates.slice(-ids.length).map((x) => x.name);
+        names = matchMultiNames(grid, r, c, ids.length, maxRow, maxCol);
+        if (names.length < ids.length) {
+          names = candidates.slice(-ids.length).map((x) => x.name);
+        }
       }
       ids.forEach((id, i) => {
         const name = names[i];
