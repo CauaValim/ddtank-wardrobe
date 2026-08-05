@@ -6,6 +6,8 @@ import {
   buildItemIndex,
   validateRows,
   summarize,
+  extractPairsFromGrid,
+  cleanDisplayName,
   STATUS_LABELS,
   type ValidationRow,
   type ValidationStatus,
@@ -83,10 +85,34 @@ export function ItemValidatorModal({ open, onClose, realm = "br" }: Props) {
 
         const index = buildItemIndex(all);
         const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
-        const sheet = wb.Sheets[wb.SheetNames[0]];
-        const sheetRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: "" });
 
-        setRows(validateRows(sheetRows, index));
+        const parsedRows: Record<string, unknown>[] = [];
+        for (const sheetName of wb.SheetNames) {
+          const ws = wb.Sheets[sheetName];
+          const grid = XLSX.utils.sheet_to_json<(string | null)[]>(ws, {
+            header: 1,
+            defval: null,
+            raw: false,
+          });
+          for (const pair of extractPairsFromGrid(grid, sheetName)) {
+            parsedRows.push({
+              Planilha: pair.sheet,
+              Célula: pair.cell,
+              ID: pair.id,
+              Nome: cleanDisplayName(pair.name),
+            });
+          }
+        }
+
+        if (parsedRows.length === 0) {
+          // Fallback: planilha simples com colunas ID / Nome
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          parsedRows.push(
+            ...XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: "" })
+          );
+        }
+
+        setRows(validateRows(parsedRows, index));
         setStatus("done");
       } catch (err) {
         console.error(err);
@@ -191,6 +217,7 @@ export function ItemValidatorModal({ open, onClose, realm = "br" }: Props) {
                   <thead className="sticky top-0 bg-secondary text-muted-foreground">
                     <tr>
                       <th className="p-2 font-medium">Img</th>
+                      <th className="p-2 font-medium">Aba / Célula</th>
                       <th className="p-2 font-medium">ID</th>
                       <th className="p-2 font-medium">Nome enviado</th>
                       <th className="p-2 font-medium">Nome no banco</th>
@@ -207,6 +234,10 @@ export function ItemValidatorModal({ open, onClose, realm = "br" }: Props) {
                           ) : (
                             <div className="h-8 w-8 rounded bg-muted" />
                           )}
+                        </td>
+                        <td className="p-2 text-muted-foreground">
+                          {String(r.original.Planilha ?? "—")}
+                          {r.original["Célula"] ? ` · ${r.original["Célula"]}` : ""}
                         </td>
                         <td className="p-2 font-mono">{r.rawId || "—"}</td>
                         <td className="p-2">{r.rawName || "—"}</td>
