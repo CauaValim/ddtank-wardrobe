@@ -1,59 +1,31 @@
+# Verificador de Itens (ID + Nome + Imagem)
 
-## Plano: Duplicar painel em `/turco` com base de dados separada
+Nova ferramenta no painel: você sobe uma planilha `.xlsx` com ID e Nome, e o painel confere linha por linha contra a base do realm atual (BR ou TR), mostrando o que está certo e o que está errado.
 
-### Objetivo
-Criar uma rota `/turco` que reusa toda a UI/cadastros atuais, mas lê e grava em uma base de dados separada (tabela `items_turco` + bucket `item-images-turco`). Os usuários e cargos permanecem compartilhados.
+## Como vai funcionar
 
-### Mudanças no Backend (Supabase)
+1. Botão novo no cabeçalho (ícone de "check de planilha"), ao lado do botão "Preencher IDs", visível só para ADM e Super Admin.
+2. Modal abre, você escolhe o arquivo `.xlsx`.
+3. O painel lê as colunas de ID e Nome (aceita variações: `ID`, `Id`, `Nome`, `Name`) e carrega a base do realm atual.
+4. Cada linha recebe um status:
+   - **Válido**: o ID existe, o nome bate com o do banco e o item tem imagem cadastrada.
+   - **Sem imagem**: ID e nome batem, mas o item não tem `image_url`.
+   - **Nome divergente**: o ID existe mas o nome é outro (mostra o nome correto do banco).
+   - **ID não encontrado**: nenhum item com aquele ID. Se o nome existir na base, sugere o ID correto.
+   - **Linha inválida**: sem ID ou sem nome.
+5. Comparação de nome é tolerante: ignora maiúsculas/minúsculas, acentos e espaços extras — diferença só de acento/caixa conta como válida.
 
-**1. Nova tabela `items_turco`** — schema idêntico a `items` (mesmas colunas, defaults e tipos).
+## Resultado na tela
 
-**2. RLS** — mesmas políticas de `items`:
-- SELECT público
-- INSERT/UPDATE/DELETE apenas para `admin` e `super_admin`
+Tabela com: miniatura da imagem do banco, ID enviado, Nome enviado, Nome no banco, ID sugerido e status colorido. Acima, um resumo com a contagem de cada status e filtro rápido por status (ex.: ver só os inválidos).
 
-**3. Novo bucket `item-images-turco`** (público, igual ao `item-images`) com políticas de escrita restritas a admins.
+## Exportar
 
-### Mudanças no Frontend
+Botão "Baixar relatório .xlsx" gera uma planilha com as colunas originais mais: `Status`, `Nome no Banco`, `ID Sugerido`, `Tem Imagem`. Linhas com problema ficam destacadas.
 
-**1. Abstração do "realm" no store**
-- Refatorar `src/hooks/useItemStore.ts` para aceitar parâmetro `realm: "br" | "turco"`.
-- O hook passa a usar dinamicamente:
-  - Tabela: `items` ou `items_turco`
-  - Bucket: `item-images` ou `item-images-turco`
-- Assinatura: `useItemStore(realm)`.
+## Detalhes técnicos
 
-**2. Roteamento (`src/App.tsx`)**
-- Adicionar nova rota:
-  ```text
-  /        → <Index auth={auth} realm="br" />
-  /turco   → <Index auth={auth} realm="turco" />
-  ```
-
-**3. Página `Index.tsx`**
-- Recebe prop `realm`.
-- Passa `realm` para `useItemStore(realm)`.
-- Título do header muda conforme realm: "Painel Staff DDTank 337" vs "Painel Staff DDTank Turco".
-
-**4. Navegação entre realms**
-- Adicionar um seletor/botão no header (ex: badge "BR | TR") que navega entre `/` e `/turco`, para que admins alternem facilmente.
-
-**5. Componentes auxiliares**
-- `IdFillerModal`: passar `realm` como prop para que ele consulte a tabela correta ao buscar IDs.
-- `FileImporter`: nenhuma mudança (apenas dispara callbacks que já estão amarrados ao realm via store).
-
-### Fluxo de dados resultante
-
-```text
-/         → useItemStore("br")    → items + item-images
-/turco    → useItemStore("turco") → items_turco + item-images-turco
-```
-
-Login, cargos (`user_roles`), cronograma e sidebar permanecem globais e compartilhados.
-
-### Arquivos afetados
-- **Migration nova**: criar `items_turco` + RLS + bucket `item-images-turco` + políticas.
-- **Editar**: `src/App.tsx`, `src/pages/Index.tsx`, `src/hooks/useItemStore.ts`, `src/components/IdFillerModal.tsx`.
-
-### Observação
-Após aprovação, ao entrar em `/turco` pela primeira vez a base estará vazia — você poderá usar o **Importar** (Excel/JSON + ZIP) para carregar a database e imagens turcas, exatamente como fez no painel BR.
+- `src/lib/itemValidator.ts` (novo): normalização de nomes, índice por ID e por nome, e a função `validateRows` que devolve os resultados tipados. Coberto por testes em `src/lib/itemValidator.test.ts`.
+- `src/components/ItemValidatorModal.tsx` (novo): leitura do arquivo com `@e965/xlsx`, tabela de resultados e exportação — mesmo padrão de `IdFillerModal.tsx`.
+- Consulta paginada (1000 por página) em `items` ou `items_turco` conforme o `realm`, buscando `id, name, image_url`. Sem mudanças no banco de dados.
+- `src/pages/Index.tsx`: novo botão condicionado a `auth.role === "admin" || "super_admin"`, passando o `realm` atual.
