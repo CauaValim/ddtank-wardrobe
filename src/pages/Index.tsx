@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useRef } from "react";
-import { Search, Package, Gamepad2, MousePointerClick, CheckSquare, LogOut, Users, FileSpreadsheet, Sparkles, Shapes } from "lucide-react";
+import { Search, Package, Gamepad2, MousePointerClick, CheckSquare, LogOut, Users, FileSpreadsheet, Sparkles, Shapes, ClipboardCheck } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useNavigate } from "react-router-dom";
 import { useItemStore } from "@/hooks/useItemStore";
@@ -8,6 +8,7 @@ import { ItemCard } from "@/components/ItemCard";
 import { ItemDetailModal } from "@/components/ItemDetailModal";
 import { BulkTypeMover } from "@/components/BulkTypeMover";
 import { IdFillerModal } from "@/components/IdFillerModal";
+import { ItemValidatorModal } from "@/components/ItemValidatorModal";
 import { getTypeName, getTypeGroups, HIDDEN_TYPES } from "@/lib/itemTypes";
 import type { GameItem } from "@/types/item";
 import type { useAuth } from "@/hooks/useAuth";
@@ -41,6 +42,7 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
   const [selectedItem, setSelectedItem] = useState<GameItem | null>(null);
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [idFillerOpen, setIdFillerOpen] = useState(false);
+  const [validatorOpen, setValidatorOpen] = useState(false);
 
   // Multi-select state
   const [selectionMode, setSelectionMode] = useState(false);
@@ -202,6 +204,15 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
                 title="Preencher IDs no Documento"
               >
                 <FileSpreadsheet className="h-3.5 w-3.5" />
+              </button>
+            )}
+            {(auth.role === "super_admin" || auth.role === "admin") && (
+              <button
+                onClick={() => setValidatorOpen(true)}
+                className="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-muted transition-all"
+                title="Verificar Itens (ID, Nome e Imagem)"
+              >
+                <ClipboardCheck className="h-3.5 w-3.5" />
               </button>
             )}
             {auth.role === "super_admin" && (
@@ -393,6 +404,7 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
       />
 
       <IdFillerModal open={idFillerOpen} onClose={() => setIdFillerOpen(false)} realm={realm} />
+      <ItemValidatorModal open={validatorOpen} onClose={() => setValidatorOpen(false)} realm={realm} />
     </div>
   );
 };
