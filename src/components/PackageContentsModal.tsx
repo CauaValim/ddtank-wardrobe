@@ -1,11 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PackageOpen, X, Package } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { GameItem } from "@/types/item";
 import type { Realm } from "@/hooks/useItemStore";
+import { parsePackageDescription, normalizeItemName } from "@/lib/packageDescParser";
 
 interface PackageContentEntry {
-  content_item_id: number;
+  content_item_id: number | null;
+  name?: string;
   quantity: number;
   probability: string | null;
 }
@@ -62,9 +64,36 @@ export function PackageContentsModal({
     };
   }, [open, packageItem, realm]);
 
+  const nameIndex = useMemo(() => {
+    const map = new Map<string, GameItem>();
+    for (const i of items) {
+      const key = normalizeItemName(i.name ?? "");
+      if (key && !map.has(key)) map.set(key, i);
+    }
+    return map;
+  }, [items]);
+
+  const fromDescription = useMemo<PackageContentEntry[]>(() => {
+    if (!packageItem) return [];
+    return parsePackageDescription(packageItem.attributes?.desc as string | undefined).map(
+      (entry) => {
+        const match = nameIndex.get(normalizeItemName(entry.name));
+        return {
+          content_item_id: match ? Number(match.id) : null,
+          name: match?.name ?? entry.name,
+          quantity: entry.quantity,
+          probability: null,
+        };
+      },
+    );
+  }, [packageItem, nameIndex]);
+
   if (!open || !packageItem) return null;
 
   const itemMap = new Map(items.map((i) => [i.id, i]));
+
+  const displayContents: PackageContentEntry[] =
+    contents.length > 0 ? contents : fromDescription;
 
   return (
     <div
@@ -110,7 +139,7 @@ export function PackageContentsModal({
             <p className="text-sm text-muted-foreground text-center py-8">
               Carregando conteúdo...
             </p>
-          ) : contents.length === 0 ? (
+          ) : displayContents.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <Package className="h-10 w-10 text-muted-foreground/40 mb-3" />
               <p className="text-sm text-muted-foreground">
@@ -118,16 +147,22 @@ export function PackageContentsModal({
               </p>
             </div>
           ) : (
-            contents.map((entry) => {
-              const contentItem = itemMap.get(String(entry.content_item_id));
+            displayContents.map((entry, idx) => {
+              const contentItem =
+                entry.content_item_id != null
+                  ? itemMap.get(String(entry.content_item_id))
+                  : undefined;
               const imageUrl = contentItem
                 ? getItemImage(contentItem.id)
                 : undefined;
-              const name = contentItem?.name ?? `Item #${entry.content_item_id}`;
+              const name =
+                contentItem?.name ??
+                entry.name ??
+                `Item #${entry.content_item_id}`;
 
               return (
                 <div
-                  key={entry.content_item_id}
+                  key={`${entry.content_item_id ?? name}-${idx}`}
                   className="bg-secondary/50 p-3 rounded-xl border border-border flex items-center gap-3 hover:border-emerald-500/40 transition"
                 >
                   <div className="w-12 h-12 rounded-lg bg-card flex items-center justify-center shrink-0 overflow-hidden relative ring-1 ring-emerald-500/60 shadow-[0_0_12px_rgba(16,185,129,0.3)] dark:shadow-[0_0_15px_rgba(16,185,129,0.2)]">
@@ -150,9 +185,11 @@ export function PackageContentsModal({
                       {name}
                     </p>
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
-                      <span className="text-[9px] font-mono text-muted-foreground">
-                        #{entry.content_item_id}
-                      </span>
+                      {entry.content_item_id != null && (
+                        <span className="text-[9px] font-mono text-muted-foreground">
+                          #{entry.content_item_id}
+                        </span>
+                      )}
                       <span className="text-[9px] font-bold text-muted-foreground">
                         QTD: {entry.quantity}x
                       </span>
