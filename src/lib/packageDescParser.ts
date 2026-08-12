@@ -19,6 +19,7 @@ const INTRO_MARKERS = [
 
 const SEPARATORS = /[,，、;；\n]+/;
 const QTY_REGEX = /^(.*?)\s*(?:[x×*]\s*(\d{1,6})|\s(\d{1,6}))\s*$/i;
+const LEADING_QTY_REGEX = /^(\d{1,6})\s*[x×*]\s*(.+)$/i;
 
 function stripNoise(raw: string): string {
   return raw
@@ -52,11 +53,28 @@ export function parsePackageDescription(desc?: string | null): ParsedContentEntr
     const part = chunk.replace(/[.。]+$/, "").trim();
     if (!part || part.length < 2) continue;
 
-    const match = part.match(QTY_REGEX);
-    if (!match) continue;
+    let name: string;
+    let qty: number;
 
-    const name = match[1].replace(/^[-•·\s]+/, "").trim();
-    const qty = Number(match[2] ?? match[3]);
+    const leading = part.match(LEADING_QTY_REGEX);
+    const match = part.match(QTY_REGEX);
+    if (leading) {
+      qty = Number(leading[1]);
+      name = leading[2];
+    } else if (match) {
+      name = match[1];
+      qty = Number(match[2] ?? match[3]);
+    } else if (start !== -1) {
+      // após um marcador (ex.: "Inclui:") itens sem quantidade valem 1
+      name = part;
+      qty = 1;
+      // ignora frases longas (provável texto explicativo)
+      if (name.split(/\s+/).length > 8) continue;
+    } else {
+      continue;
+    }
+
+    name = name.replace(/^[-•·\s]+/, "").trim();
     if (!name || name.length < 2 || !Number.isFinite(qty) || qty <= 0) continue;
     // ignora trechos que são apenas números ou frases longas demais
     if (/^\d+$/.test(name) || name.length > 60) continue;

@@ -10,6 +10,7 @@ interface PackageContentEntry {
   name?: string;
   quantity: number;
   probability: string | null;
+  imageUrl?: string;
 }
 
 interface PackageContentsModalProps {
@@ -73,20 +74,44 @@ export function PackageContentsModal({
     return map;
   }, [items]);
 
+  // Busca aproximada: exata -> prefixo -> contém
+  const findItem = useMemo(() => {
+    const normalized = items.map((i) => ({
+      item: i,
+      key: normalizeItemName(i.name ?? ""),
+    }));
+    return (rawName: string): GameItem | undefined => {
+      const key = normalizeItemName(rawName);
+      if (!key) return undefined;
+      const exact = nameIndex.get(key);
+      if (exact) return exact;
+      let best: { item: GameItem; diff: number } | undefined;
+      for (const n of normalized) {
+        if (!n.key) continue;
+        if (n.key.startsWith(key) || key.startsWith(n.key) || n.key.includes(key)) {
+          const diff = Math.abs(n.key.length - key.length);
+          if (!best || diff < best.diff) best = { item: n.item, diff };
+        }
+      }
+      return best && best.diff <= 12 ? best.item : undefined;
+    };
+  }, [items, nameIndex]);
+
   const fromDescription = useMemo<PackageContentEntry[]>(() => {
     if (!packageItem) return [];
     return parsePackageDescription(packageItem.attributes?.desc as string | undefined).map(
       (entry) => {
-        const match = nameIndex.get(normalizeItemName(entry.name));
+        const match = findItem(entry.name);
         return {
           content_item_id: match ? Number(match.id) : null,
           name: match?.name ?? entry.name,
           quantity: entry.quantity,
           probability: null,
+          imageUrl: match ? getItemImage(match.id) || match.imageUrl : undefined,
         };
       },
     );
-  }, [packageItem, nameIndex]);
+  }, [packageItem, findItem, getItemImage]);
 
   if (!open || !packageItem) return null;
 
@@ -152,9 +177,10 @@ export function PackageContentsModal({
                 entry.content_item_id != null
                   ? itemMap.get(String(entry.content_item_id))
                   : undefined;
-              const imageUrl = contentItem
-                ? getItemImage(contentItem.id)
-                : undefined;
+              const imageUrl =
+                (contentItem
+                  ? getItemImage(contentItem.id) || contentItem.imageUrl
+                  : undefined) || entry.imageUrl;
               const name =
                 contentItem?.name ??
                 entry.name ??
