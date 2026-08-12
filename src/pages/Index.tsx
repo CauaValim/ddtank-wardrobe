@@ -6,6 +6,7 @@ import { useItemStore } from "@/hooks/useItemStore";
 import { FileImporter } from "@/components/FileImporter";
 import { ItemCard } from "@/components/ItemCard";
 import { ItemDetailModal } from "@/components/ItemDetailModal";
+import { PackageContentsModal } from "@/components/PackageContentsModal";
 import { BulkTypeMover } from "@/components/BulkTypeMover";
 import { IdFillerModal } from "@/components/IdFillerModal";
 import { ItemValidatorModal } from "@/components/ItemValidatorModal";
