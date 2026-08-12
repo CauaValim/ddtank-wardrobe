@@ -402,8 +402,9 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
             </p>
           </div>
         ) : (
+          <>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-            {filteredItems.map((item) => (
+            {visibleItems.map((item) => (
               <ItemCard
                 key={item.id}
                 item={item}
@@ -415,6 +416,12 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
               />
             ))}
           </div>
+          {visibleCount < filteredItems.length && (
+            <div ref={sentinelRef} className="py-8 text-center text-xs text-muted-foreground">
+              Carregando mais itens...
+            </div>
+          )}
+          </>
         )}
       </main>
 
