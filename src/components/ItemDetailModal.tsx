@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Package, Copy, Check, PackageOpen } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { supabase } from "@/integrations/supabase/client";
 import { getTypeName } from "@/lib/itemTypes";
 import type { GameItem } from "@/types/item";
 import { ILUSTRACOES_ATTRIBUTES_BR, ILUSTRACOES_ATTRIBUTES_TR } from "@/data/ilustracoesAttributes";
@@ -25,6 +26,31 @@ export function ItemDetailModal({
   onViewPackageContents,
 }: ItemDetailModalProps) {
   const [copied, setCopied] = useState(false);
+  const [hasContents, setHasContents] = useState(false);
+
+  useEffect(() => {
+    if (!item || !open) {
+      setHasContents(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { count, error } = await supabase
+        .from("package_contents")
+        .select("*", { count: "exact", head: true })
+        .eq("realm", realm)
+        .eq("package_id", Number(item.id));
+      if (cancelled) return;
+      if (!error && count && count > 0) {
+        setHasContents(true);
+      } else {
+        setHasContents(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [item, open, realm]);
 
   if (!item) return null;
 
@@ -35,8 +61,6 @@ export function ItemDetailModal({
   };
 
   const typeName = getTypeName(item.attributes.type != null ? Number(item.attributes.type) : null);
-  const typeNumber = item.attributes.type != null ? Number(item.attributes.type) : null;
-  const isPackage = typeNumber === 200 || typeNumber === 18 || typeNumber === 66;
   const ilustracaoAttrs = (realm === "turco" ? ILUSTRACOES_ATTRIBUTES_TR : ILUSTRACOES_ATTRIBUTES_BR)[Number(item.id)];
 
   return (
