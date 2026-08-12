@@ -69,10 +69,15 @@ export function PackageContentsModal({
     const map = new Map<string, GameItem>();
     for (const i of items) {
       const key = normalizeItemName(i.name ?? "");
-      if (key && !map.has(key)) map.set(key, i);
+      if (!key) continue;
+      const current = map.get(key);
+      // Em nomes duplicados, prioriza o registro que realmente possui imagem.
+      if (!current || (!getItemImage(current.id) && getItemImage(i.id))) {
+        map.set(key, i);
+      }
     }
     return map;
-  }, [items]);
+  }, [items, getItemImage]);
 
   // Busca aproximada: exata -> prefixo -> contém
   const findItem = useMemo(() => {
@@ -107,7 +112,7 @@ export function PackageContentsModal({
           name: match?.name ?? entry.name,
           quantity: entry.quantity,
           probability: null,
-          imageUrl: match ? getItemImage(match.id) || match.imageUrl : undefined,
+          imageUrl: match ? getItemImage(String(match.id)) : undefined,
         };
       },
     );
@@ -115,7 +120,7 @@ export function PackageContentsModal({
 
   if (!open || !packageItem) return null;
 
-  const itemMap = new Map(items.map((i) => [i.id, i]));
+  const itemMap = new Map(items.map((i) => [String(i.id), i]));
 
   const displayContents: PackageContentEntry[] =
     contents.length > 0 ? contents : fromDescription;
@@ -177,10 +182,13 @@ export function PackageContentsModal({
                 entry.content_item_id != null
                   ? itemMap.get(String(entry.content_item_id))
                   : undefined;
-              const imageUrl =
-                (contentItem
-                  ? getItemImage(contentItem.id) || contentItem.imageUrl
-                  : undefined) || entry.imageUrl;
+               // Usa exatamente o mesmo acesso do grid principal.
+               const imageUrl =
+                 (entry.content_item_id != null
+                   ? getItemImage(String(entry.content_item_id))
+                   : "") ||
+                 (contentItem ? getItemImage(String(contentItem.id)) : "") ||
+                 entry.imageUrl;
               const name =
                 contentItem?.name ??
                 entry.name ??
