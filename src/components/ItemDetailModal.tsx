@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { getTypeName } from "@/lib/itemTypes";
 import type { GameItem } from "@/types/item";
 import { ILUSTRACOES_ATTRIBUTES_BR, ILUSTRACOES_ATTRIBUTES_TR } from "@/data/ilustracoesAttributes";
+import { hasParsableContents } from "@/lib/packageDescParser";
 
 interface ItemDetailModalProps {
   item: GameItem | null;
@@ -64,6 +65,7 @@ export function ItemDetailModal({
 
   const typeName = getTypeName(item.attributes.type != null ? Number(item.attributes.type) : null);
   const ilustracaoAttrs = (realm === "turco" ? ILUSTRACOES_ATTRIBUTES_TR : ILUSTRACOES_ATTRIBUTES_BR)[Number(item.id)];
+  const showContentsButton = hasContents || hasParsableContents(item.attributes.desc);
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
