@@ -18,6 +18,19 @@ const INTRO_MARKERS = [
 ];
 
 const SEPARATORS = /[,，、;；\n]+/;
+const LEADING_MARKER_REGEX =
+  /^\s*(?:inclui|incluso|inclusos|contem|contém|cont[ée]m|obter|obtem|obtém|obtenha|receber|recebe|ganhar|ganha|ganhará|recompensa|recompensas|pacote com|itens?)\s*[:：\-–]?\s+/i;
+
+/** Remove marcadores como "Contém", "Inclui" do início de um nome. */
+export function stripLeadingMarker(name: string): string {
+  let out = name.trim();
+  for (let i = 0; i < 3; i++) {
+    const next = out.replace(LEADING_MARKER_REGEX, "").trim();
+    if (next === out) break;
+    out = next;
+  }
+  return out || name.trim();
+}
 const QTY_REGEX = /^(.*?)\s*(?:[x×*]\s*(\d{1,6})|\s(\d{1,6}))\s*$/i;
 const LEADING_QTY_REGEX = /^(\d{1,6})\s*[x×*]\s*(.+)$/i;
 
@@ -75,6 +88,7 @@ export function parsePackageDescription(desc?: string | null): ParsedContentEntr
     }
 
     name = name.replace(/^[-•·\s]+/, "").trim();
+    name = stripLeadingMarker(name);
     if (!name || name.length < 2 || !Number.isFinite(qty) || qty <= 0) continue;
     // ignora trechos que são apenas números ou frases longas demais
     if (/^\d+$/.test(name) || name.length > 60) continue;
@@ -96,4 +110,25 @@ export function normalizeItemName(name: string): string {
 
 export function hasParsableContents(desc?: string | null): boolean {
   return parsePackageDescription(desc).length > 0;
+}
+
+/** Similaridade 0..1 baseada em distância de Levenshtein. */
+export function nameSimilarity(a: string, b: string): number {
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  const m = a.length;
+  const n = b.length;
+  let prev = Array.from({ length: n + 1 }, (_, i) => i);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) {
+      cur[j] = Math.min(
+        prev[j] + 1,
+        cur[j - 1] + 1,
+        prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+    }
+    prev = cur;
+  }
+  return 1 - prev[n] / Math.max(m, n);
 }
