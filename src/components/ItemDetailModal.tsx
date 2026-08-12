@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Package, Copy, Check } from "lucide-react";
+import { Package, Copy, Check, PackageOpen } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { getTypeName } from "@/lib/itemTypes";
 import type { GameItem } from "@/types/item";
@@ -12,6 +12,7 @@ interface ItemDetailModalProps {
   onClose: () => void;
   canViewId?: boolean;
   realm?: "br" | "turco";
+  onViewPackageContents?: (item: GameItem) => void;
 }
 
 export function ItemDetailModal({
