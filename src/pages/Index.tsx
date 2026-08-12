@@ -43,6 +43,7 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
   } = useItemStore(realm);
 
   const [selectedItem, setSelectedItem] = useState<GameItem | null>(null);
+  const [selectedFuguraItem, setSelectedFuguraItem] = useState<GameItem | null>(null);
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [idFillerOpen, setIdFillerOpen] = useState(false);
   const [validatorOpen, setValidatorOpen] = useState(false);
