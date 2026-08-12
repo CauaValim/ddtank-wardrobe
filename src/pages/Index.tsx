@@ -6,6 +6,7 @@ import { useItemStore } from "@/hooks/useItemStore";
 import { FileImporter } from "@/components/FileImporter";
 import { ItemCard } from "@/components/ItemCard";
 import { ItemDetailModal } from "@/components/ItemDetailModal";
+import { FugurasDetailModal } from "@/components/FugurasDetailModal";
 import { PackageContentsModal } from "@/components/PackageContentsModal";
 import { BulkTypeMover } from "@/components/BulkTypeMover";
 import { IdFillerModal } from "@/components/IdFillerModal";
@@ -42,6 +43,7 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
   } = useItemStore(realm);
 
   const [selectedItem, setSelectedItem] = useState<GameItem | null>(null);
+  const [selectedFuguraItem, setSelectedFuguraItem] = useState<GameItem | null>(null);
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [idFillerOpen, setIdFillerOpen] = useState(false);
   const [validatorOpen, setValidatorOpen] = useState(false);
@@ -409,7 +411,13 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
                 key={item.id}
                 item={item}
                 imageUrl={getItemImage(item.id)}
-                onClick={setSelectedItem}
+                onClick={(clicked) => {
+                  if (showFuguras) {
+                    setSelectedFuguraItem(clicked);
+                  } else {
+                    setSelectedItem(clicked);
+                  }
+                }}
                 selectionMode={auth.canSelect && selectionMode}
                 isSelected={selectedIds.has(item.id)}
                 onToggleSelect={toggleSelect}
@@ -444,6 +452,15 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
           setSelectedItem(null);
           setPackageItem(item);
         }}
+      />
+
+      {/* Fuguras Detail Modal */}
+      <FugurasDetailModal
+        item={selectedFuguraItem}
+        imageUrl={selectedFuguraItem ? getItemImage(selectedFuguraItem.id) : undefined}
+        open={!!selectedFuguraItem}
+        onClose={() => setSelectedFuguraItem(null)}
+        canViewId={auth.canViewId}
       />
 
       {/* Package Contents Modal */}
