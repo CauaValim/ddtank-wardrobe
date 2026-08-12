@@ -28,8 +28,10 @@ export function ItemDetailModal({
   const [copied, setCopied] = useState(false);
   const [hasContents, setHasContents] = useState(false);
 
+  const itemId = item?.id;
+
   useEffect(() => {
-    if (!item || !open) {
+    if (!itemId || !open) {
       setHasContents(false);
       return;
     }
@@ -39,7 +41,7 @@ export function ItemDetailModal({
         .from("package_contents")
         .select("*", { count: "exact", head: true })
         .eq("realm", realm)
-        .eq("package_id", Number(item.id));
+        .eq("package_id", Number(itemId));
       if (cancelled) return;
       if (!error && count && count > 0) {
         setHasContents(true);
@@ -50,7 +52,7 @@ export function ItemDetailModal({
     return () => {
       cancelled = true;
     };
-  }, [item, open, realm]);
+  }, [itemId, open, realm]);
 
   if (!item) return null;
 
