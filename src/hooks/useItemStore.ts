@@ -550,6 +550,7 @@ export function useItemStore(realm: Realm = "br") {
 
   return {
     items: filteredItems,
+    allItems: items,
     totalCount: items.length,
     searchQuery,
     setSearchQuery,

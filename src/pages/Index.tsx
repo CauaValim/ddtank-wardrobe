@@ -23,6 +23,7 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
   const navigate = useNavigate();
   const {
     items,
+    allItems,
     totalCount,
     searchQuery,
     setSearchQuery,
@@ -415,7 +416,7 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
         open={!!packageItem}
         onClose={() => setPackageItem(null)}
         realm={realm}
-        items={items}
+        items={allItems}
         getItemImage={getItemImage}
       />
 
