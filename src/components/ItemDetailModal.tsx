@@ -35,6 +35,8 @@ export function ItemDetailModal({
   };
 
   const typeName = getTypeName(item.attributes.type != null ? Number(item.attributes.type) : null);
+  const typeNumber = item.attributes.type != null ? Number(item.attributes.type) : null;
+  const isPackage = typeNumber === 200 || typeNumber === 18 || typeNumber === 66;
   const ilustracaoAttrs = (realm === "turco" ? ILUSTRACOES_ATTRIBUTES_TR : ILUSTRACOES_ATTRIBUTES_BR)[Number(item.id)];
 
   return (
