@@ -1,6 +1,7 @@
-import { useState } from "react";
-import { Package, Copy, Check } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Package, Copy, Check, PackageOpen } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { supabase } from "@/integrations/supabase/client";
 import { getTypeName } from "@/lib/itemTypes";
 import type { GameItem } from "@/types/item";
 import { ILUSTRACOES_ATTRIBUTES_BR, ILUSTRACOES_ATTRIBUTES_TR } from "@/data/ilustracoesAttributes";
@@ -12,6 +13,7 @@ interface ItemDetailModalProps {
   onClose: () => void;
   canViewId?: boolean;
   realm?: "br" | "turco";
+  onViewPackageContents?: (item: GameItem) => void;
 }
 
 export function ItemDetailModal({
@@ -21,8 +23,34 @@ export function ItemDetailModal({
   onClose,
   canViewId = true,
   realm = "br",
+  onViewPackageContents,
 }: ItemDetailModalProps) {
   const [copied, setCopied] = useState(false);
+  const [hasContents, setHasContents] = useState(false);
+
+  useEffect(() => {
+    if (!item || !open) {
+      setHasContents(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const { count, error } = await supabase
+        .from("package_contents")
+        .select("*", { count: "exact", head: true })
+        .eq("realm", realm)
+        .eq("package_id", Number(item.id));
+      if (cancelled) return;
+      if (!error && count && count > 0) {
+        setHasContents(true);
+      } else {
+        setHasContents(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [item, open, realm]);
 
   if (!item) return null;
 
@@ -61,6 +89,15 @@ export function ItemDetailModal({
                   {copied ? "Copiado" : "Copiar"}
                 </button>
               </div>
+            )}
+            {hasContents && onViewPackageContents && (
+              <button
+                onClick={() => onViewPackageContents(item)}
+                className="mt-2 flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors"
+              >
+                <PackageOpen className="h-3.5 w-3.5" />
+                Ver Conteúdo
+              </button>
             )}
           </div>
 

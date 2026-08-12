@@ -6,6 +6,7 @@ import { useItemStore } from "@/hooks/useItemStore";
 import { FileImporter } from "@/components/FileImporter";
 import { ItemCard } from "@/components/ItemCard";
 import { ItemDetailModal } from "@/components/ItemDetailModal";
+import { PackageContentsModal } from "@/components/PackageContentsModal";
 import { BulkTypeMover } from "@/components/BulkTypeMover";
 import { IdFillerModal } from "@/components/IdFillerModal";
 import { ItemValidatorModal } from "@/components/ItemValidatorModal";
@@ -43,6 +44,7 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [idFillerOpen, setIdFillerOpen] = useState(false);
   const [validatorOpen, setValidatorOpen] = useState(false);
+  const [packageItem, setPackageItem] = useState<GameItem | null>(null);
 
   // Multi-select state
   const [selectionMode, setSelectionMode] = useState(false);
@@ -401,6 +403,20 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
         onClose={() => setSelectedItem(null)}
         canViewId={auth.canViewId}
         realm={realm}
+        onViewPackageContents={(item) => {
+          setSelectedItem(null);
+          setPackageItem(item);
+        }}
+      />
+
+      {/* Package Contents Modal */}
+      <PackageContentsModal
+        packageItem={packageItem}
+        open={!!packageItem}
+        onClose={() => setPackageItem(null)}
+        realm={realm}
+        items={items}
+        getItemImage={getItemImage}
       />
 
       <IdFillerModal open={idFillerOpen} onClose={() => setIdFillerOpen(false)} realm={realm} />

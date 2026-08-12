@@ -377,6 +377,39 @@ export type Database = {
         }
         Relationships: []
       }
+      package_contents: {
+        Row: {
+          content_item_id: number
+          created_at: string
+          id: string
+          package_id: number
+          probability: string | null
+          quantity: number
+          realm: string
+          updated_at: string
+        }
+        Insert: {
+          content_item_id: number
+          created_at?: string
+          id?: string
+          package_id: number
+          probability?: string | null
+          quantity?: number
+          realm?: string
+          updated_at?: string
+        }
+        Update: {
+          content_item_id?: number
+          created_at?: string
+          id?: string
+          package_id?: number
+          probability?: string | null
+          quantity?: number
+          realm?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           id: string
