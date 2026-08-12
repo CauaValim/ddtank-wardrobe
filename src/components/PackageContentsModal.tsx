@@ -105,7 +105,7 @@ export function PackageContentsModal({
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-2 relative">
+        <div className="flex-1 overflow-y-auto pr-2 space-y-2 relative">
           {loading ? (
             <p className="text-sm text-muted-foreground text-center py-8">
               Carregando conteúdo...
