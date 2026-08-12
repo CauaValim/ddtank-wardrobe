@@ -22,6 +22,7 @@ export function ItemDetailModal({
   onClose,
   canViewId = true,
   realm = "br",
+  onViewPackageContents,
 }: ItemDetailModalProps) {
   const [copied, setCopied] = useState(false);
 
