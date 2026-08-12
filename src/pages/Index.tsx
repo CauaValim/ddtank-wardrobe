@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback, useRef } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { Search, Package, Gamepad2, MousePointerClick, CheckSquare, LogOut, Users, FileSpreadsheet, Sparkles, Shapes, ClipboardCheck } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useNavigate } from "react-router-dom";
@@ -75,6 +75,35 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
   }, [items, selectedType, typeGroups]);
 
   const lastSelectedIndex = useRef<number | null>(null);
+
+  // Renderização progressiva: mostra os primeiros cards e vai carregando ao rolar
+  const PAGE = 60;
+  const [visibleCount, setVisibleCount] = useState(PAGE);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    setVisibleCount(PAGE);
+  }, [searchQuery, selectedType, showNovidades, showFuguras, realm]);
+
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) {
+          setVisibleCount((c) => c + PAGE);
+        }
+      },
+      { rootMargin: "600px" }
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [filteredItems.length, visibleCount]);
+
+  const visibleItems = useMemo(
+    () => filteredItems.slice(0, visibleCount),
+    [filteredItems, visibleCount]
+  );
 
   const toggleSelect = useCallback((item: GameItem, shiftKey?: boolean) => {
     setSelectedIds((prev) => {
