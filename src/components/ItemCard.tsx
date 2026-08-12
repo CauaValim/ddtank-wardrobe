@@ -56,6 +56,7 @@ export const ItemCard = memo(function ItemCard({
             alt={item.name}
             className="h-full w-full object-contain transition-transform group-hover:scale-110"
             loading="lazy"
+            decoding="async"
           />
         ) : (
           <Package className="h-10 w-10 text-muted-foreground/40" />
