@@ -64,6 +64,30 @@ export function PackageContentsModal({
     };
   }, [open, packageItem, realm]);
 
+  const nameIndex = useMemo(() => {
+    const map = new Map<string, GameItem>();
+    for (const i of items) {
+      const key = normalizeItemName(i.name ?? "");
+      if (key && !map.has(key)) map.set(key, i);
+    }
+    return map;
+  }, [items]);
+
+  const fromDescription = useMemo<PackageContentEntry[]>(() => {
+    if (!packageItem) return [];
+    return parsePackageDescription(packageItem.attributes?.desc as string | undefined).map(
+      (entry) => {
+        const match = nameIndex.get(normalizeItemName(entry.name));
+        return {
+          content_item_id: match ? Number(match.id) : null,
+          name: match?.name ?? entry.name,
+          quantity: entry.quantity,
+          probability: null,
+        };
+      },
+    );
+  }, [packageItem, nameIndex]);
+
   if (!open || !packageItem) return null;
 
   const itemMap = new Map(items.map((i) => [i.id, i]));
