@@ -1,11 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PackageOpen, X, Package } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { GameItem } from "@/types/item";
 import type { Realm } from "@/hooks/useItemStore";
+import { parsePackageDescription, normalizeItemName } from "@/lib/packageDescParser";
 
 interface PackageContentEntry {
-  content_item_id: number;
+  content_item_id: number | null;
+  name?: string;
   quantity: number;
   probability: string | null;
 }
@@ -65,6 +67,9 @@ export function PackageContentsModal({
   if (!open || !packageItem) return null;
 
   const itemMap = new Map(items.map((i) => [i.id, i]));
+
+  const displayContents: PackageContentEntry[] =
+    contents.length > 0 ? contents : fromDescription;
 
   return (
     <div
