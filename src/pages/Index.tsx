@@ -403,6 +403,20 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
         onClose={() => setSelectedItem(null)}
         canViewId={auth.canViewId}
         realm={realm}
+        onViewPackageContents={(item) => {
+          setSelectedItem(null);
+          setPackageItem(item);
+        }}
+      />
+
+      {/* Package Contents Modal */}
+      <PackageContentsModal
+        packageItem={packageItem}
+        open={!!packageItem}
+        onClose={() => setPackageItem(null)}
+        realm={realm}
+        items={items}
+        getItemImage={getItemImage}
       />
 
       <IdFillerModal open={idFillerOpen} onClose={() => setIdFillerOpen(false)} realm={realm} />
