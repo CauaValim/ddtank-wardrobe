@@ -112,7 +112,73 @@ function parseRows(rows: any[]): { items: GameItem[]; images: Map<string, string
 }
 
 const realmCache: Partial<Record<Realm, RealmCache>> = {};
-const inflight: Partial<Record<Realm, Promise<RealmCache> | null>> = {};
+
+type Snapshot = { items: GameItem[]; images: Map<string, string> };
+type Loader = {
+  promise: Promise<RealmCache>;
+  subscribers: Set<(s: Snapshot) => void>;
+  latest: Snapshot;
+};
+const loaders: Partial<Record<Realm, Loader | null>> = {};
+const PAGE_CONCURRENCY = 3;
+
+function startLoad(realm: Realm, tableName: "items"): Loader {
+  const loader: Loader = {
+    promise: null as unknown as Promise<RealmCache>,
+    subscribers: new Set(),
+    latest: { items: [], images: new Map() },
+  };
+
+  loader.promise = (async () => {
+    const items: GameItem[] = [];
+    const images = new Map<string, string>();
+    let from = 0;
+    let hasMore = true;
+
+    while (hasMore) {
+      // Busca várias páginas em paralelo para reduzir a latência total
+      const ranges = Array.from({ length: PAGE_CONCURRENCY }, (_, i) => from + i * PAGE_SIZE);
+      const results = await Promise.all(
+        ranges.map((start) =>
+          supabase
+            .from(tableName)
+            .select("*")
+            .order("id", { ascending: true })
+            .range(start, start + PAGE_SIZE - 1)
+        )
+      );
+
+      hasMore = true;
+      for (const { data, error } of results) {
+        if (error || !data) {
+          hasMore = false;
+          break;
+        }
+        const parsed = parseRows(data);
+        items.push(...parsed.items);
+        parsed.images.forEach((v, k) => images.set(k, v));
+        if (data.length < PAGE_SIZE) {
+          hasMore = false;
+          break;
+        }
+      }
+      from += PAGE_SIZE * PAGE_CONCURRENCY;
+
+      // Emite resultado parcial: a UI já pode renderizar
+      const snapshot: Snapshot = { items: items.slice(), images: new Map(images) };
+      loader.latest = snapshot;
+      loader.subscribers.forEach((cb) => cb(snapshot));
+    }
+
+    const entry: RealmCache = { items, images, fetchedAt: Date.now() };
+    realmCache[realm] = entry;
+    return entry;
+  })().finally(() => {
+    loaders[realm] = null;
+  });
+
+  return loader;
+}
 
 function invalidateRealmCache(realm: Realm) {
   delete realmCache[realm];
@@ -139,85 +205,46 @@ export function useItemStore(realm: Realm = "br") {
     setShowFuguras(false);
   }, [realm]);
 
-  // Load items from Supabase on mount
-  const fetchItems = useCallback(async () => {
-    // Serve from cache if fresh
+  // Carregamento progressivo: renderiza os primeiros itens assim que chegam
+  useEffect(() => {
+    let cancelled = false;
+
     const cached = realmCache[realm];
     if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) {
       setItems(cached.items);
-      setImages(new Map(cached.images));
+      setImages(cached.images);
       setLoading(false);
       return;
     }
 
-    // Deduplicate concurrent fetches for the same realm
-    if (!inflight[realm]) {
-      inflight[realm] = (async () => {
-        let allRows: any[] = [];
-        let from = 0;
-        const pageSize = 1000;
-        let hasMore = true;
-
-        while (hasMore) {
-          const { data, error } = await supabase
-            .from(tableName)
-            .select("*")
-            .order("id", { ascending: true })
-            .range(from, from + pageSize - 1);
-          if (error || !data) break;
-          allRows = allRows.concat(data);
-          hasMore = data.length === pageSize;
-          from += pageSize;
-        }
-
-        const parsed: GameItem[] = [];
-        const loadedImages = new Map<string, string>();
-        allRows.forEach((row) => {
-          const { id, name, image_url, created_at, updated_at, ...rest } = row;
-          const attributes: Record<string, string> = {};
-          Object.entries(rest).forEach(([key, val]) => {
-            if (val != null && (key === "desc" || String(val).length < 200)) {
-              attributes[key] = String(val);
-            }
-          });
-          parsed.push({
-            id: String(id),
-            name: name ?? `Item #${id}`,
-            imageUrl: image_url ?? undefined,
-            attributes,
-          });
-          if (image_url) {
-            loadedImages.set(String(id), image_url);
-          }
-        });
-
-        const entry: RealmCache = {
-          items: parsed,
-          images: loadedImages,
-          fetchedAt: Date.now(),
-        };
-        realmCache[realm] = entry;
-        return entry;
-      })().finally(() => {
-        inflight[realm] = null;
-      });
-    }
-
     setLoading(true);
-    try {
-      const entry = await inflight[realm]!;
-      setItems(entry.items);
-      setImages(new Map(entry.images));
-    } catch (err) {
-      console.warn("Falha ao carregar itens:", err);
-    } finally {
-      setLoading(false);
-    }
-  }, [tableName, realm]);
+    const loader = loaders[realm] ?? (loaders[realm] = startLoad(realm, tableName));
 
-  useEffect(() => {
-    fetchItems();
-  }, [fetchItems]);
+    const onSnapshot = (s: Snapshot) => {
+      if (cancelled) return;
+      setItems(s.items);
+      setImages(s.images);
+      setLoading(false);
+    };
+    loader.subscribers.add(onSnapshot);
+    if (loader.latest.items.length > 0) onSnapshot(loader.latest);
+
+    loader.promise
+      .then((entry) => {
+        if (cancelled) return;
+        setItems(entry.items);
+        setImages(entry.images);
+      })
+      .catch((err) => console.warn("Falha ao carregar itens:", err))
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+      loader.subscribers.delete(onSnapshot);
+    };
+  }, [tableName, realm]);
 
   // Cross-realm search: when in TR, also look up items by name in BR table
   // and include the matching IDs in the TR results.
