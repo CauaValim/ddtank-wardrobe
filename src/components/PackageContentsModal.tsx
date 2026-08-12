@@ -3,7 +3,12 @@ import { PackageOpen, X, Package } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import type { GameItem } from "@/types/item";
 import type { Realm } from "@/hooks/useItemStore";
-import { parsePackageDescription, normalizeItemName } from "@/lib/packageDescParser";
+import {
+  parsePackageDescription,
+  normalizeItemName,
+  stripLeadingMarker,
+  nameSimilarity,
+} from "@/lib/packageDescParser";
 
 interface PackageContentEntry {
   content_item_id: number | null;
@@ -86,7 +91,7 @@ export function PackageContentsModal({
       key: normalizeItemName(i.name ?? ""),
     }));
     return (rawName: string): GameItem | undefined => {
-      const key = normalizeItemName(rawName);
+      const key = normalizeItemName(stripLeadingMarker(rawName));
       if (!key) return undefined;
       const exact = nameIndex.get(key);
       if (exact) return exact;
@@ -98,7 +103,17 @@ export function PackageContentsModal({
           if (!best || diff < best.diff) best = { item: n.item, diff };
         }
       }
-      return best && best.diff <= 12 ? best.item : undefined;
+      if (best && best.diff <= 12) return best.item;
+      // Fallback: melhor similaridade >= 80%
+      let fuzzy: { item: GameItem; score: number } | undefined;
+      for (const n of normalized) {
+        if (!n.key) continue;
+        const score = nameSimilarity(key, n.key);
+        if (score >= 0.8 && (!fuzzy || score > fuzzy.score)) {
+          fuzzy = { item: n.item, score };
+        }
+      }
+      return fuzzy?.item;
     };
   }, [items, nameIndex]);
 
