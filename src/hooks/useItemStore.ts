@@ -87,6 +87,30 @@ type RealmCache = {
   fetchedAt: number;
 };
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const PAGE_SIZE = 1000;
+
+function parseRows(rows: any[]): { items: GameItem[]; images: Map<string, string> } {
+  const parsed: GameItem[] = [];
+  const loadedImages = new Map<string, string>();
+  rows.forEach((row) => {
+    const { id, name, image_url, created_at, updated_at, ...rest } = row;
+    const attributes: Record<string, string> = {};
+    Object.entries(rest).forEach(([key, val]) => {
+      if (val != null && (key === "desc" || String(val).length < 200)) {
+        attributes[key] = String(val);
+      }
+    });
+    parsed.push({
+      id: String(id),
+      name: name ?? `Item #${id}`,
+      imageUrl: image_url ?? undefined,
+      attributes,
+    });
+    if (image_url) loadedImages.set(String(id), image_url);
+  });
+  return { items: parsed, images: loadedImages };
+}
+
 const realmCache: Partial<Record<Realm, RealmCache>> = {};
 const inflight: Partial<Record<Realm, Promise<RealmCache> | null>> = {};
 
