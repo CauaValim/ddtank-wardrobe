@@ -546,7 +546,17 @@ export function useItemStore(realm: Realm = "br") {
     return result;
   }, [items, searchQuery, crossRealmIds, showNovidades, novidadesIds, showFuguras, fugurasIds]);
 
-  const getItemImage = (id: string) => images.get(id) ?? "";
+  // Fonte única de imagens para cards, detalhes e conteúdo de pacotes.
+  // O fallback no próprio item cobre URLs recém-carregadas da tabela antes
+  // de o mapa local ser atualizado.
+  const getItemImage = useCallback((id: string) => {
+    const normalizedId = String(id);
+    return (
+      images.get(normalizedId) ??
+      items.find((item) => item.id === normalizedId)?.imageUrl ??
+      ""
+    );
+  }, [images, items]);
 
   return {
     items: filteredItems,
