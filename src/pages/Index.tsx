@@ -411,7 +411,13 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
                 key={item.id}
                 item={item}
                 imageUrl={getItemImage(item.id)}
-                onClick={setSelectedItem}
+                onClick={(clicked) => {
+                  if (showFuguras) {
+                    setSelectedFuguraItem(clicked);
+                  } else {
+                    setSelectedItem(clicked);
+                  }
+                }}
                 selectionMode={auth.canSelect && selectionMode}
                 isSelected={selectedIds.has(item.id)}
                 onToggleSelect={toggleSelect}
