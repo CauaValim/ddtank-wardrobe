@@ -86,6 +86,7 @@ type RealmCache = {
   images: Map<string, string>;
   fetchedAt: number;
 };
+const NOVIDADES_WINDOW_MS = 60 * 24 * 60 * 60 * 1000; // 2 meses
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const PAGE_SIZE = 1000;
 
@@ -104,6 +105,7 @@ function parseRows(rows: any[]): { items: GameItem[]; images: Map<string, string
       id: String(id),
       name: name ?? `Item #${id}`,
       imageUrl: image_url ?? undefined,
+      createdAt: created_at ?? undefined,
       attributes,
     });
     if (image_url) loadedImages.set(String(id), image_url);
@@ -193,7 +195,17 @@ export function useItemStore(realm: Realm = "br") {
   const [loading, setLoading] = useState(true);
   const [crossRealmIds, setCrossRealmIds] = useState<Set<string>>(new Set());
   const novidadesKey = `novidades-${realm}`;
-  const [novidadesIds, setNovidadesIds] = useState<Set<string>>(() => loadNovidades(realm));
+  const [manualNovidades, setNovidadesIds] = useState<Set<string>>(() => loadNovidades(realm));
+  // Novidades: itens adicionados nos últimos 2 meses (pelo botão do jogo ou planilha)
+  const novidadesIds = useMemo(() => {
+    const cutoff = Date.now() - NOVIDADES_WINDOW_MS;
+    const set = new Set<string>();
+    items.forEach((i) => {
+      if (!i.createdAt || new Date(i.createdAt).getTime() >= cutoff) set.add(i.id);
+    });
+    return set;
+  }, [items]);
+  void manualNovidades;
   const [showNovidades, setShowNovidades] = useState(false);
   const [fugurasIds, setFugurasIds] = useState<Set<string>>(() => loadFuguras(realm));
   const [showFuguras, setShowFuguras] = useState(false);

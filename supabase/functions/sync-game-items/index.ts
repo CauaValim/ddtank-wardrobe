@@ -2,7 +2,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 
 const SOURCE = "http://quest132-ddt.337.com/TemplateAllList.xml";
-const RES_HOSTS = ["http://res234.ddt.tr.elexddt.com"];
+const RES_HOSTS = ["http://ddt-a.akamaihd.net", "http://res234.ddt.tr.elexddt.com"];
 const MAX_IMAGES = 200;
 
 const json = (b: unknown, status = 200) =>
@@ -36,18 +36,20 @@ function parseItems(xml: string) {
 const num = (v?: string) => (v == null || v === "" || isNaN(Number(v)) ? null : Number(v));
 const bool = (v?: string) => (v == null ? null : v === "true" || v === "1");
 
-const FOLDERS: Record<number, string> = {
-  1: "head", 2: "glass", 3: "hair", 4: "eff", 5: "cloth", 6: "face", 7: "arm", 8: "armlet",
-  9: "ring", 13: "suits", 14: "necklace", 15: "wing", 16: "chatBall", 17: "offhand",
-};
+const SEXED: Record<number, string> = { 1: "head", 2: "glass", 3: "hair", 4: "eff", 5: "cloth", 6: "face", 13: "suits" };
+const UNSEXED: Record<number, string> = { 8: "armlet", 9: "ring", 14: "necklace", 15: "wing", 17: "offhand" };
+const PET: Record<number, string> = { 50: "arm", 51: "hat", 52: "cloth" };
 
 function imageCandidates(type: number, sex: number, pic: string): string[] {
   const paths: string[] = [];
-  const folder = FOLDERS[type];
-  if (folder) {
-    const s = sex === 2 ? "f" : "m";
-    paths.push(`image/equip/${s}/${folder}/${pic}/icon_1.png`, `image/equip/${folder}/${pic}/icon.png`, `image/equip/${s}/${folder}/${pic}/icon.png`);
+  if (SEXED[type]) {
+    const order = sex === 2 ? ["f", "m"] : ["m", "f"];
+    order.forEach((s) => paths.push(`image/equip/${s}/${SEXED[type]}/${pic}/icon_1.png`));
   }
+  if (UNSEXED[type]) paths.push(`image/equip/${UNSEXED[type]}/${pic}/icon.png`);
+  if (type === 7 || type === 27) paths.push(`image/arm/${pic}/00.png`);
+  if (PET[type]) paths.push(`image/petequip/${PET[type]}/${pic}/icon.png`);
+  if (type === 16) paths.push(`image/specialprop/chatBall/${pic.toLowerCase()}/icon.png`);
   paths.push(`image/unfrightprop/${pic}/icon.png`, `image/prop/${pic}/icon.png`);
   return RES_HOSTS.flatMap((h) => paths.map((p) => `${h}/${p}`));
 }
@@ -112,11 +114,16 @@ Deno.serve(async (req) => {
       if (error) throw error;
     }
 
-    // Imagens
+    // Verificação de imagens: todos os itens sem imagem (novos e antigos)
+    const { data: missing } = await admin.from("items").select("id,type,need_sex,pic_path")
+      .is("image_url", null).not("pic_path", "is", null).order("id", { ascending: true }).limit(MAX_IMAGES);
     let images = 0;
-    for (const r of rows.slice(0, MAX_IMAGES)) {
-      if (!r.pic_path) continue;
-      for (const c of imageCandidates(r.type ?? 0, r.need_sex ?? 0, r.pic_path)) {
+    const started = Date.now();
+    for (const r of missing ?? []) {
+      if (Date.now() - started > 110_000) break;
+      const pic = String(r.pic_path);
+      const cands = pic.startsWith("http") ? [pic] : imageCandidates(r.type ?? 0, r.need_sex ?? 0, pic);
+      for (const c of cands) {
         try {
           const resp = await fetch(c);
           if (!resp.ok || !(resp.headers.get("content-type") ?? "").includes("image")) { await resp.body?.cancel(); continue; }
@@ -128,11 +135,12 @@ Deno.serve(async (req) => {
           await admin.from("items").update({ image_url: pub }).eq("id", r.id);
           images++;
           break;
-        } catch { /* tenta próximo */ }
+        } catch { /* próximo */ }
       }
     }
+    const { count: stillMissing } = await admin.from("items").select("id", { count: "exact", head: true }).is("image_url", null);
 
-    return json({ totalGame: raw.length, added: rows.length, newIds: rows.map((r) => r.id), images });
+    return json({ totalGame: raw.length, added: rows.length, newIds: rows.map((r) => r.id), images, stillMissing });
   } catch (e) {
     return json({ error: (e as Error).message }, 500);
   }

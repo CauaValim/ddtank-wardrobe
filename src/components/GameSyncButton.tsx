@@ -12,11 +12,10 @@ export function GameSyncButton() {
     try {
       const { data, error } = await supabase.functions.invoke("sync-game-items");
       if (error || data?.error) throw new Error(data?.error || error?.message);
-      if (!data.added) {
-        toast.success("Painel já está atualizado com o jogo.", { id: t });
+      if (!data.added && !data.images) {
+        toast.success(`Painel já está atualizado com o jogo. Itens sem imagem: ${data.stillMissing}.`, { id: t });
       } else {
-        localStorage.setItem("novidades-br", JSON.stringify((data.newIds as number[]).map(String)));
-        toast.success(`${data.added} novos itens adicionados (${data.images} imagens). Recarregando...`, { id: t });
+        toast.success(`${data.added} novos itens, ${data.images} imagens recuperadas (restam ${data.stillMissing} sem imagem). Recarregando...`, { id: t });
         setTimeout(() => window.location.reload(), 1500);
       }
     } catch (e) {
