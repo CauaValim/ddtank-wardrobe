@@ -11,6 +11,7 @@ import { PackageContentsModal } from "@/components/PackageContentsModal";
 import { BulkTypeMover } from "@/components/BulkTypeMover";
 import { IdFillerModal } from "@/components/IdFillerModal";
 import { ItemValidatorModal } from "@/components/ItemValidatorModal";
+import { GameSyncButton } from "@/components/GameSyncButton";
 import { getTypeName, getTypeGroups, HIDDEN_TYPES } from "@/lib/itemTypes";
 import type { GameItem } from "@/types/item";
 import type { useAuth } from "@/hooks/useAuth";
@@ -231,6 +232,7 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
             {auth.canImport && (
               <FileImporter onItemsLoaded={addItems} onImagesLoaded={addImages} onSyncDescriptions={syncDescriptions} canImportImages={auth.canImportImages} canSyncDescriptions={auth.canSyncDescriptions} />
             )}
+            {realm === "br" && (auth.role === "super_admin" || auth.role === "admin") && <GameSyncButton />}
             {(auth.role === "super_admin" || auth.role === "admin") && (
               <button
                 onClick={() => setIdFillerOpen(true)}
