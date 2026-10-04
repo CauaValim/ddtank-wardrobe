@@ -462,14 +462,6 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
         }}
       />
 
-      {/* Fuguras Detail Modal */}
-      <FugurasDetailModal
-        item={selectedFuguraItem}
-        imageUrl={selectedFuguraItem ? getItemImage(selectedFuguraItem.id) : undefined}
-        open={!!selectedFuguraItem}
-        onClose={() => setSelectedFuguraItem(null)}
-        canViewId={auth.canViewId}
-      />
 
       {/* Package Contents Modal */}
       <PackageContentsModal
