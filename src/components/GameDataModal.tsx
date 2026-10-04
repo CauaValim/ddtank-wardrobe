@@ -52,7 +52,6 @@ const CARD_STATS: [string, string, string][] = [
 ];
 
 const FILES = [
-  "MountDrawTemplate",
   "NewTitleInfo",
   "RuneTemplateList",
   "MagicStoneTemplate",
@@ -64,10 +63,6 @@ export function GameDataModal({ open, onClose, lookup }: Props) {
   const { data, isLoading, error } = useGameData([...FILES], open);
   const [q, setQ] = useState("");
   const query = q.trim().toLowerCase();
-
-  const mounts = useMemo(() => {
-    return (data?.MountDrawTemplate ?? []).filter((m) => match(query, m.Name, m.TemplateId));
-  }, [data, query]);
 
   const stones = useMemo(() => {
     const m = new Map<string, GameRow[]>();
@@ -100,9 +95,8 @@ export function GameDataModal({ open, onClose, lookup }: Props) {
         {isLoading && <p className="py-8 text-center text-xs text-muted-foreground">Carregando dados do jogo...</p>}
         {error && <p className="py-8 text-center text-xs text-destructive">Erro: {(error as Error).message}</p>}
         {data && (
-          <Tabs defaultValue="mounts">
+          <Tabs defaultValue="cards">
             <TabsList className="flex-wrap">
-              <TabsTrigger value="mounts">Montarias ({mounts.length})</TabsTrigger>
               <TabsTrigger value="cards">Cartas ({cards.length})</TabsTrigger>
               <TabsTrigger value="buffs">Efeitos de Cartas ({buffs.length})</TabsTrigger>
               <TabsTrigger value="titles">Títulos ({data.NewTitleInfo?.length ?? 0})</TabsTrigger>
@@ -110,28 +104,6 @@ export function GameDataModal({ open, onClose, lookup }: Props) {
               <TabsTrigger value="stones">Pedras Mágicas ({stones.length})</TabsTrigger>
             </TabsList>
             <div className="mt-2 max-h-[65vh] overflow-y-auto pr-1">
-              <TabsContent value="mounts" className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {mounts.map((m) => {
-                  const it = lookup(m.TemplateId);
-                  return (
-                    <div key={m.ID} className="space-y-1 rounded-lg border border-border p-2">
-                      <div className="flex items-center gap-2 rounded-md bg-secondary px-2 py-1" title={`ID ${m.TemplateId}`}>
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded bg-muted">
-                          {it?.image ? (
-                            <img src={it.image} alt="" loading="lazy" className="h-full w-full object-contain" />
-                          ) : (
-                            <Package className="h-4 w-4 text-muted-foreground/40" />
-                          )}
-                        </div>
-                        <span className="truncate text-[11px] font-semibold text-card-foreground">
-                          {m.Name || it?.name || `ID ${m.TemplateId}`}
-                        </span>
-                      </div>
-                      <Stats items={[["Dano", n(m.AddHurt)], ["Armadura", n(m.AddGuard)], ["Ataque Mágico", n(m.MagicAttack)], ["Resistência Mágica", n(m.MagicDefence)], ["Vida", n(m.AddBlood)]]} />
-                    </div>
-                  );
-                })}
-              </TabsContent>
               <TabsContent value="cards" className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {cards.map((c, i) => {
                   const it = lookup(c.CardID);

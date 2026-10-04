@@ -3,8 +3,8 @@ import { Package } from "lucide-react";
 import { useGameData, n } from "@/hooks/useGameData";
 import type { ItemLookup } from "@/components/GameDataModal";
 
-/** Shows official game data (clothing set + mount illustration attributes) for one item. */
-export function ItemGameExtras({ itemId, lookup, hideMount }: { itemId: string; lookup?: ItemLookup; hideMount?: boolean }) {
+/** Shows official game data (clothing set + mount attributes) for one item. */
+export function ItemGameExtras({ itemId, lookup }: { itemId: string; lookup?: ItemLookup }) {
   const { data } = useGameData(["ClothPropertyTemplateInfo", "ClothGroupTemplateInfo", "MountDrawTemplate"]);
 
   const info = useMemo(() => {
@@ -22,14 +22,22 @@ export function ItemGameExtras({ itemId, lookup, hideMount }: { itemId: string; 
 
   return (
     <>
-      {mount && !hideMount && (
-        <div className="w-full grid grid-cols-2 gap-1.5">
-          {[["Dano", mount.AddHurt], ["Armadura", mount.AddGuard], ["Ataque Mágico", mount.MagicAttack], ["Resistência Mágica", mount.MagicDefence], ["Vida", mount.AddBlood]].map(([l, v]) => (
-            <div key={l} className="rounded-md bg-secondary px-2 py-1">
-              <span className="text-[10px] text-muted-foreground">{l}</span>
-              <p className="text-xs font-medium text-card-foreground">{v}</p>
+      {mount && (
+        <div className="w-full space-y-1.5">
+          {mount.Name && (
+            <div className="rounded-md bg-secondary px-2 py-1.5">
+              <span className="text-[10px] text-muted-foreground">Descrição da montaria</span>
+              <p className="text-xs text-card-foreground">{mount.Name}</p>
             </div>
-          ))}
+          )}
+          <div className="grid grid-cols-2 gap-1.5">
+            {[["Dano", mount.AddHurt], ["Armadura", mount.AddGuard], ["Ataque Mágico", mount.MagicAttack], ["Resistência Mágica", mount.MagicDefence], ["Vida", mount.AddBlood]].map(([l, v]) => (
+              <div key={l} className="rounded-md bg-secondary px-2 py-1">
+                <span className="text-[10px] text-muted-foreground">{l}</span>
+                <p className="text-xs font-medium text-card-foreground">{v || "0"}</p>
+              </div>
+            ))}
+          </div>
         </div>
       )}
       {set && pieces && (
