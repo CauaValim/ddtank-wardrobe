@@ -3,6 +3,7 @@ import { Package, Search } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useGameData, n, type GameRow } from "@/hooks/useGameData";
+import { QuestsTab } from "@/components/QuestsTab";
 
 export interface ItemLookup {
   (id: string): { name: string; image: string } | null;
@@ -57,6 +58,7 @@ const FILES = [
   "MagicStoneTemplate",
   "CardTemplateInfo",
   "CardBuffList",
+  "QuestList",
 ] as const;
 
 export function GameDataModal({ open, onClose, lookup }: Props) {
@@ -102,8 +104,12 @@ export function GameDataModal({ open, onClose, lookup }: Props) {
               <TabsTrigger value="titles">Títulos ({data.NewTitleInfo?.length ?? 0})</TabsTrigger>
               <TabsTrigger value="runes">Runas ({data.RuneTemplateList?.length ?? 0})</TabsTrigger>
               <TabsTrigger value="stones">Pedras Mágicas ({stones.length})</TabsTrigger>
+              <TabsTrigger value="quests">Missões ({data.QuestList?.length ?? 0})</TabsTrigger>
             </TabsList>
             <div className="mt-2 max-h-[65vh] overflow-y-auto pr-1">
+              <TabsContent value="quests">
+                <QuestsTab quests={data.QuestList ?? []} query={query} lookup={lookup} />
+              </TabsContent>
               <TabsContent value="cards" className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {cards.map((c, i) => {
                   const it = lookup(c.CardID);
