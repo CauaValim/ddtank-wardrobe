@@ -16,6 +16,7 @@ const ALLOWED = new Set([
   "TemplateAllList",
   "SuitTemplateInfoList",
   "SuitPartEquipInfoList",
+  "QuestList",
 ]);
 const TTL = 30 * 60 * 1000;
 const cache = new Map<string, { at: number; rows: Record<string, string>[] }>();
@@ -29,6 +30,37 @@ const unescape = (s: string) =>
     .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d)))
     .replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&apos;/g, "'").replace(/&amp;/g, "&");
 
+const attrs = (s: string) => {
+  const a: Record<string, string> = {};
+  for (const x of s.matchAll(/(\w+)="([^"]*)"/g)) a[x[1]] = unescape(x[2]);
+  return a;
+};
+
+const QUEST_KEYS = ["ID", "QuestID", "Title", "Detail", "Objective", "NeedMinLevel", "NeedMaxLevel", "PreQuestID", "NextQuestID", "CanRepeat", "RepeatInterval", "RewardGP", "RewardGold", "RewardBindMoney", "RewardOffer", "RewardRiches", "TimeMode", "StartDate", "EndDate"];
+
+/** QuestList nests conditions and rewards inside each quest; flatten them into JSON fields. */
+function parseQuests(xml: string) {
+  const out: Record<string, string>[] = [];
+  for (const m of xml.matchAll(/<Item\s([^<>]*?)>([\s\S]*?)<\/Item>/g)) {
+    const a = attrs(m[1]);
+    const q: Record<string, string> = {};
+    for (const k of QUEST_KEYS) if (a[k]) q[k] = a[k];
+    const conds = [...m[2].matchAll(/<Item_Condiction\s([^<>]*?)\/>/g)].map((c) => {
+      const x = attrs(c[1]);
+      return { t: x.CondictionTitle ?? "", ty: x.CondictionType ?? "", p1: x.Para1 ?? "", p2: x.Para2 ?? "" };
+    });
+    const goods = [...m[2].matchAll(/<Item_Good\s([^<>]*?)\/>/g)].map((g) => {
+      const x = attrs(g[1]);
+      return { id: x.RewardItemID ?? "", c: x.RewardItemCount1 ?? "1", v: x.RewardItemValid ?? "0", s: x.StrengthenLevel ?? "0" };
+    });
+    q.Conds = JSON.stringify(conds);
+    q.Goods = JSON.stringify(goods);
+    out.push(q);
+  }
+  return out;
+}
+
+
 async function load(file: string) {
   const hit = cache.get(file);
   if (hit && Date.now() - hit.at < TTL) return hit.rows;
@@ -38,6 +70,11 @@ async function load(file: string) {
   let xml: string;
   if (buf[0] === 0x3c || buf[0] === 0xef) xml = new TextDecoder().decode(buf);
   else xml = await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream("deflate"))).text();
+  if (file === "QuestList") {
+    const quests = parseQuests(xml);
+    cache.set(file, { at: Date.now(), rows: quests });
+    return quests;
+  }
   const rows: Record<string, string>[] = [];
   const re = /<(\w+)\s([^<>]*?)\/>/g;
   const attrRe = /(\w+)="([^"]*)"/g;
