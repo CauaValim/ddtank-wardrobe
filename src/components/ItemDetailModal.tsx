@@ -71,7 +71,7 @@ export function ItemDetailModal({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-xs border-border bg-card p-4">
+      <DialogContent className="max-h-[85vh] max-w-xs overflow-y-auto border-border bg-card p-4">
         <DialogTitle className="sr-only">{item.name}</DialogTitle>
         <div className="flex flex-col items-center gap-3">
           <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-lg bg-secondary">
@@ -116,6 +116,8 @@ export function ItemDetailModal({
 
           <ItemGameExtras
             itemId={String(item.id)}
+            itemDescription={item.attributes.desc}
+            suitId={item.attributes.suit_id}
             lookup={lookup}
             fallback={(
               <div className="w-full grid grid-cols-2 gap-1.5">

@@ -5,8 +5,26 @@ import { useGameData, n } from "@/hooks/useGameData";
 import type { ItemLookup } from "@/components/GameDataModal";
 
 /** Shows official game data (clothing set + mount attributes) for one item. */
-export function ItemGameExtras({ itemId, lookup, fallback }: { itemId: string; lookup?: ItemLookup; fallback?: ReactNode }) {
+export function ItemGameExtras({
+  itemId,
+  itemDescription,
+  suitId,
+  lookup,
+  fallback,
+}: {
+  itemId: string;
+  itemDescription?: string;
+  suitId?: string;
+  lookup?: ItemLookup;
+  fallback?: ReactNode;
+}) {
   const { data } = useGameData(["ClothPropertyTemplateInfo", "ClothGroupTemplateInfo", "MountDrawTemplate"]);
+
+  const progressiveBonus = useMemo(() => {
+    if (!suitId || suitId === "0" || !itemDescription) return null;
+    const describesBonus = /(equipar|combin|atributo adicional|aumenta|reduz|ataque cr[ií]tico|prote[cç][aã]o)/i.test(itemDescription);
+    return describesBonus ? itemDescription.trim() : null;
+  }, [itemDescription, suitId]);
 
   const info = useMemo(() => {
     if (!data) return null;
@@ -45,6 +63,7 @@ export function ItemGameExtras({ itemId, lookup, fallback }: { itemId: string; l
         <div className="w-full rounded-md border border-border p-2">
           <p className="text-[10px] text-muted-foreground">Conjunto</p>
           <p className="text-xs font-bold text-card-foreground">{set.Name}</p>
+          <p className="mt-1 text-[10px] font-medium text-muted-foreground">Bônus do conjunto completo</p>
           <div className="mt-1 flex flex-wrap gap-1">
             {[["Atq", set.Attack], ["Def", set.Defend], ["Agi", set.Agility], ["Sorte", set.Luck], ["Vida", set.Blood], ["Dano", set.Damage], ["Armadura", set.Guard]]
               .filter(([, v]) => n(v))
@@ -62,6 +81,12 @@ export function ItemGameExtras({ itemId, lookup, fallback }: { itemId: string; l
               );
             })}
           </div>
+        </div>
+      )}
+      {progressiveBonus && (
+        <div className="w-full rounded-md border border-primary/30 bg-primary/10 p-2">
+          <p className="text-[10px] font-medium text-primary">Bônus por peças equipadas</p>
+          <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-card-foreground">{progressiveBonus}</p>
         </div>
       )}
       {!mount && fallback}
