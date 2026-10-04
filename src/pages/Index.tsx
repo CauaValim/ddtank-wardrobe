@@ -422,13 +422,7 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
                 key={item.id}
                 item={item}
                 imageUrl={getItemImage(item.id)}
-                onClick={(clicked) => {
-                  if (showFuguras) {
-                    setSelectedFuguraItem(clicked);
-                  } else {
-                    setSelectedItem(clicked);
-                  }
-                }}
+                onClick={(clicked) => setSelectedItem(clicked)}
                 selectionMode={auth.canSelect && selectionMode}
                 isSelected={selectedIds.has(item.id)}
                 onToggleSelect={toggleSelect}
@@ -453,7 +447,7 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
 
       {/* Detail Modal */}
       <GameDataModal open={gameDataOpen} onClose={() => setGameDataOpen(false)} lookup={lookupItem} />
-      <CardsInfoModal open={cardsOpen} onClose={() => setCardsOpen(false)} lookup={lookupItem} />
+      <FugurasModal open={fugurasOpen} onClose={() => setFugurasOpen(false)} lookup={lookupItem} />
       <ItemDetailModal
         item={selectedItem}
         imageUrl={selectedItem ? getItemImage(selectedItem.id) : undefined}
