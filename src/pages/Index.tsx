@@ -12,6 +12,9 @@ import { BulkTypeMover } from "@/components/BulkTypeMover";
 import { IdFillerModal } from "@/components/IdFillerModal";
 import { ItemValidatorModal } from "@/components/ItemValidatorModal";
 import { GameSyncButton } from "@/components/GameSyncButton";
+import { GameDataModal } from "@/components/GameDataModal";
+import { CardsInfoModal } from "@/components/CardsInfoModal";
+import { Database, Layers } from "lucide-react";
 import { getTypeName, getTypeGroups, HIDDEN_TYPES } from "@/lib/itemTypes";
 import type { GameItem } from "@/types/item";
 import type { useAuth } from "@/hooks/useAuth";
@@ -49,6 +52,21 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
   const [idFillerOpen, setIdFillerOpen] = useState(false);
   const [validatorOpen, setValidatorOpen] = useState(false);
   const [packageItem, setPackageItem] = useState<GameItem | null>(null);
+  const [gameDataOpen, setGameDataOpen] = useState(false);
+  const [cardsOpen, setCardsOpen] = useState(false);
+  const itemNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const it of allItems) m.set(String(it.id), it.name);
+    return m;
+  }, [allItems]);
+  const lookupItem = useCallback(
+    (id: string) => {
+      const name = itemNameById.get(String(id));
+      const image = getItemImage(String(id));
+      return name || image ? { name: name ?? `ID ${id}`, image } : null;
+    },
+    [itemNameById, getItemImage],
+  );
 
   // Multi-select state
   const [selectionMode, setSelectionMode] = useState(false);
@@ -233,6 +251,21 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
               <FileImporter onItemsLoaded={addItems} onImagesLoaded={addImages} onSyncDescriptions={syncDescriptions} canImportImages={auth.canImportImages} canSyncDescriptions={auth.canSyncDescriptions} />
             )}
             {realm === "br" && (auth.role === "super_admin" || auth.role === "admin") && <GameSyncButton />}
+            <button
+              onClick={() => setGameDataOpen(true)}
+              className="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-muted transition-all"
+              title="Conjuntos, Montarias, Títulos, Pets, Runas e Pedras"
+            >
+              <Database className="h-3.5 w-3.5" />
+              Dados do Jogo
+            </button>
+            <button
+              onClick={() => setCardsOpen(true)}
+              className="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-muted transition-all"
+            >
+              <Layers className="h-3.5 w-3.5" />
+              Cards info
+            </button>
             {(auth.role === "super_admin" || auth.role === "admin") && (
               <button
                 onClick={() => setIdFillerOpen(true)}
@@ -443,6 +476,8 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
       />
 
       {/* Detail Modal */}
+      <GameDataModal open={gameDataOpen} onClose={() => setGameDataOpen(false)} lookup={lookupItem} />
+      <CardsInfoModal open={cardsOpen} onClose={() => setCardsOpen(false)} lookup={lookupItem} />
       <ItemDetailModal
         item={selectedItem}
         imageUrl={selectedItem ? getItemImage(selectedItem.id) : undefined}
@@ -450,6 +485,7 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
         onClose={() => setSelectedItem(null)}
         canViewId={auth.canViewId}
         realm={realm}
+        lookup={lookupItem}
         onViewPackageContents={(item) => {
           setSelectedItem(null);
           setPackageItem(item);
