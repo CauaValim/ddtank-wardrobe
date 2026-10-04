@@ -174,14 +174,7 @@ export function GameDataModal({ open, onClose, lookup }: Props) {
               <TabsContent value="titles" className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {(data.NewTitleInfo ?? []).filter((t) => match(query, t.Name, t.Desc)).map((t) => (
                   <div key={t.ID} className="space-y-1 rounded-lg border border-border p-2">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-xs font-bold text-card-foreground">{t.Name}</p>
-                      {t.ValidDate && t.ValidDate !== "0" && (
-                        <span className="rounded bg-accent/20 px-1.5 py-0.5 text-[10px] font-medium text-accent-foreground">
-                          Validade: {t.ValidDate} dias
-                        </span>
-                      )}
-                    </div>
+                    <p className="text-xs font-bold text-card-foreground">{t.Name}</p>
                     {t.Desc && <p className="text-[10px] text-muted-foreground">{t.Desc}</p>}
                     <Stats items={[["Ataque", n(t.Att)], ["Defesa", n(t.Def)], ["Agilidade", n(t.Agi)], ["Sorte", n(t.Luck)]]} />
                   </div>
