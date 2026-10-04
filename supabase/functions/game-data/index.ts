@@ -14,6 +14,8 @@ const ALLOWED = new Set([
   "RuneTemplateList",
   "MagicStoneTemplate",
   "TemplateAllList",
+  "SuitTemplateInfoList",
+  "SuitPartEquipInfoList",
 ]);
 const TTL = 30 * 60 * 1000;
 const cache = new Map<string, { at: number; rows: Record<string, string>[] }>();
@@ -22,7 +24,10 @@ const json = (b: unknown, status = 200) =>
   new Response(JSON.stringify(b), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
 const unescape = (s: string) =>
-  s.replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&apos;/g, "'").replace(/&amp;/g, "&");
+  s
+    .replace(/&#x([0-9a-f]+);/gi, (_, h) => String.fromCodePoint(parseInt(h, 16)))
+    .replace(/&#(\d+);/g, (_, d) => String.fromCodePoint(Number(d)))
+    .replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&apos;/g, "'").replace(/&amp;/g, "&");
 
 async function load(file: string) {
   const hit = cache.get(file);
