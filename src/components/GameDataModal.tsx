@@ -42,15 +42,25 @@ function Stats({ items }: { items: [string, number][] }) {
 
 const match = (q: string, ...vals: (string | undefined)[]) => !q || vals.some((v) => v?.toLowerCase().includes(q));
 
+const CARD_STATS: [string, string, string][] = [
+  ["Ataque", "AddAttack", "AttackRate"],
+  ["Defesa", "AddDefend", "DefendRate"],
+  ["Agilidade", "AddAgility", "AgilityRate"],
+  ["Sorte", "AddLucky", "LuckyRate"],
+  ["Dano", "AddDamage", "DamageRate"],
+  ["Armadura", "AddGuard", "GuardRate"],
+];
+
 const FILES = [
   "ClothPropertyTemplateInfo",
   "ClothGroupTemplateInfo",
-  "MountDrawTemplate",
   "NewTitleInfo",
   "PetTemplateInfo",
   "PetSkillInfo",
   "RuneTemplateList",
   "MagicStoneTemplate",
+  "CardTemplateInfo",
+  "CardBuffList",
 ] as const;
 
 export function GameDataModal({ open, onClose, lookup }: Props) {
@@ -78,6 +88,17 @@ export function GameDataModal({ open, onClose, lookup }: Props) {
     return [...m.entries()];
   }, [data]);
 
+  const cards = useMemo(() => {
+    return (data?.CardTemplateInfo ?? []).filter((c) => {
+      if (!query) return true;
+      return c.CardID.includes(query) || (lookup(c.CardID)?.name ?? "").toLowerCase().includes(query);
+    });
+  }, [data, query, lookup]);
+
+  const buffs = useMemo(() => {
+    return (data?.CardBuffList ?? []).filter((b) => !query || b.Description?.toLowerCase().includes(query));
+  }, [data, query]);
+
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-4xl border-border bg-card p-4">
@@ -92,7 +113,8 @@ export function GameDataModal({ open, onClose, lookup }: Props) {
           <Tabs defaultValue="sets">
             <TabsList className="flex-wrap">
               <TabsTrigger value="sets">Conjuntos ({sets.length})</TabsTrigger>
-              <TabsTrigger value="mounts">Montarias ({data.MountDrawTemplate?.length ?? 0})</TabsTrigger>
+              <TabsTrigger value="cards">Cartas ({cards.length})</TabsTrigger>
+              <TabsTrigger value="buffs">Efeitos de Cartas ({buffs.length})</TabsTrigger>
               <TabsTrigger value="titles">Títulos ({data.NewTitleInfo?.length ?? 0})</TabsTrigger>
               <TabsTrigger value="pets">Pets ({data.PetTemplateInfo?.length ?? 0})</TabsTrigger>
               <TabsTrigger value="runes">Runas ({data.RuneTemplateList?.length ?? 0})</TabsTrigger>
@@ -113,13 +135,41 @@ export function GameDataModal({ open, onClose, lookup }: Props) {
                   </div>
                 ))}
               </TabsContent>
-              <TabsContent value="mounts" className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {(data.MountDrawTemplate ?? []).filter((m) => match(query, m.Name, m.TemplateId)).map((m) => (
-                  <div key={m.ID} className="space-y-1 rounded-lg border border-border p-2">
-                    <Thumb id={m.TemplateId} lookup={lookup} />
-                    <Stats items={[["Dano", n(m.AddHurt)], ["Armadura", n(m.AddGuard)], ["Ataque Mágico", n(m.MagicAttack)], ["Resistência Mágica", n(m.MagicDefence)], ["Vida", n(m.AddBlood)]]} />
-                  </div>
-                ))}
+              <TabsContent value="cards" className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {cards.map((c, i) => {
+                  const it = lookup(c.CardID);
+                  const stats = CARD_STATS.map(([label, add, rate]) => ({ label, add: n(c[add]), rate: n(c[rate]) })).filter((s) => s.add || s.rate > 1);
+                  return (
+                    <div key={`${c.CardID}-${i}`} className="flex gap-2 rounded-lg border border-border p-2">
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded bg-secondary">
+                        {it?.image ? <img src={it.image} alt="" loading="lazy" className="h-full w-full object-contain" /> : <Package className="h-5 w-5 text-muted-foreground/40" />}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-bold text-card-foreground">{it?.name ?? `Carta ${c.CardID}`}</p>
+                        <p className="text-[10px] text-muted-foreground">ID {c.CardID} · Tipo {c.CardType}</p>
+                        <div className="mt-1 flex flex-wrap gap-1">
+                          {stats.length === 0 && <span className="text-[10px] text-muted-foreground">Sem atributos</span>}
+                          {stats.map((s) => (
+                            <span key={s.label} className="rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                              {s.label} {s.add ? `+${s.add}` : ""}{s.rate > 1 ? ` x${s.rate}` : ""}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </TabsContent>
+              <TabsContent value="buffs" className="space-y-2">
+                {buffs.map((b, i) => {
+                  const vals = (b.value ?? "").split("|");
+                  return (
+                    <div key={i} className="rounded-lg border border-border p-2">
+                      <p className="text-xs text-card-foreground">{b.Description?.replace("{0}", vals[0] ?? "")}</p>
+                      <p className="text-[10px] text-muted-foreground">Por nível: {vals.join(" / ")} · Condição {b.condition}</p>
+                    </div>
+                  );
+                })}
               </TabsContent>
               <TabsContent value="titles" className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {(data.NewTitleInfo ?? []).filter((t) => match(query, t.Name, t.Desc)).map((t) => (
