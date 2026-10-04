@@ -113,19 +113,27 @@ export function GameDataModal({ open, onClose, lookup }: Props) {
               <TabsTrigger value="stones">Pedras Mágicas ({stones.length})</TabsTrigger>
             </TabsList>
             <div className="mt-2 max-h-[65vh] overflow-y-auto pr-1">
-              <TabsContent value="sets" className="space-y-2">
-                {sets.filter(({ p }) => match(query, p.Name, p.ID)).map(({ p, pieces }) => (
-                  <div key={`${p.ID}-${p.Sex}`} className="rounded-lg border border-border p-2">
-                    <div className="mb-1 flex items-center justify-between gap-2">
-                      <span className="text-xs font-bold text-card-foreground">{p.Name}</span>
-                      <span className="text-[10px] text-muted-foreground">{p.Sex === "1" ? "Masculino" : "Feminino"} · {pieces.length} peças</span>
+              <TabsContent value="mounts" className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                {mounts.map((m) => {
+                  const it = lookup(m.TemplateId);
+                  return (
+                    <div key={m.ID} className="space-y-1 rounded-lg border border-border p-2">
+                      <div className="flex items-center gap-2 rounded-md bg-secondary px-2 py-1" title={`ID ${m.TemplateId}`}>
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded bg-muted">
+                          {it?.image ? (
+                            <img src={it.image} alt="" loading="lazy" className="h-full w-full object-contain" />
+                          ) : (
+                            <Package className="h-4 w-4 text-muted-foreground/40" />
+                          )}
+                        </div>
+                        <span className="truncate text-[11px] font-semibold text-card-foreground">
+                          {m.Name || it?.name || `ID ${m.TemplateId}`}
+                        </span>
+                      </div>
+                      <Stats items={[["Dano", n(m.AddHurt)], ["Armadura", n(m.AddGuard)], ["Ataque Mágico", n(m.MagicAttack)], ["Resistência Mágica", n(m.MagicDefence)], ["Vida", n(m.AddBlood)]]} />
                     </div>
-                    <Stats items={[["Ataque", n(p.Attack)], ["Defesa", n(p.Defend)], ["Agilidade", n(p.Agility)], ["Sorte", n(p.Luck)], ["Vida", n(p.Blood)], ["Dano", n(p.Damage)], ["Armadura", n(p.Guard)]]} />
-                    <div className="mt-2 grid grid-cols-2 gap-1 sm:grid-cols-4">
-                      {pieces.map((id) => <Thumb key={id} id={id} lookup={lookup} />)}
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </TabsContent>
               <TabsContent value="cards" className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {cards.map((c, i) => {
