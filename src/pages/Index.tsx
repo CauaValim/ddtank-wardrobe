@@ -99,7 +99,7 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
 
   useEffect(() => {
     setVisibleCount(PAGE);
-  }, [searchQuery, selectedType, showNovidades, showFuguras, realm]);
+  }, [searchQuery, selectedType, showNovidades, realm]);
 
   useEffect(() => {
     const el = sentinelRef.current;
@@ -249,17 +249,10 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
             <button
               onClick={() => setGameDataOpen(true)}
               className="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-muted transition-all"
-              title="Conjuntos, Montarias, Títulos, Pets, Runas e Pedras"
+              title="Conjuntos, Cartas, Títulos, Pets, Runas e Pedras"
             >
               <Database className="h-3.5 w-3.5" />
               Dados do Jogo
-            </button>
-            <button
-              onClick={() => setCardsOpen(true)}
-              className="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-muted transition-all"
-            >
-              <Layers className="h-3.5 w-3.5" />
-              Cards info
             </button>
             {(auth.role === "super_admin" || auth.role === "admin") && (
               <button
@@ -334,24 +327,12 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
               )}
             </button>
             <button
-              onClick={() => setShowFuguras(!showFuguras)}
-              disabled={fugurasCount === 0}
-              className={`flex items-center gap-1.5 rounded-lg border px-3 py-2.5 text-sm font-medium transition-all ${
-                showFuguras
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border bg-secondary text-secondary-foreground hover:bg-muted"
-              } disabled:opacity-50 disabled:cursor-not-allowed`}
-              title={fugurasCount === 0 ? "Nenhuma figura cadastrada" : `${fugurasCount} figuras cadastradas`}
+              onClick={() => setFugurasOpen(true)}
+              className="flex items-center gap-1.5 rounded-lg border border-border bg-secondary px-3 py-2.5 text-sm font-medium text-secondary-foreground hover:bg-muted transition-all"
+              title="Ilustrações de Montaria (Fuguras) do jogo"
             >
               <Shapes className="h-4 w-4" />
               Fuguras
-              {fugurasCount > 0 && (
-                <span className={`ml-1 rounded-full px-1.5 py-0.5 text-xs font-semibold ${
-                  showFuguras ? "bg-primary-foreground/20" : "bg-primary/20 text-primary"
-                }`}>
-                  {fugurasCount}
-                </span>
-              )}
             </button>
           </div>
           {totalCount > 0 && (
