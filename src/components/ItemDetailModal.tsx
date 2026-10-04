@@ -114,24 +114,28 @@ export function ItemDetailModal({
             </div>
           )}
 
-          <ItemGameExtras itemId={String(item.id)} lookup={lookup} />
-
-          <div className="w-full grid grid-cols-2 gap-1.5">
-            {[
-              { label: "Ataque", value: item.attributes.attack },
-              { label: "Defesa", value: item.attributes.defence },
-              { label: "Agilidade", value: item.attributes.agility },
-              { label: "Sorte", value: item.attributes.luck },
-              { label: "EXP", value: item.attributes.attribute2 },
-            ]
-              .filter((s) => s.value != null)
-              .map((s) => (
-                <div key={s.label} className="rounded-md bg-secondary px-2 py-1">
-                  <span className="text-[10px] text-muted-foreground">{s.label}</span>
-                  <p className="text-xs font-medium text-card-foreground">{s.value}</p>
-                </div>
-              ))}
-          </div>
+          <ItemGameExtras
+            itemId={String(item.id)}
+            lookup={lookup}
+            fallback={(
+              <div className="w-full grid grid-cols-2 gap-1.5">
+                {[
+                  { label: "Ataque", value: item.attributes.attack },
+                  { label: "Defesa", value: item.attributes.defence },
+                  { label: "Agilidade", value: item.attributes.agility },
+                  { label: "Sorte", value: item.attributes.luck },
+                  { label: "EXP", value: item.attributes.attribute2 },
+                ]
+                  .filter((s) => s.value != null)
+                  .map((s) => (
+                    <div key={s.label} className="rounded-md bg-secondary px-2 py-1">
+                      <span className="text-[10px] text-muted-foreground">{s.label}</span>
+                      <p className="text-xs font-medium text-card-foreground">{s.value}</p>
+                    </div>
+                  ))}
+              </div>
+            )}
+          />
         </div>
       </DialogContent>
     </Dialog>

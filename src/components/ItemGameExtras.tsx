@@ -1,10 +1,11 @@
 import { useMemo } from "react";
+import type { ReactNode } from "react";
 import { Package } from "lucide-react";
 import { useGameData, n } from "@/hooks/useGameData";
 import type { ItemLookup } from "@/components/GameDataModal";
 
 /** Shows official game data (clothing set + mount attributes) for one item. */
-export function ItemGameExtras({ itemId, lookup }: { itemId: string; lookup?: ItemLookup }) {
+export function ItemGameExtras({ itemId, lookup, fallback }: { itemId: string; lookup?: ItemLookup; fallback?: ReactNode }) {
   const { data } = useGameData(["ClothPropertyTemplateInfo", "ClothGroupTemplateInfo", "MountDrawTemplate"]);
 
   const info = useMemo(() => {
@@ -63,6 +64,7 @@ export function ItemGameExtras({ itemId, lookup }: { itemId: string; lookup?: It
           </div>
         </div>
       )}
+      {!mount && fallback}
     </>
   );
 }
