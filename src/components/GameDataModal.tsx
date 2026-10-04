@@ -52,8 +52,7 @@ const CARD_STATS: [string, string, string][] = [
 ];
 
 const FILES = [
-  "ClothPropertyTemplateInfo",
-  "ClothGroupTemplateInfo",
+  "MountDrawTemplate",
   "NewTitleInfo",
   "PetTemplateInfo",
   "PetSkillInfo",
