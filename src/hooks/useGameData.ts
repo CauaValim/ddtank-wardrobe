@@ -12,7 +12,8 @@ export type GameFile =
   | "PetTemplateInfo"
   | "PetSkillInfo"
   | "RuneTemplateList"
-  | "MagicStoneTemplate";
+  | "MagicStoneTemplate"
+  | "TemplateAllList";
 
 /** Loads official game data files through the game-data edge function (cached 1h client-side). */
 export function useGameData(files: GameFile[], enabled = true) {

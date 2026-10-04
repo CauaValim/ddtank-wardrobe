@@ -13,6 +13,7 @@ const ALLOWED = new Set([
   "PetSkillInfo",
   "RuneTemplateList",
   "MagicStoneTemplate",
+  "TemplateAllList",
 ]);
 const TTL = 30 * 60 * 1000;
 const cache = new Map<string, { at: number; rows: Record<string, string>[] }>();
@@ -44,8 +45,11 @@ async function load(file: string) {
     while ((x = attrRe.exec(m[2]))) a[x[1]] = unescape(x[2]);
     rows.push(a);
   }
-  cache.set(file, { at: Date.now(), rows });
-  return rows;
+  const filteredRows = file === "TemplateAllList"
+    ? rows.filter((row) => row.SuitId && row.SuitId !== "0")
+    : rows;
+  cache.set(file, { at: Date.now(), rows: filteredRows });
+  return filteredRows;
 }
 
 Deno.serve(async (req) => {
