@@ -102,9 +102,9 @@ export function GameDataModal({ open, onClose, lookup }: Props) {
         {isLoading && <p className="py-8 text-center text-xs text-muted-foreground">Carregando dados do jogo...</p>}
         {error && <p className="py-8 text-center text-xs text-destructive">Erro: {(error as Error).message}</p>}
         {data && (
-          <Tabs defaultValue="sets">
+          <Tabs defaultValue="mounts">
             <TabsList className="flex-wrap">
-              <TabsTrigger value="sets">Conjuntos ({sets.length})</TabsTrigger>
+              <TabsTrigger value="mounts">Montarias ({mounts.length})</TabsTrigger>
               <TabsTrigger value="cards">Cartas ({cards.length})</TabsTrigger>
               <TabsTrigger value="buffs">Efeitos de Cartas ({buffs.length})</TabsTrigger>
               <TabsTrigger value="titles">Títulos ({data.NewTitleInfo?.length ?? 0})</TabsTrigger>
