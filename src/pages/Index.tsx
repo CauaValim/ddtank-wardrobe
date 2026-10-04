@@ -3,7 +3,6 @@ import { Search, Package, Gamepad2, MousePointerClick, CheckSquare, LogOut, User
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useNavigate } from "react-router-dom";
 import { useItemStore } from "@/hooks/useItemStore";
-import { FileImporter } from "@/components/FileImporter";
 import { ItemCard } from "@/components/ItemCard";
 import { ItemDetailModal } from "@/components/ItemDetailModal";
 import { PackageContentsModal } from "@/components/PackageContentsModal";
