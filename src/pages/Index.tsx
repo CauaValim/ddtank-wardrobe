@@ -6,15 +6,14 @@ import { useItemStore } from "@/hooks/useItemStore";
 import { FileImporter } from "@/components/FileImporter";
 import { ItemCard } from "@/components/ItemCard";
 import { ItemDetailModal } from "@/components/ItemDetailModal";
-import { FugurasDetailModal } from "@/components/FugurasDetailModal";
 import { PackageContentsModal } from "@/components/PackageContentsModal";
 import { BulkTypeMover } from "@/components/BulkTypeMover";
 import { IdFillerModal } from "@/components/IdFillerModal";
 import { ItemValidatorModal } from "@/components/ItemValidatorModal";
 import { GameSyncButton } from "@/components/GameSyncButton";
 import { GameDataModal } from "@/components/GameDataModal";
-import { CardsInfoModal } from "@/components/CardsInfoModal";
-import { Database, Layers } from "lucide-react";
+import { FugurasModal } from "@/components/FugurasModal";
+import { Database } from "lucide-react";
 import { getTypeName, getTypeGroups, HIDDEN_TYPES } from "@/lib/itemTypes";
 import type { GameItem } from "@/types/item";
 import type { useAuth } from "@/hooks/useAuth";
@@ -41,19 +40,15 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
     novidadesCount,
     showNovidades,
     setShowNovidades,
-    fugurasCount,
-    showFuguras,
-    setShowFuguras,
   } = useItemStore(realm);
 
   const [selectedItem, setSelectedItem] = useState<GameItem | null>(null);
-  const [selectedFuguraItem, setSelectedFuguraItem] = useState<GameItem | null>(null);
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [idFillerOpen, setIdFillerOpen] = useState(false);
   const [validatorOpen, setValidatorOpen] = useState(false);
   const [packageItem, setPackageItem] = useState<GameItem | null>(null);
   const [gameDataOpen, setGameDataOpen] = useState(false);
-  const [cardsOpen, setCardsOpen] = useState(false);
+  const [fugurasOpen, setFugurasOpen] = useState(false);
   const itemNameById = useMemo(() => {
     const m = new Map<string, string>();
     for (const it of allItems) m.set(String(it.id), it.name);
@@ -104,7 +99,7 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
 
   useEffect(() => {
     setVisibleCount(PAGE);
-  }, [searchQuery, selectedType, showNovidades, showFuguras, realm]);
+  }, [searchQuery, selectedType, showNovidades, realm]);
 
   useEffect(() => {
     const el = sentinelRef.current;
@@ -254,17 +249,10 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
             <button
               onClick={() => setGameDataOpen(true)}
               className="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-muted transition-all"
-              title="Conjuntos, Montarias, Títulos, Pets, Runas e Pedras"
+              title="Conjuntos, Cartas, Títulos, Pets, Runas e Pedras"
             >
               <Database className="h-3.5 w-3.5" />
               Dados do Jogo
-            </button>
-            <button
-              onClick={() => setCardsOpen(true)}
-              className="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-muted transition-all"
-            >
-              <Layers className="h-3.5 w-3.5" />
-              Cards info
             </button>
             {(auth.role === "super_admin" || auth.role === "admin") && (
               <button
@@ -339,24 +327,12 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
               )}
             </button>
             <button
-              onClick={() => setShowFuguras(!showFuguras)}
-              disabled={fugurasCount === 0}
-              className={`flex items-center gap-1.5 rounded-lg border px-3 py-2.5 text-sm font-medium transition-all ${
-                showFuguras
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border bg-secondary text-secondary-foreground hover:bg-muted"
-              } disabled:opacity-50 disabled:cursor-not-allowed`}
-              title={fugurasCount === 0 ? "Nenhuma figura cadastrada" : `${fugurasCount} figuras cadastradas`}
+              onClick={() => setFugurasOpen(true)}
+              className="flex items-center gap-1.5 rounded-lg border border-border bg-secondary px-3 py-2.5 text-sm font-medium text-secondary-foreground hover:bg-muted transition-all"
+              title="Ilustrações de Montaria (Fuguras) do jogo"
             >
               <Shapes className="h-4 w-4" />
               Fuguras
-              {fugurasCount > 0 && (
-                <span className={`ml-1 rounded-full px-1.5 py-0.5 text-xs font-semibold ${
-                  showFuguras ? "bg-primary-foreground/20" : "bg-primary/20 text-primary"
-                }`}>
-                  {fugurasCount}
-                </span>
-              )}
             </button>
           </div>
           {totalCount > 0 && (
@@ -446,13 +422,7 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
                 key={item.id}
                 item={item}
                 imageUrl={getItemImage(item.id)}
-                onClick={(clicked) => {
-                  if (showFuguras) {
-                    setSelectedFuguraItem(clicked);
-                  } else {
-                    setSelectedItem(clicked);
-                  }
-                }}
+                onClick={(clicked) => setSelectedItem(clicked)}
                 selectionMode={auth.canSelect && selectionMode}
                 isSelected={selectedIds.has(item.id)}
                 onToggleSelect={toggleSelect}
@@ -477,7 +447,7 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
 
       {/* Detail Modal */}
       <GameDataModal open={gameDataOpen} onClose={() => setGameDataOpen(false)} lookup={lookupItem} />
-      <CardsInfoModal open={cardsOpen} onClose={() => setCardsOpen(false)} lookup={lookupItem} />
+      <FugurasModal open={fugurasOpen} onClose={() => setFugurasOpen(false)} lookup={lookupItem} />
       <ItemDetailModal
         item={selectedItem}
         imageUrl={selectedItem ? getItemImage(selectedItem.id) : undefined}
@@ -492,14 +462,6 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
         }}
       />
 
-      {/* Fuguras Detail Modal */}
-      <FugurasDetailModal
-        item={selectedFuguraItem}
-        imageUrl={selectedFuguraItem ? getItemImage(selectedFuguraItem.id) : undefined}
-        open={!!selectedFuguraItem}
-        onClose={() => setSelectedFuguraItem(null)}
-        canViewId={auth.canViewId}
-      />
 
       {/* Package Contents Modal */}
       <PackageContentsModal
