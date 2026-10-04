@@ -116,7 +116,7 @@ export function ItemDetailModal({
             </div>
           )}
 
-          <ItemGameExtras itemId={String(item.id)} lookup={lookup} />
+          <ItemGameExtras itemId={String(item.id)} lookup={lookup} hideMount={!!ilustracaoAttrs} />
 
           {ilustracaoAttrs ? (
             <div className="w-full grid grid-cols-2 gap-1.5">

@@ -4,7 +4,7 @@ import { useGameData, n } from "@/hooks/useGameData";
 import type { ItemLookup } from "@/components/GameDataModal";
 
 /** Shows official game data (clothing set + mount illustration attributes) for one item. */
-export function ItemGameExtras({ itemId, lookup }: { itemId: string; lookup?: ItemLookup }) {
+export function ItemGameExtras({ itemId, lookup, hideMount }: { itemId: string; lookup?: ItemLookup; hideMount?: boolean }) {
   const { data } = useGameData(["ClothPropertyTemplateInfo", "ClothGroupTemplateInfo", "MountDrawTemplate"]);
 
   const info = useMemo(() => {
@@ -22,7 +22,7 @@ export function ItemGameExtras({ itemId, lookup }: { itemId: string; lookup?: It
 
   return (
     <>
-      {mount && (
+      {mount && !hideMount && (
         <div className="w-full grid grid-cols-2 gap-1.5">
           {[["Dano", mount.AddHurt], ["Armadura", mount.AddGuard], ["Ataque Mágico", mount.MagicAttack], ["Resistência Mágica", mount.MagicDefence], ["Vida", mount.AddBlood]].map(([l, v]) => (
             <div key={l} className="rounded-md bg-secondary px-2 py-1">
