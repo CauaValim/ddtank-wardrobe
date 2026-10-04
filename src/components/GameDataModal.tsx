@@ -54,8 +54,6 @@ const CARD_STATS: [string, string, string][] = [
 const FILES = [
   "MountDrawTemplate",
   "NewTitleInfo",
-  "PetTemplateInfo",
-  "PetSkillInfo",
   "RuneTemplateList",
   "MagicStoneTemplate",
   "CardTemplateInfo",
@@ -108,7 +106,6 @@ export function GameDataModal({ open, onClose, lookup }: Props) {
               <TabsTrigger value="cards">Cartas ({cards.length})</TabsTrigger>
               <TabsTrigger value="buffs">Efeitos de Cartas ({buffs.length})</TabsTrigger>
               <TabsTrigger value="titles">Títulos ({data.NewTitleInfo?.length ?? 0})</TabsTrigger>
-              <TabsTrigger value="pets">Pets ({data.PetTemplateInfo?.length ?? 0})</TabsTrigger>
               <TabsTrigger value="runes">Runas ({data.RuneTemplateList?.length ?? 0})</TabsTrigger>
               <TabsTrigger value="stones">Pedras Mágicas ({stones.length})</TabsTrigger>
             </TabsList>
@@ -177,24 +174,6 @@ export function GameDataModal({ open, onClose, lookup }: Props) {
                     <p className="text-xs font-bold text-card-foreground">{t.Name}</p>
                     {t.Desc && <p className="text-[10px] text-muted-foreground">{t.Desc}</p>}
                     <Stats items={[["Ataque", n(t.Att)], ["Defesa", n(t.Def)], ["Agilidade", n(t.Agi)], ["Sorte", n(t.Luck)]]} />
-                  </div>
-                ))}
-              </TabsContent>
-              <TabsContent value="pets" className="space-y-2">
-                {(data.PetTemplateInfo ?? []).filter((p) => match(query, p.Name, p.Description)).map((p) => (
-                  <div key={p.TemplateID} className="rounded-lg border border-border p-2">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-card-foreground">{p.Name}</span>
-                      <span className="text-[10px] text-muted-foreground">Raridade {p.RareLevel} · {p.StarLevel}★ · MP {p.MP}</span>
-                    </div>
-                    {p.Description && <p className="text-[10px] text-muted-foreground">{p.Description}</p>}
-                  </div>
-                ))}
-                {query && (data.PetSkillInfo ?? []).filter((s) => match(query, s.Name, s.Description)).slice(0, 100).map((s) => (
-                  <div key={`sk-${s.ID}`} className="rounded-lg border border-border bg-secondary/40 p-2">
-                    <span className="text-xs font-semibold text-card-foreground">Habilidade: {s.Name}</span>
-                    <span className="ml-2 text-[10px] text-muted-foreground">MP {s.CostMP ?? "-"} · Recarga {s.ColdDown ?? "-"}</span>
-                    <p className="text-[10px] text-muted-foreground">{s.Description}</p>
                   </div>
                 ))}
               </TabsContent>
