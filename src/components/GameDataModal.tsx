@@ -67,16 +67,9 @@ export function GameDataModal({ open, onClose, lookup }: Props) {
   const [q, setQ] = useState("");
   const query = q.trim().toLowerCase();
 
-  const sets = useMemo(() => {
-    if (!data) return [];
-    const pieces = new Map<string, string[]>();
-    for (const g of data.ClothGroupTemplateInfo ?? []) {
-      const k = `${g.ID}|${g.Sex}`;
-      if (!pieces.has(k)) pieces.set(k, []);
-      pieces.get(k)!.push(g.TemplateID);
-    }
-    return (data.ClothPropertyTemplateInfo ?? []).map((p) => ({ p, pieces: pieces.get(`${p.ID}|${p.Sex}`) ?? [] }));
-  }, [data]);
+  const mounts = useMemo(() => {
+    return (data?.MountDrawTemplate ?? []).filter((m) => match(query, m.Name, m.TemplateId));
+  }, [data, query]);
 
   const stones = useMemo(() => {
     const m = new Map<string, GameRow[]>();
