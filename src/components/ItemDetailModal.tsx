@@ -6,6 +6,8 @@ import { getTypeName } from "@/lib/itemTypes";
 import type { GameItem } from "@/types/item";
 import { ILUSTRACOES_ATTRIBUTES_BR, ILUSTRACOES_ATTRIBUTES_TR } from "@/data/ilustracoesAttributes";
 import { hasParsableContents } from "@/lib/packageDescParser";
+import { ItemGameExtras } from "@/components/ItemGameExtras";
+import type { ItemLookup } from "@/components/GameDataModal";
 
 interface ItemDetailModalProps {
   item: GameItem | null;
@@ -15,6 +17,7 @@ interface ItemDetailModalProps {
   canViewId?: boolean;
   realm?: "br" | "turco";
   onViewPackageContents?: (item: GameItem) => void;
+  lookup?: ItemLookup;
 }
 
 export function ItemDetailModal({
@@ -25,6 +28,7 @@ export function ItemDetailModal({
   canViewId = true,
   realm = "br",
   onViewPackageContents,
+  lookup,
 }: ItemDetailModalProps) {
   const [copied, setCopied] = useState(false);
   const [hasContents, setHasContents] = useState(false);
@@ -111,6 +115,8 @@ export function ItemDetailModal({
               <p className="text-xs text-card-foreground whitespace-pre-wrap">{item.attributes.desc}</p>
             </div>
           )}
+
+          <ItemGameExtras itemId={String(item.id)} lookup={lookup} />
 
           {ilustracaoAttrs ? (
             <div className="w-full grid grid-cols-2 gap-1.5">
