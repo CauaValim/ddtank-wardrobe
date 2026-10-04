@@ -4,7 +4,6 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { getTypeName } from "@/lib/itemTypes";
 import type { GameItem } from "@/types/item";
-import { ILUSTRACOES_ATTRIBUTES_BR, ILUSTRACOES_ATTRIBUTES_TR } from "@/data/ilustracoesAttributes";
 import { hasParsableContents } from "@/lib/packageDescParser";
 import { ItemGameExtras } from "@/components/ItemGameExtras";
 import type { ItemLookup } from "@/components/GameDataModal";
@@ -68,7 +67,6 @@ export function ItemDetailModal({
   };
 
   const typeName = getTypeName(item.attributes.type != null ? Number(item.attributes.type) : null);
-  const ilustracaoAttrs = (realm === "turco" ? ILUSTRACOES_ATTRIBUTES_TR : ILUSTRACOES_ATTRIBUTES_BR)[Number(item.id)];
   const showContentsButton = hasContents || hasParsableContents(item.attributes.desc);
 
   return (
@@ -116,41 +114,28 @@ export function ItemDetailModal({
             </div>
           )}
 
-          <ItemGameExtras itemId={String(item.id)} lookup={lookup} hideMount={!!ilustracaoAttrs} />
-
-          {ilustracaoAttrs ? (
-            <div className="w-full grid grid-cols-2 gap-1.5">
-              {[
-                { label: "Dano", value: ilustracaoAttrs.dano },
-                { label: "Armadura", value: ilustracaoAttrs.armadura },
-                { label: "Ataque Mágico", value: ilustracaoAttrs.atkMag },
-                { label: "Resistência Mágica", value: ilustracaoAttrs.resistMag },
-                { label: "Vida", value: ilustracaoAttrs.vida },
-              ].map((s) => (
-                <div key={s.label} className="rounded-md bg-secondary px-2 py-1">
-                  <span className="text-[10px] text-muted-foreground">{s.label}</span>
-                  <p className="text-xs font-medium text-card-foreground">{s.value}</p>
-                </div>
-              ))}
-            </div>
-          ) : (
-          <div className="w-full grid grid-cols-2 gap-1.5">
-            {[
-              { label: "Ataque", value: item.attributes.attack },
-              { label: "Defesa", value: item.attributes.defence },
-              { label: "Agilidade", value: item.attributes.agility },
-              { label: "Sorte", value: item.attributes.luck },
-              { label: "EXP", value: item.attributes.attribute2 },
-            ]
-              .filter((s) => s.value != null)
-              .map((s) => (
-                <div key={s.label} className="rounded-md bg-secondary px-2 py-1">
-                  <span className="text-[10px] text-muted-foreground">{s.label}</span>
-                  <p className="text-xs font-medium text-card-foreground">{s.value}</p>
-                </div>
-              ))}
-          </div>
-          )}
+          <ItemGameExtras
+            itemId={String(item.id)}
+            lookup={lookup}
+            fallback={(
+              <div className="w-full grid grid-cols-2 gap-1.5">
+                {[
+                  { label: "Ataque", value: item.attributes.attack },
+                  { label: "Defesa", value: item.attributes.defence },
+                  { label: "Agilidade", value: item.attributes.agility },
+                  { label: "Sorte", value: item.attributes.luck },
+                  { label: "EXP", value: item.attributes.attribute2 },
+                ]
+                  .filter((s) => s.value != null)
+                  .map((s) => (
+                    <div key={s.label} className="rounded-md bg-secondary px-2 py-1">
+                      <span className="text-[10px] text-muted-foreground">{s.label}</span>
+                      <p className="text-xs font-medium text-card-foreground">{s.value}</p>
+                    </div>
+                  ))}
+              </div>
+            )}
+          />
         </div>
       </DialogContent>
     </Dialog>
