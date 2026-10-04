@@ -116,7 +116,6 @@ export function ItemDetailModal({
 
           <ItemGameExtras
             itemId={String(item.id)}
-            itemDescription={item.attributes.desc}
             suitId={item.attributes.suit_id}
             lookup={lookup}
             fallback={(

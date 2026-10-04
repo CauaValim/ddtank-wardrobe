@@ -7,37 +7,38 @@ import type { ItemLookup } from "@/components/GameDataModal";
 /** Shows official game data (clothing set + mount attributes) for one item. */
 export function ItemGameExtras({
   itemId,
-  itemDescription,
   suitId,
   lookup,
   fallback,
 }: {
   itemId: string;
-  itemDescription?: string;
   suitId?: string;
   lookup?: ItemLookup;
   fallback?: ReactNode;
 }) {
-  const { data } = useGameData(["ClothPropertyTemplateInfo", "ClothGroupTemplateInfo", "MountDrawTemplate"]);
-
-  const progressiveBonus = useMemo(() => {
-    if (!suitId || suitId === "0" || !itemDescription) return null;
-    const describesBonus = /(equipar|combin|atributo adicional|aumenta|reduz|ataque cr[ií]tico|prote[cç][aã]o)/i.test(itemDescription);
-    return describesBonus ? itemDescription.trim() : null;
-  }, [itemDescription, suitId]);
+  const { data } = useGameData(["MountDrawTemplate", "TemplateAllList"]);
 
   const info = useMemo(() => {
     if (!data) return null;
     const mount = data.MountDrawTemplate?.find((m) => m.TemplateId === itemId);
-    const g = data.ClothGroupTemplateInfo?.find((x) => x.TemplateID === itemId);
-    if (!g) return { mount };
-    const set = data.ClothPropertyTemplateInfo?.find((p) => p.ID === g.ID && p.Sex === g.Sex);
-    const pieces = (data.ClothGroupTemplateInfo ?? []).filter((x) => x.ID === g.ID && x.Sex === g.Sex).map((x) => x.TemplateID);
-    return { mount, set, pieces };
-  }, [data, itemId]);
+    if (!suitId || suitId === "0") return { mount };
+
+    const pieces = (data.TemplateAllList ?? []).filter((row) => row.SuitId === suitId);
+    const bonusPattern = /(equipar|combin|atributo adicional|aumenta|reduz|ataque cr[ií]tico|prote[cç][aã]o)/i;
+    const bonus = pieces
+      .map((row) => row.Description?.trim() ?? "")
+      .filter((description) => bonusPattern.test(description))
+      .sort((a, b) => b.length - a.length)[0];
+
+    return { mount, setBonus: bonus, setPieces: pieces };
+  }, [data, itemId, suitId]);
 
   if (!info) return null;
-  const { mount, set, pieces } = info as { mount?: Record<string, string>; set?: Record<string, string>; pieces?: string[] };
+  const { mount, setBonus, setPieces } = info as {
+    mount?: Record<string, string>;
+    setBonus?: string;
+    setPieces?: Record<string, string>[];
+  };
 
   return (
     <>
@@ -59,34 +60,21 @@ export function ItemGameExtras({
           </div>
         </div>
       )}
-      {set && pieces && (
-        <div className="w-full rounded-md border border-border p-2">
-          <p className="text-[10px] text-muted-foreground">Conjunto</p>
-          <p className="text-xs font-bold text-card-foreground">{set.Name}</p>
-          <p className="mt-1 text-[10px] font-medium text-muted-foreground">Bônus do conjunto completo</p>
-          <div className="mt-1 flex flex-wrap gap-1">
-            {[["Atq", set.Attack], ["Def", set.Defend], ["Agi", set.Agility], ["Sorte", set.Luck], ["Vida", set.Blood], ["Dano", set.Damage], ["Armadura", set.Guard]]
-              .filter(([, v]) => n(v))
-              .map(([k, v]) => (
-                <span key={k} className="rounded bg-primary/15 px-1.5 py-0.5 text-[10px] font-medium text-primary">{k} +{v}</span>
-              ))}
-          </div>
+      {setBonus && setPieces && (
+        <div className="w-full rounded-md border border-primary/30 bg-primary/10 p-2">
+          <p className="text-[10px] font-medium text-primary">Bônus por peças equipadas</p>
+          <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-card-foreground">{setBonus}</p>
           <div className="mt-2 grid grid-cols-4 gap-1">
-            {pieces.map((id) => {
+            {setPieces.map((piece) => {
+              const id = piece.TemplateID;
               const it = lookup?.(id);
               return (
-                <div key={id} title={it?.name ?? id} className={`flex aspect-square items-center justify-center overflow-hidden rounded bg-secondary ${id === itemId ? "ring-1 ring-primary" : ""}`}>
+                <div key={id} title={it?.name ?? piece.Name ?? id} className={`flex aspect-square items-center justify-center overflow-hidden rounded bg-secondary ${id === itemId ? "ring-1 ring-primary" : ""}`}>
                   {it?.image ? <img src={it.image} alt="" loading="lazy" className="h-full w-full object-contain" /> : <Package className="h-4 w-4 text-muted-foreground/40" />}
                 </div>
               );
             })}
           </div>
-        </div>
-      )}
-      {progressiveBonus && (
-        <div className="w-full rounded-md border border-primary/30 bg-primary/10 p-2">
-          <p className="text-[10px] font-medium text-primary">Bônus por peças equipadas</p>
-          <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-card-foreground">{progressiveBonus}</p>
         </div>
       )}
       {!mount && fallback}
