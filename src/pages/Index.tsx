@@ -3,7 +3,6 @@ import { Search, Package, Gamepad2, MousePointerClick, CheckSquare, LogOut, User
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useNavigate } from "react-router-dom";
 import { useItemStore } from "@/hooks/useItemStore";
-import { FileImporter } from "@/components/FileImporter";
 import { ItemCard } from "@/components/ItemCard";
 import { ItemDetailModal } from "@/components/ItemDetailModal";
 import { PackageContentsModal } from "@/components/PackageContentsModal";
@@ -31,12 +30,9 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
     totalCount,
     searchQuery,
     setSearchQuery,
-    addItems,
-    addImages,
     getItemImage,
     loading,
     updateItemType,
-    syncDescriptions,
     novidadesCount,
     showNovidades,
     setShowNovidades,
@@ -241,9 +237,6 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
                   </button>
                 )}
               </>
-            )}
-            {auth.canImport && (
-              <FileImporter onItemsLoaded={addItems} onImagesLoaded={addImages} onSyncDescriptions={syncDescriptions} canImportImages={auth.canImportImages} canSyncDescriptions={auth.canSyncDescriptions} />
             )}
             {realm === "br" && (auth.role === "super_admin" || auth.role === "admin") && <GameSyncButton />}
             <button
