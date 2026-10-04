@@ -242,9 +242,6 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
                 )}
               </>
             )}
-            {auth.canImport && (
-              <FileImporter onItemsLoaded={addItems} onImagesLoaded={addImages} onSyncDescriptions={syncDescriptions} canImportImages={auth.canImportImages} canSyncDescriptions={auth.canSyncDescriptions} />
-            )}
             {realm === "br" && (auth.role === "super_admin" || auth.role === "admin") && <GameSyncButton />}
             <button
               onClick={() => setGameDataOpen(true)}
