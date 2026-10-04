@@ -4,10 +4,11 @@ import { Package } from "lucide-react";
 import { useGameData } from "@/hooks/useGameData";
 import type { ItemLookup } from "@/components/GameDataModal";
 
-/** Shows official game data (clothing set + mount attributes) for one item. */
+type Row = Record<string, string>;
+
+/** Shows official game data (equipped-set bonus + mount attributes) for one item. */
 export function ItemGameExtras({
   itemId,
-  suitId,
   lookup,
   fallback,
 }: {
@@ -16,28 +17,32 @@ export function ItemGameExtras({
   lookup?: ItemLookup;
   fallback?: ReactNode;
 }) {
-  const { data } = useGameData(["MountDrawTemplate", "TemplateAllList"]);
+  const { data } = useGameData(["MountDrawTemplate", "SuitTemplateInfoList", "SuitPartEquipInfoList"]);
 
   const info = useMemo(() => {
     if (!data) return null;
-    const mount = data.MountDrawTemplate?.find((m) => m.TemplateId === itemId);
-    if (!suitId || suitId === "0") return { mount };
+    const mount = data.MountDrawTemplate?.find((m) => m.TemplateId === itemId) as Row | undefined;
 
-    const pieces = (data.TemplateAllList ?? []).filter((row) => row.SuitId === suitId);
-    const bonusPattern = /(equipar|combin|atributo adicional|aumenta|reduz|ataque cr[ií]tico|prote[cç][aã]o)/i;
-    const bonus = pieces
-      .map((row) => row.Description?.trim() ?? "")
-      .filter((description) => bonusPattern.test(description))
-      .sort((a, b) => b.length - a.length)[0];
+    const parts = (data.SuitPartEquipInfoList ?? []) as Row[];
+    const ownPart = parts.find((p) => (p.ContainEquip ?? "").split(",").map((s) => s.trim()).includes(itemId));
+    if (!ownPart) return { mount };
 
-    return { mount, setBonus: bonus, setPieces: pieces };
-  }, [data, itemId, suitId]);
+    const suit = (data.SuitTemplateInfoList ?? []).find((s) => s.SuitId === ownPart.ID) as Row | undefined;
+    const tiers = [1, 2, 3, 4, 5]
+      .map((i) => ({ count: Number(suit?.[`EqipCount${i}`] ?? 0), text: (suit?.[`SkillDescribe${i}`] ?? "").trim() }))
+      .filter((t) => t.count > 0 && t.text);
+    const setParts = parts.filter((p) => p.ID === ownPart.ID);
+
+    return { mount, suitName: suit?.SuitName, tiers, setParts, ownPart };
+  }, [data, itemId]);
 
   if (!info) return null;
-  const { mount, setBonus, setPieces } = info as {
-    mount?: Record<string, string>;
-    setBonus?: string;
-    setPieces?: Record<string, string>[];
+  const { mount, suitName, tiers, setParts, ownPart } = info as {
+    mount?: Row;
+    suitName?: string;
+    tiers?: { count: number; text: string }[];
+    setParts?: Row[];
+    ownPart?: Row;
   };
 
   return (
@@ -60,21 +65,31 @@ export function ItemGameExtras({
           </div>
         </div>
       )}
-      {setBonus && setPieces && (
+      {ownPart && tiers && tiers.length > 0 && (
         <div className="w-full rounded-md border border-primary/30 bg-primary/10 p-2">
-          <p className="text-[10px] font-medium text-primary">Bônus por peças equipadas</p>
-          <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-card-foreground">{setBonus}</p>
-          <div className="mt-2 grid grid-cols-4 gap-1">
-            {setPieces.map((piece) => {
-              const id = piece.TemplateID;
-              const it = lookup?.(id);
-              return (
-                <div key={id} title={it?.name ?? piece.Name ?? id} className={`flex aspect-square items-center justify-center overflow-hidden rounded bg-secondary ${id === itemId ? "ring-1 ring-primary" : ""}`}>
-                  {it?.image ? <img src={it.image} alt="" loading="lazy" className="h-full w-full object-contain" /> : <Package className="h-4 w-4 text-muted-foreground/40" />}
-                </div>
-              );
-            })}
+          <p className="text-[10px] font-medium text-primary">Bônus de conjunto equipado{suitName ? ` — ${suitName}` : ""}</p>
+          <div className="mt-1 space-y-1">
+            {tiers.map((t) => (
+              <div key={t.count} className="rounded bg-secondary px-2 py-1">
+                <span className="text-[10px] text-muted-foreground">{t.count} peças equipadas</span>
+                <p className="whitespace-pre-wrap text-xs leading-relaxed text-card-foreground">{t.text}</p>
+              </div>
+            ))}
           </div>
+          {setParts && setParts.length > 0 && (
+            <div className="mt-2 grid grid-cols-4 gap-1">
+              {setParts.map((part) => {
+                const ids = (part.ContainEquip ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+                const it = ids.map((id) => lookup?.(id)).find((x) => x?.image) ?? lookup?.(ids[0]);
+                const isOwn = part === ownPart;
+                return (
+                  <div key={part.ContainEquip} title={part.PartName} className={`flex aspect-square items-center justify-center overflow-hidden rounded bg-secondary ${isOwn ? "ring-1 ring-primary" : ""}`}>
+                    {it?.image ? <img src={it.image} alt={part.PartName} loading="lazy" className="h-full w-full object-contain" /> : <Package className="h-4 w-4 text-muted-foreground/40" />}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
       {!mount && fallback}
