@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { ReactNode } from "react";
 import { Package } from "lucide-react";
-import { useGameData, n } from "@/hooks/useGameData";
+import { useGameData } from "@/hooks/useGameData";
 import type { ItemLookup } from "@/components/GameDataModal";
 
 /** Shows official game data (clothing set + mount attributes) for one item. */
