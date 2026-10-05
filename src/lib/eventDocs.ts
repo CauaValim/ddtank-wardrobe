@@ -173,6 +173,25 @@ async function fetchImage(url: string): Promise<ArrayBuffer | undefined> {
   }
 }
 
+async function fetchTemplate(): Promise<ArrayBuffer> {
+  const candidates = [
+    templateAsset.url,
+    new URL(templateAsset.url, "https://id-preview--731302f9-75e5-4f80-bdb7-6445bf12520f.lovable.app").href,
+  ];
+  for (const url of candidates) {
+    try {
+      const response = await fetch(url);
+      if (!response.ok) continue;
+      const contentType = response.headers.get("content-type") ?? "";
+      const data = await response.arrayBuffer();
+      if (contentType.includes("spreadsheetml") || new Uint8Array(data.slice(0, 2)).every((value, index) => value === [0x50, 0x4b][index])) return data;
+    } catch {
+      // Tenta a próxima origem do asset.
+    }
+  }
+  throw new Error("Não foi possível carregar o modelo oficial");
+}
+
 function nameForSection(section: EventSection, used: Set<string>): string {
   let name = `BR-${SECTION_META[section.type].sheet} ${section.servers}`.slice(0, 31);
   let suffix = 2;
@@ -331,15 +350,17 @@ function fillTable(
 
 export async function exportDocumentFromTemplate(doc: EventDocument, getImage: (id: string) => string) {
   if (doc.sections.length === 0) throw new Error("Adicione ao menos uma seção antes de exportar");
-  const response = await fetch(templateAsset.url);
-  if (!response.ok) throw new Error("Não foi possível carregar o modelo oficial");
-  const original = await response.arrayBuffer();
+  const original = await fetchTemplate();
   const workbook = XLSX.read(original, { type: "array", cellDates: false });
   const selectedSheets = doc.sections.map((section) => getTemplateSheet(section, doc.sections));
   if (selectedSheets.some((name) => !name)) throw new Error("O modelo não possui abas suficientes para os eventos repetidos");
   const ids = [...new Set(doc.sections.flatMap((section) => section.groups.flatMap((group) => group.items.map((item) => item.id))))];
   const imageData = new Map<string, ArrayBuffer | undefined>();
   await Promise.all(ids.map(async (id) => imageData.set(id, await fetchImage(getImage(id)))));
+  const missingImages = ids.filter((id) => !imageData.get(id));
+  if (missingImages.length > 0) {
+    throw new Error(`Não foi possível carregar a imagem de ${missingImages.length} item(ns): ${missingImages.slice(0, 5).join(", ")}`);
+  }
   const changes: WorksheetCellChanges = new Map();
   const images: WorksheetImageChange[] = [];
   const renames = new Map<string, string>();
