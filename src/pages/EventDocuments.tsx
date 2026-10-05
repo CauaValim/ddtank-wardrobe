@@ -34,7 +34,7 @@ function fromRow(row: Row): { doc: EventDocument; converted: number; dropped: nu
 function useCatalog() {
   const { allItems, getItemImage } = useItemStore("br");
   const knownIds = useMemo(() => new Set(allItems.map((i) => i.id)), [allItems]);
-  return { allItems, getItemImage, knownIds };
+  return { getItemImage, knownIds };
 }
 
 async function runExport(doc: EventDocument, getItemImage: (id: string) => string, knownIds: Set<string>): Promise<ValidationIssue[]> {
@@ -171,7 +171,7 @@ function DocList() {
 function Editor({ id }: { id: string }) {
   const navigate = useNavigate();
   const { role } = useAuth();
-  const { allItems, getItemImage, knownIds } = useCatalog();
+  const { getItemImage, knownIds } = useCatalog();
   const [doc, setDoc] = useState<EventDocument | null>(null);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -307,7 +307,6 @@ function Editor({ id }: { id: string }) {
           index={i}
           isFirst={i === 0}
           isLast={i === doc.sections.length - 1}
-          items={allItems}
           knownIds={knownIds}
           getImage={getItemImage}
           onChange={(ns) => update({ sections: doc.sections.map((x) => (x.id === s.id ? ns : x)) })}

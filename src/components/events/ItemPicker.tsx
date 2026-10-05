@@ -1,27 +1,75 @@
-import { useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Plus } from "lucide-react";
-import type { GameItem } from "@/types/item";
+import { Loader2, Plus } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 interface Props {
-  items: GameItem[];
   getImage: (id: string) => string;
   onPick: (item: { id: string; name: string }) => void;
   disabled?: boolean;
 }
 
-export function ItemPicker({ items, getImage, onPick, disabled }: Props) {
+type Result = { id: string; name: string; imageUrl: string };
+
+const LIMIT = 30;
+
+// Busca direto na tabela `items` do painel, para não depender do catálogo
+// carregado no navegador (que chega aos poucos e pode estar desatualizado).
+async function searchItems(term: string): Promise<Result[]> {
+  const pattern = `%${term.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+  const byName = supabase.from("items").select("id, name, image_url").ilike("name", pattern).order("id").limit(LIMIT);
+  const byId = /^\d+$/.test(term)
+    ? supabase.from("items").select("id, name, image_url").eq("id", Number(term)).limit(1)
+    : null;
+  const [names, ids] = await Promise.all([byName, byId]);
+  if (names.error) throw names.error;
+  if (ids?.error) throw ids.error;
+  const seen = new Set<string>();
+  const out: Result[] = [];
+  for (const row of [...(ids?.data ?? []), ...(names.data ?? [])]) {
+    const id = String(row.id);
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push({ id, name: row.name ?? `Item #${id}`, imageUrl: row.image_url ?? "" });
+  }
+  return out.slice(0, LIMIT);
+}
+
+export function ItemPicker({ getImage, onPick, disabled }: Props) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
-  const results = useMemo(() => {
-    const s = q.trim().toLowerCase();
-    if (s.length < 2) return [];
-    return items
-      .filter((i) => i.id === s || i.id.startsWith(s) || i.name.toLowerCase().includes(s))
-      .slice(0, 30);
-  }, [q, items]);
+  const [results, setResults] = useState<Result[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const term = q.trim();
+
+  useEffect(() => {
+    if (term.length < 2) {
+      setResults([]);
+      setLoading(false);
+      setFailed(false);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    const handle = setTimeout(async () => {
+      try {
+        const found = await searchItems(term);
+        if (!cancelled) { setResults(found); setFailed(false); }
+      } catch (err) {
+        console.warn("Falha ao buscar itens:", err);
+        if (!cancelled) { setResults([]); setFailed(true); }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [term]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -33,26 +81,35 @@ export function ItemPicker({ items, getImage, onPick, disabled }: Props) {
       <PopoverContent className="w-96 p-2" align="start">
         <Input autoFocus placeholder="Buscar por nome ou ID..." value={q} onChange={(e) => setQ(e.target.value)} />
         <div className="mt-2 max-h-72 overflow-y-auto space-y-1">
-          {results.map((it) => (
-            <button
-              key={it.id}
-              className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm hover:bg-muted"
-              onClick={() => {
-                onPick({ id: it.id, name: it.name });
-                setOpen(false);
-                setQ("");
-              }}
-            >
-              {getImage(it.id) ? (
-                <img src={getImage(it.id)} alt="" className="h-8 w-8 object-contain" />
-              ) : (
-                <div className="h-8 w-8 rounded bg-muted" />
-              )}
-              <span className="flex-1 truncate">{it.name}</span>
-              <span className="text-xs text-muted-foreground">{it.id}</span>
-            </button>
-          ))}
-          {q.trim().length >= 2 && results.length === 0 && (
+          {results.map((it) => {
+            const image = it.imageUrl || getImage(it.id);
+            return (
+              <button
+                key={it.id}
+                className="flex w-full items-center gap-2 rounded px-2 py-1 text-left text-sm hover:bg-muted"
+                onClick={() => {
+                  onPick({ id: it.id, name: it.name });
+                  setOpen(false);
+                  setQ("");
+                }}
+              >
+                {image ? (
+                  <img src={image} alt="" className="h-8 w-8 object-contain" />
+                ) : (
+                  <div className="h-8 w-8 rounded bg-muted" />
+                )}
+                <span className="flex-1 truncate">{it.name}</span>
+                <span className="text-xs text-muted-foreground">{it.id}</span>
+              </button>
+            );
+          })}
+          {loading && (
+            <p className="flex items-center gap-1 p-2 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Buscando no painel...</p>
+          )}
+          {!loading && failed && (
+            <p className="p-2 text-xs text-destructive">Não foi possível buscar no painel. Tente de novo.</p>
+          )}
+          {!loading && !failed && term.length >= 2 && results.length === 0 && (
             <p className="p-2 text-xs text-muted-foreground">Nenhum item encontrado.</p>
           )}
         </div>
@@ -61,7 +118,7 @@ export function ItemPicker({ items, getImage, onPick, disabled }: Props) {
           variant="ghost"
           className="mt-2 w-full"
           onClick={() => {
-            onPick({ id: "XXX", name: q.trim() || "Item novo" });
+            onPick({ id: "XXX", name: term || "Item novo" });
             setOpen(false);
             setQ("");
           }}

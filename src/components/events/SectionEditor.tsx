@@ -11,10 +11,8 @@ import { ItemRow } from "@/components/events/ItemRow";
 import { renderFormat } from "@/lib/eventTemplate/format";
 import { capacitySummary, emptyBlock, getLayout, newItem } from "@/lib/eventTemplate/model";
 import type { BlockSpec, EventBlock, EventItem, EventSection, FieldSpec, LayoutSpec, SetSpec } from "@/lib/eventTemplate/types";
-import type { GameItem } from "@/types/item";
 
 export interface EditorContext {
-  items: GameItem[];
   knownIds: Set<string>;
   getImage: (id: string) => string;
   layout: LayoutSpec;
@@ -103,7 +101,6 @@ function BlockEditor({ spec, block, title, ctx, onChange, onRemove }: {
               <Badge variant={full ? "default" : "outline"} className="tabular-nums">{items.length} de {g.slots.length}</Badge>
               <span className="flex-1" />
               <ItemPicker
-                items={ctx.items}
                 getImage={ctx.getImage}
                 disabled={full}
                 onPick={(p) => {
@@ -174,7 +171,6 @@ interface SectionProps {
   index: number;
   isFirst: boolean;
   isLast: boolean;
-  items: GameItem[];
   knownIds: Set<string>;
   getImage: (id: string) => string;
   onChange: (s: EventSection) => void;
@@ -182,7 +178,7 @@ interface SectionProps {
   onMove: (dir: -1 | 1) => void;
 }
 
-export function SectionEditor({ section, index, isFirst, isLast, items, knownIds, getImage, onChange, onRemove, onMove }: SectionProps) {
+export function SectionEditor({ section, index, isFirst, isLast, knownIds, getImage, onChange, onRemove, onMove }: SectionProps) {
   const layout = getLayout(section.layoutId);
   if (!layout) {
     return (
@@ -192,7 +188,7 @@ export function SectionEditor({ section, index, isFirst, isLast, items, knownIds
       </Card>
     );
   }
-  const ctx: EditorContext = { items, knownIds, getImage, layout, servers: section.servers, sectionFields: section.fields };
+  const ctx: EditorContext = { knownIds, getImage, layout, servers: section.servers, sectionFields: section.fields };
   const fields = editable(layout.fields);
   return (
     <Card className="space-y-4 p-4">
