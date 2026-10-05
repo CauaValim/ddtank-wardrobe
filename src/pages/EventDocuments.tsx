@@ -28,8 +28,7 @@ function DocList() {
   const navigate = useNavigate();
   const [docs, setDocs] = useState<EventDocument[]>([]);
   const [loading, setLoading] = useState(true);
-  const { getItemImage } = useItemStore("br");
-  const { allItems } = useItemStore("br");
+  const { allItems, getItemImage } = useItemStore("br");
   const knownIds = useMemo(() => new Set(allItems.map((item) => item.id)), [allItems]);
 
   const load = useCallback(async () => {

@@ -500,11 +500,11 @@ export async function finalizeWorkbookTemplate(
         const relId = blip?.getAttributeNS(DOCUMENT_REL_NS, "embed") ?? blip?.getAttribute("r:embed") ?? "";
         return /\.(png|jpe?g)$/i.test(mediaByRel.get(relId) ?? "");
       }) ?? matches[0];
-      if (!raster) continue;
       if (!change.data) {
-        raster.parentNode?.removeChild(raster);
+        matches.forEach((anchor) => anchor.parentNode?.removeChild(anchor));
         continue;
       }
+      if (!raster) continue;
       const blip = getFirstByLocalName(raster, "blip");
       if (!blip) continue;
       let index = 1;

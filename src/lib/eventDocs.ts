@@ -149,7 +149,9 @@ const fileName = (title: string) => `${title.replace(/[^\w\- ]+/g, "_")}.xlsx`;
 const itemLabel = (item: EventItem) => `${item.name}\n${item.validity}`.trim();
 
 function addImage(images: WorksheetImageChange[], sheetName: string, row: number, column: number, data?: ArrayBuffer) {
-  images.push({ sheetName, row, column, data });
+  const existing = images.find((change) => change.sheetName === sheetName && change.row === row && change.column === column);
+  if (existing) existing.data = data;
+  else images.push({ sheetName, row, column, data });
 }
 
 async function fetchImage(url: string): Promise<ArrayBuffer | undefined> {
@@ -227,6 +229,10 @@ function fillTable(
   const isRanking = section.type.startsWith("ranking_");
   if (isRanking) {
     const placements = [[9, 8, 8], [13, 8, 8], [17, 8, 8], [21, 8, 8], [25, 8, 8], [9, 13, 13], [13, 13, 13], [17, 13, 13], [21, 13, 13], [25, 13, 13]];
+    placements.forEach((slot) => {
+      for (let itemIndex = 0; itemIndex < 3; itemIndex += 1) cell(changes, sheet, XLSX.utils.encode_cell({ r: slot[0], c: slot[1] + itemIndex }), "");
+      cell(changes, sheet, XLSX.utils.encode_cell({ r: slot[0] + 1, c: slot[2] }), "");
+    });
     section.groups.forEach((group, groupIndex) => {
       const slot = placements[groupIndex];
       if (!slot) return;
@@ -239,6 +245,14 @@ function fillTable(
   if (section.type === "daily") {
     const rows = data.map((row, index) => ({ row, index })).filter(({ row }) => /^Queue\s+/i.test(String(row[13] ?? "")));
     if (section.groups.length > rows.length) throw new Error(`${SECTION_META[section.type].label}: o modelo possui espaço para ${rows.length} filas`);
+    rows.forEach(({ index: row }) => {
+      for (let itemIndex = 0; itemIndex < 3; itemIndex += 1) {
+        const column = 15 + itemIndex * 3;
+        cell(changes, sheet, XLSX.utils.encode_cell({ r: row, c: column }), "");
+        addImage(images, sheet, row + 1, column + 1);
+      }
+      cell(changes, sheet, XLSX.utils.encode_cell({ r: Math.max(0, row - 1), c: 14 }), "");
+    });
     section.groups.forEach((group, groupIndex) => {
       const target = rows[groupIndex]?.index;
       if (target == null) return;
@@ -258,6 +272,13 @@ function fillTable(
     if (header == null) return;
     const starts: number[] = [];
     for (let r = header + 1; r < data.length; r += 1) if (/^(RECHARGE|CONSUME) OF/i.test(String(data[r]?.[1] ?? ""))) starts.push(r);
+    starts.forEach((start) => {
+      for (let itemIndex = 0; itemIndex < 3; itemIndex += 1) {
+        cell(changes, sheet, XLSX.utils.encode_cell({ r: start + itemIndex, c: 2 }), "");
+        addImage(images, sheet, start + itemIndex + 1, 8 + itemIndex);
+      }
+      cell(changes, sheet, XLSX.utils.encode_cell({ r: start, c: 3 }), "");
+    });
     section.groups.forEach((group, groupIndex) => {
       const start = starts[groupIndex];
       if (start == null) return;
@@ -286,6 +307,12 @@ function fillTable(
   const nameCol = section.type === "ammo" ? 2 : section.type === "exchange" ? (headers[0] != null && String(data[headers[0]]?.[2] ?? "").toLowerCase() === "value" ? 5 : 4) : headers[0] != null ? Math.max(0, data[headers[0]].findIndex((v) => /^ITEM NAME$/i.test(String(v ?? "").trim()))) : 1;
   const imageColumn = section.type === "ammo" ? 4 : section.type === "exchange" ? nameCol + 5 : section.type === "mission" ? nameCol + 5 : nameCol + 4;
   const idCol = section.type === "ammo" ? 5 : section.type === "exchange" ? nameCol + 5 : section.type === "mission" ? nameCol + 6 : nameCol + 5;
+  itemRows.forEach((row) => {
+    cell(changes, sheet, XLSX.utils.encode_cell({ r: row, c: nameCol }), "");
+    cell(changes, sheet, XLSX.utils.encode_cell({ r: row, c: idCol }), "");
+    if (section.type === "ammo") cell(changes, sheet, XLSX.utils.encode_cell({ r: row, c: idCol + 1 }), "");
+    addImage(images, sheet, row + 1, imageColumn);
+  });
   allItems.forEach((item, index) => {
     const row = itemRows[index];
     if (row == null) return;
