@@ -42,7 +42,7 @@ function DocList() {
     const { data: u } = await supabase.auth.getUser();
     const payload = base
       ? { title: `${base.title} (cópia)`, theme: base.theme, servers: base.servers, start_date: base.start_date, end_date: base.end_date, sections: base.sections.map((s) => ({ ...s, id: newId() })), created_by: u.user?.id }
-      : { title: "Novo documento", servers: "s1-s401", template_version: EVENT_TEMPLATE_VERSION, created_by: u.user?.id };
+      : { title: "Novo documento", servers: "s1-s401", created_by: u.user?.id };
     const { data, error } = await table().insert(payload).select().single();
     if (error) return toast.error(error.message);
     navigate(`/eventos/${data.id}`);

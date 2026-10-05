@@ -13,6 +13,8 @@ export interface WorksheetImageChange {
 
 const SPREADSHEET_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 const DOCUMENT_REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+const PACKAGE_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships";
+const IMAGE_REL_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
 const XML_NS = "http://www.w3.org/XML/1998/namespace";
 
 function getDescendantsByLocalName(parent: Document | Element, localName: string): Element[] {
@@ -416,11 +418,23 @@ export async function finalizeWorkbookTemplate(
   assertValidXml(workbookRelsDoc, "xl/_rels/workbook.xml.rels");
   const sheetPathByName = getSheetPathByName(workbookDoc, workbookRelsDoc);
   const selected = new Set(selectedSheets);
+  const oldIndexByName = new Map<string, number>();
+  getDescendantsByLocalName(workbookDoc, "sheet").forEach((sheet, index) => {
+    oldIndexByName.set(sheet.getAttribute("name") ?? "", index);
+  });
 
   for (const sheet of getDescendantsByLocalName(workbookDoc, "sheet")) {
     const name = sheet.getAttribute("name") ?? "";
     if (!selected.has(name)) sheet.parentNode?.removeChild(sheet);
     else if (renames.has(name)) sheet.setAttribute("name", renames.get(name) ?? name);
+  }
+  for (const definedName of getDescendantsByLocalName(workbookDoc, "definedName")) {
+    const rawIndex = definedName.getAttribute("localSheetId");
+    if (rawIndex == null) continue;
+    const oldIndex = Number(rawIndex);
+    const oldName = [...oldIndexByName.entries()].find((entry) => entry[1] === oldIndex)?.[0];
+    if (!oldName || !selected.has(oldName)) definedName.parentNode?.removeChild(definedName);
+    else definedName.setAttribute("localSheetId", String(selectedSheets.indexOf(oldName)));
   }
   zip.file("xl/workbook.xml", serializer.serializeToString(workbookDoc));
 
@@ -482,11 +496,24 @@ export async function finalizeWorkbookTemplate(
         continue;
       }
       const blip = getFirstByLocalName(raster, "blip");
-      const relId = blip?.getAttributeNS(DOCUMENT_REL_NS, "embed") ?? blip?.getAttribute("r:embed") ?? "";
-      const mediaPath = mediaByRel.get(relId);
-      if (mediaPath && /\.(png|jpe?g)$/i.test(mediaPath)) zip.file(mediaPath, change.data);
+      if (!blip) continue;
+      let index = 1;
+      while (zip.file(`xl/media/event-item-${index}.png`)) index += 1;
+      const mediaPath = `xl/media/event-item-${index}.png`;
+      zip.file(mediaPath, change.data);
+      const usedIds = new Set(getDescendantsByLocalName(drawingRelsDoc, "Relationship").map((rel) => rel.getAttribute("Id")));
+      let relIndex = 1;
+      while (usedIds.has(`rIdEvent${relIndex}`)) relIndex += 1;
+      const relId = `rIdEvent${relIndex}`;
+      const rel = drawingRelsDoc.createElementNS(PACKAGE_REL_NS, "Relationship");
+      rel.setAttribute("Id", relId);
+      rel.setAttribute("Type", IMAGE_REL_TYPE);
+      rel.setAttribute("Target", `../media/event-item-${index}.png`);
+      drawingRelsDoc.documentElement.appendChild(rel);
+      blip.setAttributeNS(DOCUMENT_REL_NS, "r:embed", relId);
     }
     zip.file(drawingPath, serializer.serializeToString(drawingDoc));
+    zip.file(relationshipPath(drawingPath), serializer.serializeToString(drawingRelsDoc));
   }
 
   return zip.generateAsync({ type: "arraybuffer", compression: "DEFLATE" });

@@ -43,6 +43,7 @@ export interface EventSection {
   notes: string;
   exchangeItem?: string;
   templateSheet?: string;
+  templateVersion?: string;
   groups: EventGroup[];
 }
 
@@ -93,6 +94,7 @@ export function newSection(type: SectionType, servers: string): EventSection {
     start: "",
     end: "",
     notes: "",
+    templateVersion: EVENT_TEMPLATE_VERSION,
     groups: [{ label: `${meta.groupLabel} 1`, items: [] }],
   };
 }
@@ -204,12 +206,28 @@ function fillTable(
   const allItems = section.groups.flatMap((group) => group.items);
   const isRanking = section.type.startsWith("ranking_");
   if (isRanking) {
-    const placements = [[9, 8, 9], [13, 8, 9], [17, 8, 9], [21, 8, 9], [25, 8, 9], [9, 13, 14], [13, 13, 14], [17, 13, 14], [21, 13, 14], [25, 13, 14]];
+    const placements = [[9, 8, 8], [13, 8, 8], [17, 8, 8], [21, 8, 8], [25, 8, 8], [9, 13, 13], [13, 13, 13], [17, 13, 13], [21, 13, 13], [25, 13, 13]];
     section.groups.forEach((group, groupIndex) => {
       const slot = placements[groupIndex];
       if (!slot) return;
       group.items.slice(0, 3).forEach((item, itemIndex) => cell(changes, sheet, XLSX.utils.encode_cell({ r: slot[0], c: slot[1] + itemIndex }), itemLabel(item)));
       cell(changes, sheet, XLSX.utils.encode_cell({ r: slot[0] + 1, c: slot[2] }), idLine(group.items));
+    });
+    return;
+  }
+  if (section.type === "daily") {
+    const rows = data.map((row, index) => ({ row, index })).filter(({ row }) => /^Queue\s+/i.test(String(row[13] ?? "")));
+    section.groups.forEach((group, groupIndex) => {
+      const target = rows[groupIndex]?.index;
+      if (target == null) return;
+      cell(changes, sheet, XLSX.utils.encode_cell({ r: target, c: 13 }), group.label);
+      group.items.slice(0, 3).forEach((item, itemIndex) => {
+        const column = 15 + itemIndex * 3;
+        cell(changes, sheet, XLSX.utils.encode_cell({ r: target, c: column }), itemLabel(item));
+        addImage(images, sheet, target + 1, column + 1, imageData.get(item.id));
+      });
+      const idRow = Math.max(0, target - 1);
+      cell(changes, sheet, XLSX.utils.encode_cell({ r: idRow, c: 14 }), idLine(group.items));
     });
     return;
   }
@@ -241,8 +259,8 @@ function fillTable(
     }
   });
   const nameCol = section.type === "ammo" ? 2 : section.type === "exchange" ? (headers[0] != null && String(data[headers[0]]?.[2] ?? "").toLowerCase() === "value" ? 5 : 4) : headers[0] != null ? Math.max(0, data[headers[0]].findIndex((v) => /^ITEM NAME$/i.test(String(v ?? "").trim()))) : 1;
-  const imageCol = section.type === "ammo" ? 3 : section.type === "exchange" ? nameCol + 4 : nameCol + 3;
-  const idCol = section.type === "ammo" ? 5 : section.type === "exchange" ? nameCol + 5 : nameCol + 5;
+  const imageColumn = section.type === "ammo" ? 4 : section.type === "exchange" ? nameCol + 5 : section.type === "mission" ? nameCol + 5 : nameCol + 4;
+  const idCol = section.type === "ammo" ? 5 : section.type === "exchange" ? nameCol + 5 : section.type === "mission" ? nameCol + 6 : nameCol + 5;
   allItems.forEach((item, index) => {
     const row = itemRows[index];
     if (row == null) return;
@@ -255,7 +273,7 @@ function fillTable(
     } else {
       cell(changes, sheet, XLSX.utils.encode_cell({ r: row, c: idCol }), `${item.id || "XXX"}*${item.qty}`);
     }
-    addImage(images, sheet, row + 1, imageCol + 1, imageData.get(item.id));
+    addImage(images, sheet, row + 1, imageColumn, imageData.get(item.id));
   });
 }
 
@@ -294,53 +312,3 @@ export async function exportDocumentFromTemplate(doc: EventDocument, getImage: (
   URL.revokeObjectURL(url);
 }
 
-export function exportDocumentXlsx(doc: EventDocument) {
-  const wb = XLSX.utils.book_new();
-  const used = new Set<string>();
-  doc.sections.forEach((s) => {
-    const meta = SECTION_META[s.type];
-    const rows: (string | number)[][] = [];
-    rows.push([`${meta.sheet.toUpperCase()} ${s.servers}`]);
-    rows.push([`DATE ENTRY: ${fmtDate(s.start)}`]);
-    rows.push([`DATE END: ${fmtDate(s.end)}`]);
-    if (s.notes) rows.push([s.notes]);
-    rows.push([]);
-    if (meta.hasTitles) {
-      if (s.titleEn) rows.push([`Title: ${s.titleEn}`]);
-      rows.push(["PORTUGUESE TRANSLATION"]);
-      rows.push(["Title:", s.titlePt]);
-      rows.push(["Description:", s.descPt]);
-      rows.push([]);
-    }
-    if (s.exchangeItem) rows.push(["EXCHANGE ITEM", s.exchangeItem], []);
-    s.groups.forEach((g) => {
-      rows.push([g.label]);
-      if (meta.hasValue) {
-        rows.push(["Value", "Item Name", "ID / Amount", "Condition"]);
-        g.items.forEach((it) =>
-          rows.push([g.value ?? "", `${it.name}\n${it.validity}`, `${it.id || "XXX"}*${it.qty}`, it.condition ?? ""]),
-        );
-      } else if (meta.hasPrice) {
-        rows.push(["Item Name", "Value", "ID", "Amount", "Condition"]);
-        g.items.forEach((it) =>
-          rows.push([`${it.name}\n${it.validity}`, it.price ?? "", it.id || "XXX", `*${it.qty}`, it.condition ?? ""]),
-        );
-      } else {
-        rows.push(["Item Name", "ID / Amount"]);
-        g.items.forEach((it, i) =>
-          rows.push([`${it.name}\n${it.validity}`, i === 0 ? idLine(g.items) : ""]),
-        );
-      }
-      rows.push([]);
-    });
-    const ws = XLSX.utils.aoa_to_sheet(rows);
-    ws["!cols"] = [{ wch: 45 }, { wch: 40 }, { wch: 22 }, { wch: 14 }, { wch: 30 }];
-    let name = `BR-${meta.sheet} ${s.servers}`.slice(0, 31);
-    let n = 2;
-    while (used.has(name)) name = `${name.slice(0, 28)} ${n++}`;
-    used.add(name);
-    XLSX.utils.book_append_sheet(wb, ws, name);
-  });
-  if (doc.sections.length === 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Vazio"]]), "Doc");
-  XLSX.writeFile(wb, `${doc.title.replace(/[^\w\- ]+/g, "_")}.xlsx`);
-}
