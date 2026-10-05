@@ -428,6 +428,13 @@ export async function finalizeWorkbookTemplate(
     if (!selected.has(name)) sheet.parentNode?.removeChild(sheet);
     else if (renames.has(name)) sheet.setAttribute("name", renames.get(name) ?? name);
   }
+  const sheetsNode = getFirstByLocalName(workbookDoc, "sheets");
+  if (sheetsNode) {
+    selectedSheets.forEach((name) => {
+      const sheet = getChildElementsByLocalName(sheetsNode, "sheet").find((candidate) => candidate.getAttribute("name") === (renames.get(name) ?? name));
+      if (sheet) sheetsNode.appendChild(sheet);
+    });
+  }
   for (const definedName of getDescendantsByLocalName(workbookDoc, "definedName")) {
     const rawIndex = definedName.getAttribute("localSheetId");
     if (rawIndex == null) continue;

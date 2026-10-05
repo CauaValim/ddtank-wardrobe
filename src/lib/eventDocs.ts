@@ -189,6 +189,26 @@ function commonFields(changes: WorksheetCellChanges, sheet: string, section: Eve
       if (/^DATE END:/i.test(value)) cell(changes, sheet, ref, `DATE END: ${fmtDate(section.end)}`);
     }
   }
+  if (!SECTION_META[section.type].hasTitles) return;
+  let markerRow = -1;
+  for (let r = 0; r < data.length; r += 1) {
+    if (data[r]?.some((value) => /PORTUGUESE TRANSLATION/i.test(String(value ?? "")))) {
+      markerRow = r;
+      break;
+    }
+  }
+  if (markerRow < 0) return;
+  for (let r = markerRow + 1; r < Math.min(data.length, markerRow + 6); r += 1) {
+    const row = data[r] ?? [];
+    for (let c = 0; c < row.length; c += 1) {
+      const label = String(row[c] ?? "").trim();
+      const isTitle = /^Title\s*[:：]?$/i.test(label);
+      const isDescription = /^Description\s*[:：]?$/i.test(label);
+      if (!isTitle && !isDescription) continue;
+      const targetColumn = row.findIndex((value, index) => index > c && String(value ?? "").trim().length > 0);
+      if (targetColumn >= 0) cell(changes, sheet, XLSX.utils.encode_cell({ r, c: targetColumn }), isTitle ? section.titlePt : section.descPt);
+    }
+  }
 }
 
 function fillTable(
@@ -213,10 +233,12 @@ function fillTable(
       group.items.slice(0, 3).forEach((item, itemIndex) => cell(changes, sheet, XLSX.utils.encode_cell({ r: slot[0], c: slot[1] + itemIndex }), itemLabel(item)));
       cell(changes, sheet, XLSX.utils.encode_cell({ r: slot[0] + 1, c: slot[2] }), idLine(group.items));
     });
+    if (section.groups.length > placements.length) throw new Error(`${SECTION_META[section.type].label}: o modelo possui espaço para ${placements.length} posições`);
     return;
   }
   if (section.type === "daily") {
     const rows = data.map((row, index) => ({ row, index })).filter(({ row }) => /^Queue\s+/i.test(String(row[13] ?? "")));
+    if (section.groups.length > rows.length) throw new Error(`${SECTION_META[section.type].label}: o modelo possui espaço para ${rows.length} filas`);
     section.groups.forEach((group, groupIndex) => {
       const target = rows[groupIndex]?.index;
       if (target == null) return;
@@ -247,6 +269,7 @@ function fillTable(
         addImage(images, sheet, row + 1, 8 + itemIndex, imageData.get(item.id));
       });
     });
+    if (section.groups.length > starts.length) throw new Error(`${SECTION_META[section.type].label}: o modelo possui espaço para ${starts.length} faixas`);
     return;
   }
   const itemRows: number[] = [];

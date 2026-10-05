@@ -12,7 +12,7 @@ import { toast } from "sonner";
 import { ArrowLeft, Copy, Download, FileText, Plus, Save, Trash2, ChevronUp, ChevronDown, ShieldCheck, LayoutTemplate } from "lucide-react";
 import { ItemPicker } from "@/components/events/ItemPicker";
 import {
-  SECTION_META, EVENT_TEMPLATE_VERSION, newSection, newId, idLine, validateDocument, exportDocumentFromTemplate,
+  SECTION_META, newSection, newId, idLine, validateDocument, exportDocumentFromTemplate,
   type EventDocument, type EventSection, type SectionType,
 } from "@/lib/eventDocs";
 
