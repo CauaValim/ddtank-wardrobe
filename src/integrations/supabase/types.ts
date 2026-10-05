@@ -45,6 +45,7 @@ export type Database = {
           servers: string
           start_date: string | null
           status: string
+          template_version: string | null
           theme: string | null
           title: string
           updated_at: string
@@ -58,6 +59,7 @@ export type Database = {
           servers?: string
           start_date?: string | null
           status?: string
+          template_version?: string | null
           theme?: string | null
           title: string
           updated_at?: string
@@ -71,6 +73,7 @@ export type Database = {
           servers?: string
           start_date?: string | null
           status?: string
+          template_version?: string | null
           theme?: string | null
           title?: string
           updated_at?: string
