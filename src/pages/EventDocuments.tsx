@@ -96,6 +96,7 @@ function Editor({ id }: { id: string }) {
   const [newType, setNewType] = useState<SectionType>("daily");
   const knownIds = useMemo(() => new Set(allItems.map((i) => i.id)), [allItems]);
   const [issues, setIssues] = useState<ReturnType<typeof validateDocument> | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     table().select("*").eq("id", id).single().then(({ data, error }: { data: EventDocument; error: Error | null }) => {
@@ -143,17 +144,20 @@ function Editor({ id }: { id: string }) {
           <SelectContent><SelectItem value="draft">Rascunho</SelectItem><SelectItem value="final">Finalizado</SelectItem></SelectContent>
         </Select>
         <Button variant="outline" className="gap-1" onClick={() => setIssues(validateDocument(doc, knownIds))}><ShieldCheck className="h-4 w-4" /> Validar</Button>
-        <Button variant="outline" className="gap-1" onClick={async () => {
+        <Button variant="outline" className="gap-1" disabled={exporting} onClick={async () => {
           const found = validateDocument(doc, knownIds);
           setIssues(found);
           if (found.length > 0) return toast.error("Corrija os problemas antes de exportar");
+          setExporting(true);
           try {
             await exportDocumentFromTemplate(doc, getItemImage);
             toast.success("Documento exportado no modelo oficial");
           } catch (error) {
             toast.error(error instanceof Error ? error.message : "Falha ao exportar");
+          } finally {
+            setExporting(false);
           }
-        }}><Download className="h-4 w-4" /> .xlsx</Button>
+        }}><Download className="h-4 w-4" /> {exporting ? "Gerando..." : ".xlsx"}</Button>
         <Button className="gap-1" onClick={save} disabled={saving || !dirty}><Save className="h-4 w-4" /> {saving ? "Salvando..." : "Salvar"}</Button>
       </div>
 

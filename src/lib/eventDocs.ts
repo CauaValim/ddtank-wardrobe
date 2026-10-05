@@ -258,6 +258,8 @@ function fillTable(
       if (row.some((v) => String(v ?? "").includes("["))) itemRows.push(r);
     }
   });
+  const slotCapacity = itemRows.length;
+  if (allItems.length > slotCapacity) throw new Error(`${SECTION_META[section.type].label}: o modelo possui espaço para ${slotCapacity} item(ns)`);
   const nameCol = section.type === "ammo" ? 2 : section.type === "exchange" ? (headers[0] != null && String(data[headers[0]]?.[2] ?? "").toLowerCase() === "value" ? 5 : 4) : headers[0] != null ? Math.max(0, data[headers[0]].findIndex((v) => /^ITEM NAME$/i.test(String(v ?? "").trim()))) : 1;
   const imageColumn = section.type === "ammo" ? 4 : section.type === "exchange" ? nameCol + 5 : section.type === "mission" ? nameCol + 5 : nameCol + 4;
   const idCol = section.type === "ammo" ? 5 : section.type === "exchange" ? nameCol + 5 : section.type === "mission" ? nameCol + 6 : nameCol + 5;
