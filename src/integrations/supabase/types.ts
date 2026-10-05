@@ -35,6 +35,48 @@ export type Database = {
         }
         Relationships: []
       }
+      event_documents: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          end_date: string | null
+          id: string
+          sections: Json
+          servers: string
+          start_date: string | null
+          status: string
+          theme: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          end_date?: string | null
+          id?: string
+          sections?: Json
+          servers?: string
+          start_date?: string | null
+          status?: string
+          theme?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          end_date?: string | null
+          id?: string
+          sections?: Json
+          servers?: string
+          start_date?: string | null
+          status?: string
+          theme?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       item_categories: {
         Row: {
           category_id: string

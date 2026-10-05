@@ -239,6 +239,14 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
               </>
             )}
             {realm === "br" && (auth.role === "super_admin" || auth.role === "admin") && <GameSyncButton />}
+            {auth.canImport && (
+              <button
+                onClick={() => navigate("/eventos")}
+                className="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-muted transition-all"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5" /> Documentos de Eventos
+              </button>
+            )}
             <button
               onClick={() => setGameDataOpen(true)}
               className="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-muted transition-all"

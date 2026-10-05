@@ -11,6 +11,7 @@ import Login from "./pages/Login";
 import UserManagement from "./pages/UserManagement";
 import Trust from "./pages/Trust";
 import NotFound from "./pages/NotFound";
+import EventDocuments from "./pages/EventDocuments";
 
 const queryClient = new QueryClient();
 
@@ -46,6 +47,8 @@ function AppRoutes() {
             {auth.role === "super_admin" && (
               <Route path="/users" element={<UserManagement />} />
             )}
+            {auth.canImport && <Route path="/eventos" element={<EventDocuments />} />}
+            {auth.canImport && <Route path="/eventos/:id" element={<EventDocuments />} />}
             <Route path="/trust" element={<Trust />} />
             <Route path="/login" element={<Navigate to="/" replace />} />
             <Route path="*" element={<NotFound />} />
