@@ -9,10 +9,10 @@ import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { ArrowLeft, Copy, Download, FileText, Plus, Save, Trash2, ChevronUp, ChevronDown, ShieldCheck } from "lucide-react";
+import { ArrowLeft, Copy, Download, FileText, Plus, Save, Trash2, ChevronUp, ChevronDown, ShieldCheck, LayoutTemplate } from "lucide-react";
 import { ItemPicker } from "@/components/events/ItemPicker";
 import {
-  SECTION_META, newSection, newId, idLine, validateDocument, exportDocumentXlsx,
+  SECTION_META, newSection, newId, idLine, validateDocument, exportDocumentFromTemplate,
   type EventDocument, type EventSection, type SectionType,
 } from "@/lib/eventDocs";
 
@@ -28,6 +28,8 @@ function DocList() {
   const navigate = useNavigate();
   const [docs, setDocs] = useState<EventDocument[]>([]);
   const [loading, setLoading] = useState(true);
+  const { allItems, getItemImage } = useItemStore("br");
+  const knownIds = useMemo(() => new Set(allItems.map((item) => item.id)), [allItems]);
 
   const load = useCallback(async () => {
     const { data, error } = await table().select("*").order("updated_at", { ascending: false });
@@ -75,7 +77,12 @@ function DocList() {
           <Badge variant={d.status === "final" ? "default" : "secondary"}>{d.status === "final" ? "Finalizado" : "Rascunho"}</Badge>
           <Button size="sm" onClick={() => navigate(`/eventos/${d.id}`)}>Abrir</Button>
           <Button size="icon" variant="ghost" title="Duplicar" onClick={() => create(d)}><Copy className="h-4 w-4" /></Button>
-          <Button size="icon" variant="ghost" title="Exportar .xlsx" onClick={() => exportDocumentXlsx(d)}><Download className="h-4 w-4" /></Button>
+          <Button size="icon" variant="ghost" title="Exportar no modelo oficial" onClick={async () => {
+            const found = validateDocument(d, knownIds);
+            if (found.length > 0) return toast.error("Abra o documento e corrija os problemas antes de exportar");
+            try { await exportDocumentFromTemplate(d, getItemImage); }
+            catch (error) { toast.error(error instanceof Error ? error.message : "Falha ao exportar"); }
+          }}><Download className="h-4 w-4" /></Button>
           <Button size="icon" variant="ghost" title="Excluir" onClick={() => remove(d)}><Trash2 className="h-4 w-4" /></Button>
         </Card>
       ))}
@@ -92,6 +99,7 @@ function Editor({ id }: { id: string }) {
   const [newType, setNewType] = useState<SectionType>("daily");
   const knownIds = useMemo(() => new Set(allItems.map((i) => i.id)), [allItems]);
   const [issues, setIssues] = useState<ReturnType<typeof validateDocument> | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     table().select("*").eq("id", id).single().then(({ data, error }: { data: EventDocument; error: Error | null }) => {
@@ -101,8 +109,10 @@ function Editor({ id }: { id: string }) {
   }, [id]);
 
   const update = (patch: Partial<EventDocument>) => { setDoc((d) => d && { ...d, ...patch }); setDirty(true); };
-  const updateSection = (sid: string, patch: Partial<EventSection>) =>
-    update({ sections: doc!.sections.map((s) => (s.id === sid ? { ...s, ...patch } : s)) });
+  const updateSection = (sid: string, patch: Partial<EventSection>) => {
+    if (!doc) return;
+    update({ sections: doc.sections.map((s) => (s.id === sid ? { ...s, ...patch } : s)) });
+  };
 
   const save = async () => {
     if (!doc) return;
@@ -137,7 +147,20 @@ function Editor({ id }: { id: string }) {
           <SelectContent><SelectItem value="draft">Rascunho</SelectItem><SelectItem value="final">Finalizado</SelectItem></SelectContent>
         </Select>
         <Button variant="outline" className="gap-1" onClick={() => setIssues(validateDocument(doc, knownIds))}><ShieldCheck className="h-4 w-4" /> Validar</Button>
-        <Button variant="outline" className="gap-1" onClick={() => exportDocumentXlsx(doc)}><Download className="h-4 w-4" /> .xlsx</Button>
+        <Button variant="outline" className="gap-1" disabled={exporting} onClick={async () => {
+          const found = validateDocument(doc, knownIds);
+          setIssues(found);
+          if (found.length > 0) return toast.error("Corrija os problemas antes de exportar");
+          setExporting(true);
+          try {
+            await exportDocumentFromTemplate(doc, getItemImage);
+            toast.success("Documento exportado no modelo oficial");
+          } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Falha ao exportar");
+          } finally {
+            setExporting(false);
+          }
+        }}><Download className="h-4 w-4" /> {exporting ? "Gerando..." : ".xlsx"}</Button>
         <Button className="gap-1" onClick={save} disabled={saving || !dirty}><Save className="h-4 w-4" /> {saving ? "Salvando..." : "Salvar"}</Button>
       </div>
 
@@ -147,6 +170,11 @@ function Editor({ id }: { id: string }) {
         <Field label="Início"><Input type="date" value={doc.start_date ?? ""} onChange={(e) => update({ start_date: e.target.value })} /></Field>
         <Field label="Fim"><Input type="date" value={doc.end_date ?? ""} onChange={(e) => update({ end_date: e.target.value })} /></Field>
       </Card>
+
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <LayoutTemplate className="h-4 w-4 text-primary" />
+        Modelo ativo: 16 Anos de DDTank · imagens e formatação original preservadas
+      </div>
 
       {issues && (
         <Card className="p-4 space-y-1">
@@ -207,6 +235,7 @@ function SectionEditor({ section: s, index, items, getImage, onChange, onRemove,
     <Card className="p-4 space-y-3">
       <div className="flex items-center gap-2">
         <Badge>{index + 1}. {meta.label}</Badge>
+        <Badge variant="outline" className="gap-1"><LayoutTemplate className="h-3 w-3" /> Layout oficial</Badge>
         <span className="flex-1" />
         <Button size="icon" variant="ghost" onClick={() => onMove(-1)}><ChevronUp className="h-4 w-4" /></Button>
         <Button size="icon" variant="ghost" onClick={() => onMove(1)}><ChevronDown className="h-4 w-4" /></Button>

@@ -4,8 +4,17 @@ import JSZip from "jszip";
 export type XlsxCellValue = string | number;
 export type WorksheetCellChanges = Map<string, Map<string, XlsxCellValue>>;
 
+export interface WorksheetImageChange {
+  sheetName: string;
+  row: number;
+  column: number;
+  data?: ArrayBuffer;
+}
+
 const SPREADSHEET_NS = "http://schemas.openxmlformats.org/spreadsheetml/2006/main";
 const DOCUMENT_REL_NS = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+const PACKAGE_REL_NS = "http://schemas.openxmlformats.org/package/2006/relationships";
+const IMAGE_REL_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
 const XML_NS = "http://www.w3.org/XML/1998/namespace";
 
 function getDescendantsByLocalName(parent: Document | Element, localName: string): Element[] {
@@ -372,6 +381,149 @@ export async function applyWorkbookChanges(
 
     updateDimension(sheetDoc, changedRefs);
     zip.file(sheetPath, serializer.serializeToString(sheetDoc));
+  }
+
+  return zip.generateAsync({ type: "arraybuffer", compression: "DEFLATE" });
+}
+
+function relationshipPath(ownerPath: string): string {
+  const slash = ownerPath.lastIndexOf("/");
+  return `${ownerPath.slice(0, slash)}/_rels/${ownerPath.slice(slash + 1)}.rels`;
+}
+
+/**
+ * Keeps only selected worksheets, optionally renames them, and replaces/removes
+ * images by their drawing anchor. Unrelated OOXML parts remain byte-for-byte intact.
+ */
+export async function finalizeWorkbookTemplate(
+  originalBuffer: ArrayBuffer,
+  selectedSheets: string[],
+  renames: Map<string, string>,
+  imageChanges: WorksheetImageChange[],
+): Promise<ArrayBuffer> {
+  const zip = await JSZip.loadAsync(originalBuffer);
+  const workbookFile = zip.file("xl/workbook.xml");
+  const workbookRelsFile = zip.file("xl/_rels/workbook.xml.rels");
+  if (!workbookFile || !workbookRelsFile) throw new Error("Estrutura XLSX inválida: workbook não encontrado");
+
+  const parser = new DOMParser();
+  const serializer = new XMLSerializer();
+  const [workbookXml, workbookRelsXml] = await Promise.all([
+    workbookFile.async("string"),
+    workbookRelsFile.async("string"),
+  ]);
+  const workbookDoc = parser.parseFromString(workbookXml, "application/xml");
+  const workbookRelsDoc = parser.parseFromString(workbookRelsXml, "application/xml");
+  assertValidXml(workbookDoc, "xl/workbook.xml");
+  assertValidXml(workbookRelsDoc, "xl/_rels/workbook.xml.rels");
+  const sheetPathByName = getSheetPathByName(workbookDoc, workbookRelsDoc);
+  const selected = new Set(selectedSheets);
+  const oldIndexByName = new Map<string, number>();
+  getDescendantsByLocalName(workbookDoc, "sheet").forEach((sheet, index) => {
+    oldIndexByName.set(sheet.getAttribute("name") ?? "", index);
+  });
+
+  for (const sheet of getDescendantsByLocalName(workbookDoc, "sheet")) {
+    const name = sheet.getAttribute("name") ?? "";
+    if (!selected.has(name)) sheet.parentNode?.removeChild(sheet);
+    else if (renames.has(name)) sheet.setAttribute("name", renames.get(name) ?? name);
+  }
+  const sheetsNode = getFirstByLocalName(workbookDoc, "sheets");
+  if (sheetsNode) {
+    selectedSheets.forEach((name) => {
+      const sheet = getChildElementsByLocalName(sheetsNode, "sheet").find((candidate) => candidate.getAttribute("name") === (renames.get(name) ?? name));
+      if (sheet) sheetsNode.appendChild(sheet);
+    });
+  }
+  const workbookView = getFirstByLocalName(workbookDoc, "workbookView");
+  workbookView?.setAttribute("activeTab", "0");
+  workbookView?.setAttribute("firstSheet", "0");
+  for (const definedName of getDescendantsByLocalName(workbookDoc, "definedName")) {
+    const rawIndex = definedName.getAttribute("localSheetId");
+    if (rawIndex == null) continue;
+    const oldIndex = Number(rawIndex);
+    const oldName = [...oldIndexByName.entries()].find((entry) => entry[1] === oldIndex)?.[0];
+    if (!oldName || !selected.has(oldName)) definedName.parentNode?.removeChild(definedName);
+    else definedName.setAttribute("localSheetId", String(selectedSheets.indexOf(oldName)));
+  }
+  zip.file("xl/workbook.xml", serializer.serializeToString(workbookDoc));
+
+  const changesBySheet = new Map<string, WorksheetImageChange[]>();
+  imageChanges.forEach((change) => {
+    const list = changesBySheet.get(change.sheetName) ?? [];
+    list.push(change);
+    changesBySheet.set(change.sheetName, list);
+  });
+
+  for (const [sheetName, changes] of changesBySheet) {
+    const sheetPath = sheetPathByName.get(sheetName);
+    if (!sheetPath) continue;
+    const sheetFile = zip.file(sheetPath);
+    const sheetRelsFile = zip.file(relationshipPath(sheetPath));
+    if (!sheetFile || !sheetRelsFile) continue;
+    const [sheetXml, sheetRelsXml] = await Promise.all([sheetFile.async("string"), sheetRelsFile.async("string")]);
+    const sheetDoc = parser.parseFromString(sheetXml, "application/xml");
+    const sheetRelsDoc = parser.parseFromString(sheetRelsXml, "application/xml");
+    const drawing = getFirstByLocalName(sheetDoc, "drawing");
+    const drawingRelId = drawing?.getAttributeNS(DOCUMENT_REL_NS, "id") ?? drawing?.getAttribute("r:id");
+    const drawingTarget = getDescendantsByLocalName(sheetRelsDoc, "Relationship")
+      .find((rel) => rel.getAttribute("Id") === drawingRelId)?.getAttribute("Target");
+    if (!drawingTarget) continue;
+    const drawingPath = resolveZipPath(sheetPath.slice(0, sheetPath.lastIndexOf("/")), drawingTarget);
+    const drawingFile = zip.file(drawingPath);
+    const drawingRelsFile = zip.file(relationshipPath(drawingPath));
+    if (!drawingFile || !drawingRelsFile) continue;
+    const [drawingXml, drawingRelsXml] = await Promise.all([drawingFile.async("string"), drawingRelsFile.async("string")]);
+    const drawingDoc = parser.parseFromString(drawingXml, "application/xml");
+    const drawingRelsDoc = parser.parseFromString(drawingRelsXml, "application/xml");
+    const mediaByRel = new Map<string, string>();
+    getDescendantsByLocalName(drawingRelsDoc, "Relationship").forEach((rel) => {
+      const id = rel.getAttribute("Id");
+      const target = rel.getAttribute("Target");
+      if (id && target) mediaByRel.set(id, resolveZipPath(drawingPath.slice(0, drawingPath.lastIndexOf("/")), target));
+    });
+
+    const anchors = [
+      ...getDescendantsByLocalName(drawingDoc, "oneCellAnchor"),
+      ...getDescendantsByLocalName(drawingDoc, "twoCellAnchor"),
+    ];
+    for (const change of changes) {
+      const matches = anchors.filter((anchor) => {
+        const from = getChildElementsByLocalName(anchor, "from")[0];
+        if (!from) return false;
+        const row = Number(getChildElementsByLocalName(from, "row")[0]?.textContent ?? "-1") + 1;
+        const column = Number(getChildElementsByLocalName(from, "col")[0]?.textContent ?? "-1") + 1;
+        return row === change.row && column === change.column;
+      });
+      const raster = matches.find((anchor) => {
+        const blip = getFirstByLocalName(anchor, "blip");
+        const relId = blip?.getAttributeNS(DOCUMENT_REL_NS, "embed") ?? blip?.getAttribute("r:embed") ?? "";
+        return /\.(png|jpe?g)$/i.test(mediaByRel.get(relId) ?? "");
+      }) ?? matches[0];
+      if (!change.data) {
+        matches.forEach((anchor) => anchor.parentNode?.removeChild(anchor));
+        continue;
+      }
+      if (!raster) continue;
+      const blip = getFirstByLocalName(raster, "blip");
+      if (!blip) continue;
+      let index = 1;
+      while (zip.file(`xl/media/event-item-${index}.png`)) index += 1;
+      const mediaPath = `xl/media/event-item-${index}.png`;
+      zip.file(mediaPath, change.data);
+      const usedIds = new Set(getDescendantsByLocalName(drawingRelsDoc, "Relationship").map((rel) => rel.getAttribute("Id")));
+      let relIndex = 1;
+      while (usedIds.has(`rIdEvent${relIndex}`)) relIndex += 1;
+      const relId = `rIdEvent${relIndex}`;
+      const rel = drawingRelsDoc.createElementNS(PACKAGE_REL_NS, "Relationship");
+      rel.setAttribute("Id", relId);
+      rel.setAttribute("Type", IMAGE_REL_TYPE);
+      rel.setAttribute("Target", `../media/event-item-${index}.png`);
+      drawingRelsDoc.documentElement.appendChild(rel);
+      blip.setAttributeNS(DOCUMENT_REL_NS, "r:embed", relId);
+    }
+    zip.file(drawingPath, serializer.serializeToString(drawingDoc));
+    zip.file(relationshipPath(drawingPath), serializer.serializeToString(drawingRelsDoc));
   }
 
   return zip.generateAsync({ type: "arraybuffer", compression: "DEFLATE" });
