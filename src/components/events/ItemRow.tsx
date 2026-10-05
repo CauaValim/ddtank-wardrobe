@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { BINDS, DURATIONS, type EventItem, type ItemFieldSpec } from "@/lib/eventTemplate/types";
 import { fileToItemImage } from "@/lib/eventTemplate/browserImages";
+import type { IdStatus } from "@/lib/eventTemplate/itemLookup";
 
 interface Props {
   item: EventItem;

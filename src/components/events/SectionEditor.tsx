@@ -11,6 +11,7 @@ import { ItemRow } from "@/components/events/ItemRow";
 import { renderFormat } from "@/lib/eventTemplate/format";
 import { capacitySummary, emptyBlock, getLayout, newItem } from "@/lib/eventTemplate/model";
 import type { BlockSpec, EventBlock, EventItem, EventSection, FieldSpec, LayoutSpec, SetSpec } from "@/lib/eventTemplate/types";
+import type { IdStatus } from "@/lib/eventTemplate/itemLookup";
 
 export interface EditorContext {
   idStatus: (id: string) => IdStatus;
