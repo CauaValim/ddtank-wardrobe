@@ -357,6 +357,10 @@ export async function exportDocumentFromTemplate(doc: EventDocument, getImage: (
   const ids = [...new Set(doc.sections.flatMap((section) => section.groups.flatMap((group) => group.items.map((item) => item.id))))];
   const imageData = new Map<string, ArrayBuffer | undefined>();
   await Promise.all(ids.map(async (id) => imageData.set(id, await fetchImage(getImage(id)))));
+  const missingImages = ids.filter((id) => !imageData.get(id));
+  if (missingImages.length > 0) {
+    throw new Error(`Não foi possível carregar a imagem de ${missingImages.length} item(ns): ${missingImages.slice(0, 5).join(", ")}`);
+  }
   const changes: WorksheetCellChanges = new Map();
   const images: WorksheetImageChange[] = [];
   const renames = new Map<string, string>();
