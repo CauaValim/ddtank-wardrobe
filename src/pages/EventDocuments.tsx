@@ -29,6 +29,8 @@ function DocList() {
   const [docs, setDocs] = useState<EventDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const { getItemImage } = useItemStore("br");
+  const { allItems } = useItemStore("br");
+  const knownIds = useMemo(() => new Set(allItems.map((item) => item.id)), [allItems]);
 
   const load = useCallback(async () => {
     const { data, error } = await table().select("*").order("updated_at", { ascending: false });
@@ -77,6 +79,8 @@ function DocList() {
           <Button size="sm" onClick={() => navigate(`/eventos/${d.id}`)}>Abrir</Button>
           <Button size="icon" variant="ghost" title="Duplicar" onClick={() => create(d)}><Copy className="h-4 w-4" /></Button>
           <Button size="icon" variant="ghost" title="Exportar no modelo oficial" onClick={async () => {
+            const found = validateDocument(d, knownIds);
+            if (found.length > 0) return toast.error("Abra o documento e corrija os problemas antes de exportar");
             try { await exportDocumentFromTemplate(d, getItemImage); }
             catch (error) { toast.error(error instanceof Error ? error.message : "Falha ao exportar"); }
           }}><Download className="h-4 w-4" /></Button>

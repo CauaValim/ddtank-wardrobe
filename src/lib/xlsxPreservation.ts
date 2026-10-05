@@ -435,6 +435,9 @@ export async function finalizeWorkbookTemplate(
       if (sheet) sheetsNode.appendChild(sheet);
     });
   }
+  const workbookView = getFirstByLocalName(workbookDoc, "workbookView");
+  workbookView?.setAttribute("activeTab", "0");
+  workbookView?.setAttribute("firstSheet", "0");
   for (const definedName of getDescendantsByLocalName(workbookDoc, "definedName")) {
     const rawIndex = definedName.getAttribute("localSheetId");
     if (rawIndex == null) continue;
