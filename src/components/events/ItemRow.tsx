@@ -12,7 +12,7 @@ interface Props {
   index: number;
   kind: "items" | "requirements";
   itemFields?: ItemFieldSpec[];
-  knownIds: Set<string>;
+  idStatus: (id: string) => IdStatus;
   getImage: (id: string) => string;
   onChange: (patch: Partial<EventItem>) => void;
   onRemove: () => void;
@@ -20,11 +20,11 @@ interface Props {
 
 const NO_BIND = "__none__";
 
-export function ItemRow({ item, index, kind, itemFields, knownIds, getImage, onChange, onRemove }: Props) {
+export function ItemRow({ item, index, kind, itemFields, idStatus, getImage, onChange, onRemove }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const isPending = !item.id.trim() || /^x+$/i.test(item.id.trim());
   const image = item.imageUrl || (isPending ? "" : getImage(item.id));
-  const unknownId = !isPending && !knownIds.has(item.id.trim());
+  const unknownId = !isPending && idStatus(item.id) === "unknown";
   const setExtra = (key: string, value: string) => onChange({ extra: { ...(item.extra ?? {}), [key]: value } });
 
   const pickImage = async (file?: File) => {

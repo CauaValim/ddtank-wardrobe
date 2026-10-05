@@ -27,7 +27,7 @@ function Harness({ initial }: { initial: EventSection }) {
   const [section, setSection] = useState(initial);
   return (
     <SectionEditor
-      section={section} index={0} isFirst isLast knownIds={new Set(["11510"])} getImage={() => ""}
+      section={section} index={0} isFirst isLast idStatus={(id) => (id === "11510" ? "known" : "unknown")} getImage={() => ""}
       onChange={setSection} onRemove={() => {}} onMove={() => {}}
     />
   );

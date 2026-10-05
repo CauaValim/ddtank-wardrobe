@@ -13,7 +13,7 @@ import { capacitySummary, emptyBlock, getLayout, newItem } from "@/lib/eventTemp
 import type { BlockSpec, EventBlock, EventItem, EventSection, FieldSpec, LayoutSpec, SetSpec } from "@/lib/eventTemplate/types";
 
 export interface EditorContext {
-  knownIds: Set<string>;
+  idStatus: (id: string) => IdStatus;
   getImage: (id: string) => string;
   layout: LayoutSpec;
   servers: string;
@@ -117,7 +117,7 @@ function BlockEditor({ spec, block, title, ctx, onChange, onRemove }: {
                 index={i}
                 kind={g.kind}
                 itemFields={ctx.layout.itemFields}
-                knownIds={ctx.knownIds}
+                idStatus={ctx.idStatus}
                 getImage={ctx.getImage}
                 onChange={(patch) => setGroup(g.key, items.map((x, k) => (k === i ? { ...x, ...patch } : x)))}
                 onRemove={() => setGroup(g.key, items.filter((_, k) => k !== i))}
@@ -171,14 +171,14 @@ interface SectionProps {
   index: number;
   isFirst: boolean;
   isLast: boolean;
-  knownIds: Set<string>;
+  idStatus: (id: string) => IdStatus;
   getImage: (id: string) => string;
   onChange: (s: EventSection) => void;
   onRemove: () => void;
   onMove: (dir: -1 | 1) => void;
 }
 
-export function SectionEditor({ section, index, isFirst, isLast, knownIds, getImage, onChange, onRemove, onMove }: SectionProps) {
+export function SectionEditor({ section, index, isFirst, isLast, idStatus, getImage, onChange, onRemove, onMove }: SectionProps) {
   const layout = getLayout(section.layoutId);
   if (!layout) {
     return (
@@ -188,7 +188,7 @@ export function SectionEditor({ section, index, isFirst, isLast, knownIds, getIm
       </Card>
     );
   }
-  const ctx: EditorContext = { knownIds, getImage, layout, servers: section.servers, sectionFields: section.fields };
+  const ctx: EditorContext = { idStatus, getImage, layout, servers: section.servers, sectionFields: section.fields };
   const fields = editable(layout.fields);
   return (
     <Card className="space-y-4 p-4">

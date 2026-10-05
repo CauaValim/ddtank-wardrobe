@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Copy, Download, FileText, FileUp, Plus, Save, ShieldCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { useItemStore } from "@/hooks/useItemStore";
+import { useEventItemLookup } from "@/hooks/useEventItemLookup";
 import { useAuth } from "@/hooks/useAuth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,7 @@ import { readDocument } from "@/lib/eventTemplate/importer";
 import { loadTemplate } from "@/lib/eventTemplate/templateSource";
 import { downloadBlob, loadImageForWorkbook } from "@/lib/eventTemplate/browserImages";
 import { validateEventDocument, type ValidationIssue } from "@/lib/eventTemplate/validate";
+import { collectItemIds, lookupItems, validationOptions, type ItemLookup } from "@/lib/eventTemplate/itemLookup";
 import type { EventDocument, EventItem } from "@/lib/eventTemplate/types";
 import type { Json } from "@/integrations/supabase/types";
 
@@ -31,14 +32,8 @@ function fromRow(row: Row): { doc: EventDocument; converted: number; dropped: nu
   return { doc: { ...row, status: row.status === "final" ? "final" : "draft", sections }, converted, dropped };
 }
 
-function useCatalog() {
-  const { allItems, getItemImage } = useItemStore("br");
-  const knownIds = useMemo(() => new Set(allItems.map((i) => i.id)), [allItems]);
-  return { getItemImage, knownIds };
-}
-
-async function runExport(doc: EventDocument, getItemImage: (id: string) => string, knownIds: Set<string>): Promise<ValidationIssue[]> {
-  const issues = validateEventDocument(doc, manifest, { knownIds, hasImage: (id) => !!getItemImage(id) });
+async function runExport(doc: EventDocument, lookup: ItemLookup): Promise<ValidationIssue[]> {
+  const issues = validateEventDocument(doc, manifest, validationOptions(lookup));
   const errors = issues.filter((i) => i.level === "error");
   if (errors.length > 0) {
     toast.error(`Corrija ${errors.length} erro(s) antes de exportar`);
@@ -46,7 +41,7 @@ async function runExport(doc: EventDocument, getItemImage: (id: string) => strin
   }
   const template = await loadTemplate(manifest);
   const result = await exportDocument(template, manifest, doc, {
-    loadImage: (item: EventItem) => loadImageForWorkbook(item.imageUrl || (/^x+$/i.test(item.id) ? "" : getItemImage(item.id))),
+    loadImage: (item: EventItem) => loadImageForWorkbook(item.imageUrl || (lookup.get(item.id.trim())?.imageUrl ?? "")),
   });
   downloadBlob(result.data, result.fileName);
   if (result.warnings.length > 0) toast.warning(`Exportado com ${result.warnings.length} aviso(s): ${result.warnings.slice(0, 2).join("; ")}`);
@@ -66,7 +61,6 @@ function DocList() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
-  const { getItemImage, knownIds } = useCatalog();
 
   const load = useCallback(async () => {
     const { data, error } = await table().select("*").order("updated_at", { ascending: false });
@@ -154,7 +148,7 @@ function DocList() {
             disabled={busy === d.id}
             onClick={async () => {
               setBusy(d.id);
-              try { await runExport(d, getItemImage, knownIds); }
+              try { await runExport(d, await lookupItems(collectItemIds(d))); }
               catch (e) { toast.error(e instanceof Error ? e.message : "Falha ao exportar"); }
               finally { setBusy(null); }
             }}
@@ -171,8 +165,8 @@ function DocList() {
 function Editor({ id }: { id: string }) {
   const navigate = useNavigate();
   const { role } = useAuth();
-  const { getItemImage, knownIds } = useCatalog();
   const [doc, setDoc] = useState<EventDocument | null>(null);
+  const { idStatus, getImage, ensure } = useEventItemLookup(doc);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -228,7 +222,10 @@ function Editor({ id }: { id: string }) {
     update({ sections: arr });
   };
 
-  const validate = () => setIssues(validateEventDocument(doc, manifest, { knownIds, hasImage: (x) => !!getItemImage(x) }));
+  const validate = async () => {
+    try { setIssues(validateEventDocument(doc, manifest, validationOptions(await ensure(doc)))); }
+    catch (e) { toast.error(e instanceof Error ? e.message : "Falha ao verificar os IDs no painel"); }
+  };
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-4 p-6">
@@ -246,7 +243,7 @@ function Editor({ id }: { id: string }) {
           disabled={exporting}
           onClick={async () => {
             setExporting(true);
-            try { setIssues(await runExport(doc, getItemImage, knownIds)); }
+            try { setIssues(await runExport(doc, await ensure(doc))); }
             catch (e) { toast.error(e instanceof Error ? e.message : "Falha ao exportar"); }
             finally { setExporting(false); }
           }}
@@ -307,8 +304,8 @@ function Editor({ id }: { id: string }) {
           index={i}
           isFirst={i === 0}
           isLast={i === doc.sections.length - 1}
-          knownIds={knownIds}
-          getImage={getItemImage}
+          idStatus={idStatus}
+          getImage={getImage}
           onChange={(ns) => update({ sections: doc.sections.map((x) => (x.id === s.id ? ns : x)) })}
           onRemove={() => confirm("Remover esta seção?") && update({ sections: doc.sections.filter((x) => x.id !== s.id) })}
           onMove={(d) => move(i, d)}
