@@ -79,7 +79,7 @@ function DocList() {
           <Button size="icon" variant="ghost" title="Duplicar" onClick={() => create(d)}><Copy className="h-4 w-4" /></Button>
           <Button size="icon" variant="ghost" title="Exportar no modelo oficial" onClick={async () => {
             const found = validateDocument(d, knownIds);
-            if (found.length > 0) return toast.error("Abra o documento e corrija os problemas antes de exportar");
+            if (found.length > 0) toast.warning(`Exportando com ${found.length} aviso(s) — abra o documento para revisar`);
             try { await exportDocumentFromTemplate(d, getItemImage); }
             catch (error) { toast.error(error instanceof Error ? error.message : "Falha ao exportar"); }
           }}><Download className="h-4 w-4" /></Button>
@@ -150,7 +150,7 @@ function Editor({ id }: { id: string }) {
         <Button variant="outline" className="gap-1" disabled={exporting} onClick={async () => {
           const found = validateDocument(doc, knownIds);
           setIssues(found);
-          if (found.length > 0) return toast.error("Corrija os problemas antes de exportar");
+          if (found.length > 0) toast.warning(`Exportando com ${found.length} aviso(s) — confira a lista de validação`);
           setExporting(true);
           try {
             await exportDocumentFromTemplate(doc, getItemImage);
