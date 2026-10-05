@@ -22,3 +22,6 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Modelo oficial de eventos (18 MB) usado só nos testes locais
+src/lib/eventTemplate/__fixtures__/

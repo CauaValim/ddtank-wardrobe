@@ -1,0 +1,265 @@
+import { Drawing, type ImageData } from "./drawing";
+import { FormatContext, itemLabel, renderFormat, richRuns } from "./format";
+import { Worksheet, XlsxPackage, parseRange } from "./ooxml";
+import type { BlockSpec, EventBlock, EventDocument, EventItem, EventSection, FieldSpec, LayoutSpec, SetSpec, SlotSpec, TemplateManifest } from "./types";
+
+export interface ExportDeps {
+  /** Returns the PNG of an item (or null when there is no image). */
+  loadImage: (item: EventItem) => Promise<ImageData | null>;
+}
+
+export interface ExportResult {
+  data: ArrayBuffer;
+  fileName: string;
+  warnings: string[];
+}
+
+const INVALID_SHEET_CHARS = /[\\/?*[\]:]/g;
+
+export function sheetNameFor(layout: LayoutSpec, servers: string, used: Set<string>): string {
+  const base = layout.sheetNamePattern.replace("{servers}", servers).replace(INVALID_SHEET_CHARS, "-").replace(/\s+/g, " ").trim().slice(0, 31) || "Evento";
+  let name = base;
+  let n = 2;
+  while (used.has(name.toLowerCase())) {
+    const suffix = ` ${n}`;
+    name = `${base.slice(0, 31 - suffix.length)}${suffix}`;
+    n += 1;
+  }
+  used.add(name.toLowerCase());
+  return name;
+}
+
+export function exportFileName(doc: EventDocument): string {
+  const safe = doc.title.normalize("NFC").replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ").trim() || "Documento de eventos";
+  return `${safe}.xlsx`;
+}
+
+export function layoutById(manifest: TemplateManifest, id: string): LayoutSpec {
+  const layout = manifest.layouts.find((l) => l.id === id);
+  if (!layout) throw new Error(`Layout "${id}" não existe na versão ${manifest.version} do modelo`);
+  return layout;
+}
+
+interface FillContext {
+  doc: EventDocument;
+  section: EventSection | null;
+  layout: LayoutSpec;
+  ws: Worksheet;
+  drawing: Drawing | null;
+  deps: ExportDeps;
+  warnings: string[];
+  imageCache: Map<string, Promise<ImageData | null>>;
+  where: string;
+}
+
+function baseContext(ctx: FillContext): FormatContext {
+  return {
+    servers: ctx.section?.servers || ctx.doc.servers,
+    docTitle: (ctx.doc.theme || ctx.doc.title || "").trim(),
+    docServers: ctx.doc.servers,
+    sectionFields: ctx.section?.fields ?? {},
+  };
+}
+
+async function writeField(ctx: FillContext, field: FieldSpec, values: Record<string, string>, groups?: Record<string, EventItem[]>) {
+  const value = values[field.key];
+  if (field.input !== "derived" && field.input !== "datetime" && !value && field.format === "{value}") {
+    ctx.ws.clear(field.cell);
+    return;
+  }
+  const text = renderFormat(field.format, { ...baseContext(ctx), value, groups });
+  await ctx.ws.setRich(field.cell, richRuns(field.rich, text));
+}
+
+async function clearField(ctx: FillContext, field: FieldSpec) {
+  ctx.ws.clear(field.cell);
+}
+
+async function imageFor(ctx: FillContext, item: EventItem): Promise<ImageData | null> {
+  const key = item.imageUrl || item.id;
+  if (!ctx.imageCache.has(key)) ctx.imageCache.set(key, ctx.deps.loadImage(item).catch(() => null));
+  const image = await (ctx.imageCache.get(key) as Promise<ImageData | null>);
+  if (!image) ctx.warnings.push(`${ctx.where}: "${item.name || item.id}" foi exportado sem imagem`);
+  return image;
+}
+
+function slotBottom(slot: SlotSpec): number {
+  let row = slot.hideRows?.[1] ?? 0;
+  if (slot.image) row = Math.max(row, parseRange(slot.image).r2);
+  for (const c of slot.cells) row = Math.max(row, parseRange(c.cell).r2);
+  return row;
+}
+
+function blockRefs(spec: BlockSpec): string[] {
+  const refs = spec.fields.map((f) => f.cell);
+  for (const g of spec.groups) for (const slot of g.slots) {
+    refs.push(...slot.cells.map((c) => c.cell));
+    if (slot.image) refs.push(slot.image);
+  }
+  return refs;
+}
+
+async function fillBlock(ctx: FillContext, spec: BlockSpec, data: EventBlock | undefined, label: string) {
+  const used = data != null;
+  for (const field of spec.fields) {
+    if (used) await writeField(ctx, field, data.fields, data.groups);
+    else await clearField(ctx, field);
+  }
+  for (const group of spec.groups) {
+    const items = used ? data.groups[group.key] ?? [] : [];
+    if (items.length > group.slots.length) {
+      throw new Error(`${ctx.where} · ${label}: "${group.label}" tem ${items.length} itens, mas o modelo comporta ${group.slots.length}`);
+    }
+    // Text cells (a cell may be shared by several slots: bundles are written together).
+    const cellTexts = new Map<string, { rich: (typeof group.slots)[number]["cells"][number]["rich"]; parts: string[] }>();
+    group.slots.forEach((slot, i) => {
+      const item = items[i];
+      for (const cell of slot.cells) {
+        const entry = cellTexts.get(cell.cell) ?? { rich: cell.rich, parts: [] };
+        if (item) {
+          entry.parts.push(cell.format === "{label}" ? itemLabel(item, group.labelStyle) : renderFormat(cell.format, { ...baseContext(ctx), item, labelStyle: group.labelStyle, groups: data?.groups }));
+        }
+        cellTexts.set(cell.cell, entry);
+      }
+    });
+    for (const [cell, entry] of cellTexts) {
+      const text = entry.parts.filter(Boolean).join(entry.rich === "itemLabel" ? "\n\n" : "\n");
+      if (!text) ctx.ws.clear(cell);
+      else await ctx.ws.setRich(cell, richRuns(entry.rich, text));
+    }
+    // Background of the name cell follows the item's validity, like in the template.
+    const fills = ctx.layout.durationFill;
+    if (fills && group.kind === "items") {
+      const done = new Set<string>();
+      for (const [i, slot] of group.slots.entries()) {
+        const item = items[i];
+        const cell = slot.cells.find((c) => c.format === "{label}")?.cell;
+        if (!item || !cell || done.has(cell)) continue;
+        done.add(cell);
+        await ctx.ws.setFill(cell, /\d+\s*(days?|dias?)/i.test(item.duration) ? fills.timed : fills.permanent);
+      }
+    }
+    // Images: slots sharing the same box are filled together.
+    const boxes = new Map<string, (ImageData | null)[]>();
+    for (const [i, slot] of group.slots.entries()) {
+      if (!slot.image) continue;
+      const item = items[i];
+      const list = boxes.get(slot.image) ?? [];
+      list.push(item ? await imageFor(ctx, item) : null);
+      boxes.set(slot.image, list);
+    }
+    if (ctx.drawing) {
+      for (const [range, images] of boxes) {
+        await ctx.drawing.fillBox(parseRange(range), images, `${label} ${group.label}`);
+      }
+      for (const [i, slot] of group.slots.entries()) {
+        for (const deco of slot.decorations ?? []) {
+          const item = items[i];
+          const wanted = !!item && Object.entries(deco.when).every(([k, v]) => (item.extra?.[k] ?? "") === v);
+          await ctx.drawing.ensureDecoration(deco.media, parseRange(deco.box), wanted);
+        }
+      }
+    }
+    group.slots.forEach((slot, i) => {
+      if (!items[i] && slot.hideRows && used) ctx.ws.hideRows(slot.hideRows[0], slot.hideRows[1]);
+    });
+    // The table's bottom border lives on the last slot: carry it to the last visible one.
+    const last = group.slots[group.slots.length - 1];
+    if (used && items.length > 0 && items.length < group.slots.length && last.hideRows) {
+      const [c1, c2] = ctx.ws.columnSpan(blockRefs(spec));
+      await ctx.ws.copyRowBorders(slotBottom(last), slotBottom(group.slots[items.length - 1]), c1, c2);
+    }
+  }
+  if (spec.children) await fillSet(ctx, spec.children, used ? data.children ?? [] : [], label);
+  if (!used) {
+    if (spec.hideRows) ctx.ws.hideRows(spec.hideRows[0], spec.hideRows[1]);
+    if (spec.hideCols) ctx.ws.hideColumns(spec.hideCols);
+  }
+}
+
+async function fillSet(ctx: FillContext, set: SetSpec, blocks: EventBlock[], parent = "") {
+  if (blocks.length > set.blocks.length) {
+    throw new Error(`${ctx.where}: "${set.label}" tem ${blocks.length} ${set.blockLabel.toLowerCase()}(s), mas o modelo comporta ${set.blocks.length}`);
+  }
+  for (const [i, spec] of set.blocks.entries()) {
+    await fillBlock(ctx, spec, blocks[i], `${parent ? `${parent} › ` : ""}${set.blockLabel} ${i + 1}`);
+  }
+  const lastSpec = set.blocks[set.blocks.length - 1];
+  const lastUsed = set.blocks[blocks.length - 1];
+  const height = (b: BlockSpec) => (b.hideRows ? b.hideRows[1] - b.hideRows[0] : -1);
+  if (blocks.length > 0 && blocks.length < set.blocks.length && lastSpec.hideRows && lastUsed?.hideRows && height(lastSpec) === height(lastUsed)) {
+    const [c1, c2] = ctx.ws.columnSpan(set.blocks.flatMap(blockRefs));
+    await ctx.ws.copyRowBorders(lastSpec.hideRows[1], lastUsed.hideRows[1], c1, c2);
+  }
+}
+
+async function fillSheet(ctx: FillContext, coverOnly: boolean) {
+  const { layout, section, ws } = ctx;
+  for (const field of layout.fields) {
+    await writeField(ctx, field, section?.fields ?? {}, undefined);
+  }
+  for (const set of layout.sets) await fillSet(ctx, set, section?.sets[set.key] ?? []);
+  for (const rule of layout.hideWhenEmpty ?? []) {
+    const block = section?.sets[rule.set]?.[rule.block];
+    if (!block || (block.groups[rule.group] ?? []).length === 0) ws.hideRows(rule.rows[0], rule.rows[1]);
+  }
+  for (const range of layout.clearRanges ?? []) ws.clearRange(range);
+  if (coverOnly && layout.cover) ws.hideColumns(layout.cover.hideColsWithoutSection);
+  if (ctx.drawing) {
+    await ctx.drawing.removeHidden((r) => ws.isRowHidden(r), (c) => ws.isColHidden(c));
+    await ctx.drawing.pruneUnusedRels();
+  }
+}
+
+/**
+ * Generates the workbook for a document using the official template.
+ * The cover (first tab of the template) always comes first.
+ */
+export async function exportDocument(template: ArrayBuffer, manifest: TemplateManifest, doc: EventDocument, deps: ExportDeps): Promise<ExportResult> {
+  const pkg = await XlsxPackage.load(template);
+  const warnings: string[] = [];
+  const cover = layoutById(manifest, manifest.coverLayout);
+  const sections = [...doc.sections];
+  const coverIndex = sections.findIndex((s) => s.layoutId === cover.id);
+  const coverSection = coverIndex >= 0 ? sections.splice(coverIndex, 1)[0] : null;
+  const entries: { section: EventSection | null; layout: LayoutSpec }[] = [
+    { section: coverSection, layout: cover },
+    ...sections.map((s) => ({ section: s, layout: layoutById(manifest, s.layoutId) })),
+  ];
+
+  const usedSources = new Set<string>();
+  const finalNames = new Set<string>();
+  const plan: { current: string; final: string }[] = [];
+  let copy = 0;
+  for (const entry of entries) {
+    let current = entry.layout.sheet;
+    if (usedSources.has(current)) {
+      copy += 1;
+      const tmp = `__copia_${copy}`;
+      await pkg.duplicateSheet(current, tmp);
+      current = tmp;
+    }
+    usedSources.add(entry.layout.sheet);
+    plan.push({ current, final: sheetNameFor(entry.layout, entry.section?.servers || doc.servers, finalNames) });
+  }
+
+  const imageCache = new Map<string, Promise<ImageData | null>>();
+  for (const [i, entry] of entries.entries()) {
+    const ws = await pkg.worksheet(plan[i].current);
+    const drawing = await Drawing.open(ws);
+    await fillSheet({
+      doc,
+      section: entry.section,
+      layout: entry.layout,
+      ws,
+      drawing,
+      deps,
+      warnings,
+      imageCache,
+      where: entry.section ? `${i}. ${entry.layout.label}` : "Capa",
+    }, entry.section == null);
+  }
+
+  await pkg.finalizeSheets(plan);
+  return { data: await pkg.save(), fileName: exportFileName(doc), warnings };
+}

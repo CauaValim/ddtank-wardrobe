@@ -1,23 +1,58 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
+import { ArrowLeft, Copy, Download, FileText, FileUp, Plus, Save, ShieldCheck, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useItemStore } from "@/hooks/useItemStore";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { useAuth } from "@/hooks/useAuth";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { toast } from "sonner";
-import { ArrowLeft, Copy, Download, FileText, Plus, Save, Trash2, ChevronUp, ChevronDown, ShieldCheck, LayoutTemplate } from "lucide-react";
-import { ItemPicker } from "@/components/events/ItemPicker";
-import {
-  SECTION_META, newSection, newId, idLine, validateDocument, exportDocumentFromTemplate,
-  type EventDocument, type EventSection, type SectionType,
-} from "@/lib/eventDocs";
+import { SectionEditor } from "@/components/events/SectionEditor";
+import { LayoutPicker } from "@/components/events/LayoutPicker";
+import { TemplateBanner } from "@/components/events/TemplateBanner";
+import { manifest, newId, newSection, normalizeSections } from "@/lib/eventTemplate/model";
+import { exportDocument } from "@/lib/eventTemplate/exporter";
+import { readDocument } from "@/lib/eventTemplate/importer";
+import { loadTemplate } from "@/lib/eventTemplate/templateSource";
+import { downloadBlob, loadImageForWorkbook } from "@/lib/eventTemplate/browserImages";
+import { validateEventDocument, type ValidationIssue } from "@/lib/eventTemplate/validate";
+import type { EventDocument, EventItem } from "@/lib/eventTemplate/types";
+import type { Json } from "@/integrations/supabase/types";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const table = () => (supabase as any).from("event_documents");
+type Row = Omit<EventDocument, "sections"> & { sections: Json };
+
+const table = () => supabase.from("event_documents");
+
+function fromRow(row: Row): { doc: EventDocument; converted: number; dropped: number } {
+  const { sections, converted, dropped } = normalizeSections(row.sections);
+  return { doc: { ...row, status: row.status === "final" ? "final" : "draft", sections }, converted, dropped };
+}
+
+function useCatalog() {
+  const { allItems, getItemImage } = useItemStore("br");
+  const knownIds = useMemo(() => new Set(allItems.map((i) => i.id)), [allItems]);
+  return { allItems, getItemImage, knownIds };
+}
+
+async function runExport(doc: EventDocument, getItemImage: (id: string) => string, knownIds: Set<string>): Promise<ValidationIssue[]> {
+  const issues = validateEventDocument(doc, manifest, { knownIds, hasImage: (id) => !!getItemImage(id) });
+  const errors = issues.filter((i) => i.level === "error");
+  if (errors.length > 0) {
+    toast.error(`Corrija ${errors.length} erro(s) antes de exportar`);
+    return issues;
+  }
+  const template = await loadTemplate(manifest);
+  const result = await exportDocument(template, manifest, doc, {
+    loadImage: (item: EventItem) => loadImageForWorkbook(item.imageUrl || (/^x+$/i.test(item.id) ? "" : getItemImage(item.id))),
+  });
+  downloadBlob(result.data, result.fileName);
+  if (result.warnings.length > 0) toast.warning(`Exportado com ${result.warnings.length} aviso(s): ${result.warnings.slice(0, 2).join("; ")}`);
+  else toast.success("Documento exportado no modelo oficial");
+  return issues;
+}
 
 export default function EventDocuments() {
   const { id } = useParams();
@@ -26,63 +61,106 @@ export default function EventDocuments() {
 
 function DocList() {
   const navigate = useNavigate();
+  const { role } = useAuth();
   const [docs, setDocs] = useState<EventDocument[]>([]);
   const [loading, setLoading] = useState(true);
-  const { allItems, getItemImage } = useItemStore("br");
-  const knownIds = useMemo(() => new Set(allItems.map((item) => item.id)), [allItems]);
+  const [busy, setBusy] = useState<string | null>(null);
+  const importRef = useRef<HTMLInputElement>(null);
+  const { getItemImage, knownIds } = useCatalog();
 
   const load = useCallback(async () => {
     const { data, error } = await table().select("*").order("updated_at", { ascending: false });
     if (error) toast.error(error.message);
-    setDocs((data as EventDocument[]) ?? []);
+    setDocs(((data ?? []) as Row[]).map((r) => fromRow(r).doc));
     setLoading(false);
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  const create = async (base?: EventDocument) => {
+  const insert = async (payload: Partial<EventDocument>) => {
     const { data: u } = await supabase.auth.getUser();
-    const payload = base
-      ? { title: `${base.title} (cópia)`, theme: base.theme, servers: base.servers, start_date: base.start_date, end_date: base.end_date, sections: base.sections.map((s) => ({ ...s, id: newId() })), created_by: u.user?.id }
-      : { title: "Novo documento", servers: "s1-s401", created_by: u.user?.id };
-    const { data, error } = await table().insert(payload).select().single();
-    if (error) return toast.error(error.message);
+    const { data, error } = await table()
+      .insert({ ...payload, title: payload.title ?? "Novo documento", sections: (payload.sections ?? []) as unknown as Json, template_version: manifest.version, created_by: u.user?.id })
+      .select("id")
+      .single();
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
     navigate(`/eventos/${data.id}`);
   };
 
+  const duplicate = (d: EventDocument) =>
+    insert({ title: `${d.title} (cópia)`, theme: d.theme, servers: d.servers, start_date: d.start_date, end_date: d.end_date, sections: d.sections.map((s) => ({ ...s, id: newId() })) });
+
   const remove = async (d: EventDocument) => {
-    if (!confirm(`Excluir "${d.title}"?`)) return;
+    if (!confirm(`Excluir "${d.title}"? Essa ação não pode ser desfeita.`)) return;
     const { error } = await table().delete().eq("id", d.id);
     if (error) return toast.error(error.message);
     load();
   };
 
+  const importFile = async (file?: File) => {
+    if (!file) return;
+    setBusy("import");
+    try {
+      const doc = await readDocument(await file.arrayBuffer(), manifest);
+      if (doc.sections.length === 0) {
+        toast.error("Nenhuma aba dessa planilha segue o modelo oficial");
+        return;
+      }
+      toast.success(`${doc.sections.length} aba(s) importada(s)`);
+      await insert({ ...doc, title: file.name.replace(/\.xlsx$/i, "") });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Falha ao ler a planilha");
+    } finally {
+      setBusy(null);
+    }
+  };
+
   return (
-    <div className="p-6 max-w-5xl mx-auto w-full space-y-4">
-      <div className="flex items-center gap-2">
-        <Button variant="ghost" size="sm" onClick={() => navigate("/")}><ArrowLeft className="h-4 w-4" /></Button>
-        <h1 className="text-xl font-bold flex-1">Documentos de Eventos</h1>
-        <Button onClick={() => create()} className="gap-1"><Plus className="h-4 w-4" /> Novo documento</Button>
+    <div className="mx-auto w-full max-w-5xl space-y-4 p-6">
+      <div className="flex flex-wrap items-center gap-2">
+        <Button variant="ghost" size="sm" title="Voltar ao painel" onClick={() => navigate("/")}><ArrowLeft className="h-4 w-4" /></Button>
+        <h1 className="flex-1 text-xl font-bold">Documentos de Eventos</h1>
+        <input ref={importRef} type="file" accept=".xlsx" className="hidden" onChange={(e) => { importFile(e.target.files?.[0]); e.target.value = ""; }} />
+        <Button variant="outline" className="gap-1" disabled={busy === "import"} onClick={() => importRef.current?.click()}>
+          <FileUp className="h-4 w-4" /> {busy === "import" ? "Importando..." : "Importar planilha"}
+        </Button>
+        <Button className="gap-1" onClick={() => insert({ servers: "s1-s401", sections: [] })}><Plus className="h-4 w-4" /> Novo documento</Button>
       </div>
-      {loading ? <p className="text-sm text-muted-foreground">Carregando...</p> : docs.length === 0 ? (
-        <p className="text-sm text-muted-foreground">Nenhum documento ainda. Crie o primeiro.</p>
+      <TemplateBanner canUpload={role === "super_admin"} />
+      {loading ? (
+        <p className="text-sm text-muted-foreground">Carregando...</p>
+      ) : docs.length === 0 ? (
+        <Card className="p-6 text-sm text-muted-foreground">
+          Nenhum documento ainda. Crie um novo ou importe a planilha da semana anterior para começar a partir dela.
+        </Card>
       ) : docs.map((d) => (
-        <Card key={d.id} className="p-4 flex items-center gap-3">
+        <Card key={d.id} className="flex flex-wrap items-center gap-3 p-4">
           <FileText className="h-5 w-5 text-primary" />
-          <div className="flex-1 min-w-0">
-            <p className="font-semibold truncate">{d.title}</p>
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-semibold">{d.title}</p>
             <p className="text-xs text-muted-foreground">
-              {d.servers} · {d.start_date ?? "--"} até {d.end_date ?? "--"} · {d.sections.length} seções
+              {d.servers}, {d.start_date ?? "sem início"} a {d.end_date ?? "sem fim"}, {d.sections.length} seção(ões)
             </p>
           </div>
           <Badge variant={d.status === "final" ? "default" : "secondary"}>{d.status === "final" ? "Finalizado" : "Rascunho"}</Badge>
           <Button size="sm" onClick={() => navigate(`/eventos/${d.id}`)}>Abrir</Button>
-          <Button size="icon" variant="ghost" title="Duplicar" onClick={() => create(d)}><Copy className="h-4 w-4" /></Button>
-          <Button size="icon" variant="ghost" title="Exportar no modelo oficial" onClick={async () => {
-            const found = validateDocument(d, knownIds);
-            if (found.length > 0) toast.warning(`Exportando com ${found.length} aviso(s) — abra o documento para revisar`);
-            try { await exportDocumentFromTemplate(d, getItemImage); }
-            catch (error) { toast.error(error instanceof Error ? error.message : "Falha ao exportar"); }
-          }}><Download className="h-4 w-4" /></Button>
+          <Button size="icon" variant="ghost" title="Duplicar" onClick={() => duplicate(d)}><Copy className="h-4 w-4" /></Button>
+          <Button
+            size="icon"
+            variant="ghost"
+            title="Exportar .xlsx"
+            disabled={busy === d.id}
+            onClick={async () => {
+              setBusy(d.id);
+              try { await runExport(d, getItemImage, knownIds); }
+              catch (e) { toast.error(e instanceof Error ? e.message : "Falha ao exportar"); }
+              finally { setBusy(null); }
+            }}
+          >
+            <Download className="h-4 w-4" />
+          </Button>
           <Button size="icon" variant="ghost" title="Excluir" onClick={() => remove(d)}><Trash2 className="h-4 w-4" /></Button>
         </Card>
       ))}
@@ -92,34 +170,47 @@ function DocList() {
 
 function Editor({ id }: { id: string }) {
   const navigate = useNavigate();
-  const { allItems, getItemImage } = useItemStore("br");
+  const { role } = useAuth();
+  const { allItems, getItemImage, knownIds } = useCatalog();
   const [doc, setDoc] = useState<EventDocument | null>(null);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [newType, setNewType] = useState<SectionType>("daily");
-  const knownIds = useMemo(() => new Set(allItems.map((i) => i.id)), [allItems]);
-  const [issues, setIssues] = useState<ReturnType<typeof validateDocument> | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [issues, setIssues] = useState<ValidationIssue[] | null>(null);
 
   useEffect(() => {
-    table().select("*").eq("id", id).single().then(({ data, error }: { data: EventDocument; error: Error | null }) => {
-      if (error) toast.error(error.message);
-      setDoc(data);
+    table().select("*").eq("id", id).single().then(({ data, error }) => {
+      if (error) {
+        toast.error(error.message);
+        return;
+      }
+      const { doc: loaded, converted, dropped } = fromRow(data as Row);
+      setDoc(loaded);
+      if (converted > 0 || dropped > 0) {
+        setDirty(true);
+        toast.info(`Documento convertido para o novo editor (${converted} seção(ões))${dropped ? `; ${dropped} sem layout equivalente foram descartadas` : ""}. Revise e salve.`);
+      }
     });
   }, [id]);
 
-  const update = (patch: Partial<EventDocument>) => { setDoc((d) => d && { ...d, ...patch }); setDirty(true); };
-  const updateSection = (sid: string, patch: Partial<EventSection>) => {
-    if (!doc) return;
-    update({ sections: doc.sections.map((s) => (s.id === sid ? { ...s, ...patch } : s)) });
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+    window.addEventListener("beforeunload", warn);
+    return () => window.removeEventListener("beforeunload", warn);
+  }, [dirty]);
+
+  const update = (patch: Partial<EventDocument>) => {
+    setDoc((d) => (d ? { ...d, ...patch } : d));
+    setDirty(true);
   };
 
   const save = async () => {
     if (!doc) return;
     setSaving(true);
     const { error } = await table().update({
-      title: doc.title, theme: doc.theme, servers: doc.servers, start_date: doc.start_date || null,
-      end_date: doc.end_date || null, status: doc.status, sections: doc.sections, updated_at: new Date().toISOString(),
+      title: doc.title, theme: doc.theme, servers: doc.servers, start_date: doc.start_date || null, end_date: doc.end_date || null,
+      status: doc.status, sections: doc.sections as unknown as Json, template_version: manifest.version,
     }).eq("id", doc.id);
     setSaving(false);
     if (error) return toast.error(error.message);
@@ -137,50 +228,76 @@ function Editor({ id }: { id: string }) {
     update({ sections: arr });
   };
 
+  const validate = () => setIssues(validateEventDocument(doc, manifest, { knownIds, hasImage: (x) => !!getItemImage(x) }));
+
   return (
-    <div className="p-6 max-w-6xl mx-auto w-full space-y-4">
-      <div className="flex flex-wrap items-center gap-2 sticky top-0 z-10 bg-background py-2 border-b border-border">
-        <Button variant="ghost" size="sm" onClick={() => (!dirty || confirm("Sair sem salvar?")) && navigate("/eventos")}><ArrowLeft className="h-4 w-4" /></Button>
-        <Input className="flex-1 min-w-[200px] font-semibold" value={doc.title} onChange={(e) => update({ title: e.target.value })} />
+    <div className="mx-auto w-full max-w-6xl space-y-4 p-6">
+      <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b border-border bg-background py-2">
+        <Button variant="ghost" size="sm" title="Voltar à lista" onClick={() => (!dirty || confirm("Sair sem salvar as alterações?")) && navigate("/eventos")}><ArrowLeft className="h-4 w-4" /></Button>
+        <Input className="min-w-[200px] flex-1 font-semibold" value={doc.title} onChange={(e) => update({ title: e.target.value })} aria-label="Nome do documento" />
         <Select value={doc.status} onValueChange={(v) => update({ status: v as EventDocument["status"] })}>
           <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
           <SelectContent><SelectItem value="draft">Rascunho</SelectItem><SelectItem value="final">Finalizado</SelectItem></SelectContent>
         </Select>
-        <Button variant="outline" className="gap-1" onClick={() => setIssues(validateDocument(doc, knownIds))}><ShieldCheck className="h-4 w-4" /> Validar</Button>
-        <Button variant="outline" className="gap-1" disabled={exporting} onClick={async () => {
-          const found = validateDocument(doc, knownIds);
-          setIssues(found);
-          if (found.length > 0) toast.warning(`Exportando com ${found.length} aviso(s) — confira a lista de validação`);
-          setExporting(true);
-          try {
-            await exportDocumentFromTemplate(doc, getItemImage);
-            toast.success("Documento exportado no modelo oficial");
-          } catch (error) {
-            toast.error(error instanceof Error ? error.message : "Falha ao exportar");
-          } finally {
-            setExporting(false);
-          }
-        }}><Download className="h-4 w-4" /> {exporting ? "Gerando..." : ".xlsx"}</Button>
+        <Button variant="outline" className="gap-1" onClick={validate}><ShieldCheck className="h-4 w-4" /> Validar</Button>
+        <Button
+          variant="outline"
+          className="gap-1"
+          disabled={exporting}
+          onClick={async () => {
+            setExporting(true);
+            try { setIssues(await runExport(doc, getItemImage, knownIds)); }
+            catch (e) { toast.error(e instanceof Error ? e.message : "Falha ao exportar"); }
+            finally { setExporting(false); }
+          }}
+        >
+          <Download className="h-4 w-4" /> {exporting ? "Gerando..." : "Exportar .xlsx"}
+        </Button>
         <Button className="gap-1" onClick={save} disabled={saving || !dirty}><Save className="h-4 w-4" /> {saving ? "Salvando..." : "Salvar"}</Button>
       </div>
 
-      <Card className="p-4 grid gap-3 sm:grid-cols-4">
-        <Field label="Tema"><Input value={doc.theme ?? ""} onChange={(e) => update({ theme: e.target.value })} placeholder="16 Anos de DDTank" /></Field>
-        <Field label="Servidores"><Input value={doc.servers} onChange={(e) => update({ servers: e.target.value })} /></Field>
-        <Field label="Início"><Input type="date" value={doc.start_date ?? ""} onChange={(e) => update({ start_date: e.target.value })} /></Field>
-        <Field label="Fim"><Input type="date" value={doc.end_date ?? ""} onChange={(e) => update({ end_date: e.target.value })} /></Field>
+      <TemplateBanner canUpload={role === "super_admin"} />
+
+      <Card className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
+        <label className="block space-y-1 lg:col-span-2">
+          <span className="text-xs text-muted-foreground">Evento na capa (em inglês, como em "EVENT FOR THE SERVERS")</span>
+          <Input value={doc.theme ?? ""} placeholder="16th Birthday Week 1" onChange={(e) => update({ theme: e.target.value })} />
+        </label>
+        <label className="block space-y-1">
+          <span className="text-xs text-muted-foreground">Servidores do documento</span>
+          <Input value={doc.servers} onChange={(e) => update({ servers: e.target.value })} />
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="block space-y-1">
+            <span className="text-xs text-muted-foreground">Início</span>
+            <Input type="date" value={doc.start_date ?? ""} onChange={(e) => update({ start_date: e.target.value })} />
+          </label>
+          <label className="block space-y-1">
+            <span className="text-xs text-muted-foreground">Fim</span>
+            <Input type="date" value={doc.end_date ?? ""} onChange={(e) => update({ end_date: e.target.value })} />
+          </label>
+        </div>
+        <p className="text-xs text-muted-foreground sm:col-span-2 lg:col-span-4">
+          A capa (primeira aba do modelo) sempre sai no arquivo. Se o documento tiver uma seção de Entrada Diária, ela ocupa a capa.
+          Modelo: {manifest.version}.
+        </p>
       </Card>
 
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-        <LayoutTemplate className="h-4 w-4 text-primary" />
-        Modelo ativo: 16 Anos de DDTank · imagens e formatação original preservadas
-      </div>
-
       {issues && (
-        <Card className="p-4 space-y-1">
-          <p className="font-semibold text-sm">{issues.length === 0 ? "Tudo certo — nenhum problema encontrado." : `${issues.length} problema(s):`}</p>
-          {issues.map((x, i) => <p key={i} className="text-xs text-destructive">{x.section}: {x.message}</p>)}
+        <Card className="space-y-1 p-4">
+          <p className="text-sm font-semibold">
+            {issues.length === 0 ? "Nenhum problema encontrado." : `${issues.filter((i) => i.level === "error").length} erro(s) e ${issues.filter((i) => i.level === "warning").length} aviso(s)`}
+          </p>
+          {issues.map((x, i) => (
+            <p key={i} className={`text-xs ${x.level === "error" ? "text-destructive" : "text-amber-600 dark:text-amber-400"}`}>
+              {x.where}: {x.message}
+            </p>
+          ))}
         </Card>
+      )}
+
+      {doc.sections.length === 0 && (
+        <Card className="p-6 text-sm text-muted-foreground">Este documento ainda não tem seções. Adicione a primeira escolhendo o layout da aba.</Card>
       )}
 
       {doc.sections.map((s, i) => (
@@ -188,111 +305,20 @@ function Editor({ id }: { id: string }) {
           key={s.id}
           section={s}
           index={i}
+          isFirst={i === 0}
+          isLast={i === doc.sections.length - 1}
           items={allItems}
+          knownIds={knownIds}
           getImage={getItemImage}
-          onChange={(p) => updateSection(s.id, p)}
-          onRemove={() => confirm("Remover seção?") && update({ sections: doc.sections.filter((x) => x.id !== s.id) })}
+          onChange={(ns) => update({ sections: doc.sections.map((x) => (x.id === s.id ? ns : x)) })}
+          onRemove={() => confirm("Remover esta seção?") && update({ sections: doc.sections.filter((x) => x.id !== s.id) })}
           onMove={(d) => move(i, d)}
         />
       ))}
 
-      <Card className="p-4 flex flex-wrap items-center gap-2 border-dashed">
-        <Select value={newType} onValueChange={(v) => setNewType(v as SectionType)}>
-          <SelectTrigger className="w-60"><SelectValue /></SelectTrigger>
-          <SelectContent>
-            {Object.entries(SECTION_META).map(([k, m]) => <SelectItem key={k} value={k}>{m.label}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Button className="gap-1" onClick={() => update({ sections: [...doc.sections, newSection(newType, doc.servers)] })}>
-          <Plus className="h-4 w-4" /> Adicionar seção
-        </Button>
-      </Card>
+      <div className="flex justify-center border-t border-dashed border-border pt-4">
+        <LayoutPicker onPick={(layout) => update({ sections: [...doc.sections, newSection(layout, doc.servers)] })} />
+      </div>
     </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <label className="space-y-1 block"><span className="text-xs text-muted-foreground">{label}</span>{children}</label>;
-}
-
-interface SectionProps {
-  section: EventSection;
-  index: number;
-  items: ReturnType<typeof useItemStore>["allItems"];
-  getImage: (id: string) => string;
-  onChange: (p: Partial<EventSection>) => void;
-  onRemove: () => void;
-  onMove: (d: -1 | 1) => void;
-}
-
-function SectionEditor({ section: s, index, items, getImage, onChange, onRemove, onMove }: SectionProps) {
-  const meta = SECTION_META[s.type];
-  const setGroups = (groups: EventSection["groups"]) => onChange({ groups });
-  const setGroup = (gi: number, patch: Partial<EventSection["groups"][number]>) =>
-    setGroups(s.groups.map((g, i) => (i === gi ? { ...g, ...patch } : g)));
-
-  return (
-    <Card className="p-4 space-y-3">
-      <div className="flex items-center gap-2">
-        <Badge>{index + 1}. {meta.label}</Badge>
-        <Badge variant="outline" className="gap-1"><LayoutTemplate className="h-3 w-3" /> Layout oficial</Badge>
-        <span className="flex-1" />
-        <Button size="icon" variant="ghost" onClick={() => onMove(-1)}><ChevronUp className="h-4 w-4" /></Button>
-        <Button size="icon" variant="ghost" onClick={() => onMove(1)}><ChevronDown className="h-4 w-4" /></Button>
-        <Button size="icon" variant="ghost" onClick={onRemove}><Trash2 className="h-4 w-4" /></Button>
-      </div>
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Field label="Servidores"><Input value={s.servers} onChange={(e) => onChange({ servers: e.target.value })} /></Field>
-        <Field label="Início"><Input type="datetime-local" value={s.start} onChange={(e) => onChange({ start: e.target.value })} /></Field>
-        <Field label="Fim"><Input type="datetime-local" value={s.end} onChange={(e) => onChange({ end: e.target.value })} /></Field>
-      </div>
-      {meta.hasTitles && (
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Field label="Título (inglês)"><Input value={s.titleEn} onChange={(e) => onChange({ titleEn: e.target.value })} /></Field>
-          <Field label="Título (PT)"><Input value={s.titlePt} onChange={(e) => onChange({ titlePt: e.target.value })} /></Field>
-          <Field label="Descrição (PT)"><Input value={s.descPt} onChange={(e) => onChange({ descPt: e.target.value })} /></Field>
-        </div>
-      )}
-      {s.type === "exchange" && (
-        <Field label="Item de troca (nome / ID)"><Input value={s.exchangeItem ?? ""} onChange={(e) => onChange({ exchangeItem: e.target.value })} placeholder="Fragmento do Deus de batalha - ID 11568" /></Field>
-      )}
-      <Field label="Observações"><Textarea rows={2} value={s.notes} onChange={(e) => onChange({ notes: e.target.value })} /></Field>
-
-      {s.groups.map((g, gi) => (
-        <div key={gi} className="rounded-lg border border-border p-3 space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <Input className="w-48" value={g.label} onChange={(e) => setGroup(gi, { label: e.target.value })} />
-            {meta.hasValue && <Input className="w-48" placeholder="Custo (ex.: 11568*5)" value={g.value ?? ""} onChange={(e) => setGroup(gi, { value: e.target.value })} />}
-            <ItemPicker items={items} getImage={getImage} onPick={(p) => setGroup(gi, { items: [...g.items, { ...p, qty: 1, validity: "[Permanent] [Bound]" }] })} />
-            <span className="flex-1" />
-            <Button size="icon" variant="ghost" onClick={() => setGroups(s.groups.filter((_, i) => i !== gi))}><Trash2 className="h-4 w-4" /></Button>
-          </div>
-          {g.items.map((it, ii) => {
-            const setItem = (p: Partial<typeof it>) => setGroup(gi, { items: g.items.map((x, k) => (k === ii ? { ...x, ...p } : x)) });
-            return (
-              <div key={ii} className="flex flex-wrap items-center gap-2 text-sm">
-                {getImage(it.id) ? <img src={getImage(it.id)} alt="" className="h-9 w-9 object-contain" /> : <div className="h-9 w-9 rounded bg-muted" />}
-                <Input className="flex-1 min-w-[160px]" value={it.name} onChange={(e) => setItem({ name: e.target.value })} />
-                <Input className="w-24" value={it.id} onChange={(e) => setItem({ id: e.target.value })} title="ID" />
-                <Input className="w-20" type="number" min={1} value={it.qty} onChange={(e) => setItem({ qty: Number(e.target.value) })} title="Quantidade" />
-                <Input className="w-48" value={it.validity} onChange={(e) => setItem({ validity: e.target.value })} title="Validade" />
-                {meta.hasPrice && <Input className="w-32" placeholder="Preço" value={it.price ?? ""} onChange={(e) => setItem({ price: e.target.value })} />}
-                {(meta.hasPrice || meta.hasValue) && <Input className="w-44" placeholder="Condição/limite" value={it.condition ?? ""} onChange={(e) => setItem({ condition: e.target.value })} />}
-                <Button size="icon" variant="ghost" onClick={() => setGroup(gi, { items: g.items.filter((_, k) => k !== ii) })}><Trash2 className="h-3.5 w-3.5" /></Button>
-              </div>
-            );
-          })}
-          {g.items.length > 0 && (
-            <div className="flex items-center gap-2">
-              <code className="flex-1 rounded bg-muted px-2 py-1 text-xs break-all">{idLine(g.items)}</code>
-              <Button size="sm" variant="ghost" onClick={() => { navigator.clipboard.writeText(idLine(g.items)); toast.success("Copiado"); }}><Copy className="h-3.5 w-3.5" /></Button>
-            </div>
-          )}
-        </div>
-      ))}
-      <Button size="sm" variant="outline" className="gap-1" onClick={() => setGroups([...s.groups, { label: `${meta.groupLabel} ${s.groups.length + 1}`, items: [] }])}>
-        <Plus className="h-3.5 w-3.5" /> {meta.groupLabel}
-      </Button>
-    </Card>
   );
 }

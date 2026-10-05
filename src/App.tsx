@@ -11,7 +11,15 @@ import Login from "./pages/Login";
 import UserManagement from "./pages/UserManagement";
 import Trust from "./pages/Trust";
 import NotFound from "./pages/NotFound";
-import EventDocuments from "./pages/EventDocuments";
+import { lazy, Suspense } from "react";
+
+// Página pesada (modelo oficial + motor OOXML): carregada só quando aberta.
+const EventDocuments = lazy(() => import("./pages/EventDocuments"));
+const eventDocuments = (
+  <Suspense fallback={<p className="p-6 text-sm text-muted-foreground">Carregando...</p>}>
+    <EventDocuments />
+  </Suspense>
+);
 
 const queryClient = new QueryClient();
 
@@ -47,8 +55,8 @@ function AppRoutes() {
             {auth.role === "super_admin" && (
               <Route path="/users" element={<UserManagement />} />
             )}
-            {auth.canImport && <Route path="/eventos" element={<EventDocuments />} />}
-            {auth.canImport && <Route path="/eventos/:id" element={<EventDocuments />} />}
+            {auth.canImport && <Route path="/eventos" element={eventDocuments} />}
+            {auth.canImport && <Route path="/eventos/:id" element={eventDocuments} />}
             <Route path="/trust" element={<Trust />} />
             <Route path="/login" element={<Navigate to="/" replace />} />
             <Route path="*" element={<NotFound />} />

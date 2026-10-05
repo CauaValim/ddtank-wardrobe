@@ -9,9 +9,10 @@ interface Props {
   items: GameItem[];
   getImage: (id: string) => string;
   onPick: (item: { id: string; name: string }) => void;
+  disabled?: boolean;
 }
 
-export function ItemPicker({ items, getImage, onPick }: Props) {
+export function ItemPicker({ items, getImage, onPick, disabled }: Props) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const results = useMemo(() => {
@@ -25,7 +26,7 @@ export function ItemPicker({ items, getImage, onPick }: Props) {
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button size="sm" variant="outline" className="gap-1">
+        <Button size="sm" variant="outline" className="gap-1" disabled={disabled} title={disabled ? "Todas as vagas deste grupo estão ocupadas" : undefined}>
           <Plus className="h-3.5 w-3.5" /> Item
         </Button>
       </PopoverTrigger>

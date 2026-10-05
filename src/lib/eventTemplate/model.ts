@@ -1,0 +1,155 @@
+import manifestJson from "./manifest.json";
+import { parseItemLabel } from "./format";
+import type { BlockSpec, EventBlock, EventItem, EventSection, LayoutSpec, SetSpec, TemplateManifest } from "./types";
+
+export const manifest = manifestJson as TemplateManifest;
+
+export const newId = () => Math.random().toString(36).slice(2, 10);
+
+export function getLayout(id: string): LayoutSpec | undefined {
+  return manifest.layouts.find((l) => l.id === id);
+}
+
+export const LAYOUT_GROUPS: { type: string; label: string }[] = [
+  { type: "daily", label: "Entrada Diária" },
+  { type: "mission", label: "Missões" },
+  { type: "doit", label: "Faça se Puder" },
+  { type: "tribe", label: "Desafio da Tribo" },
+  { type: "exchange", label: "Troca" },
+  { type: "ammo", label: "Venda de Munição" },
+  { type: "recharge", label: "Recarga" },
+  { type: "consume", label: "Consumo" },
+  { type: "recharge_extra", label: "Recarga Extra" },
+  { type: "consume_extra", label: "Consumo Extra" },
+  { type: "ranking_recharge", label: "Ranking de Recarga" },
+  { type: "ranking_consume", label: "Ranking de Consumo" },
+];
+
+export function emptyBlock(spec: BlockSpec): EventBlock {
+  const block: EventBlock = { fields: {}, groups: {} };
+  for (const g of spec.groups) block.groups[g.key] = [];
+  if (spec.children) block.children = Array.from({ length: spec.children.minBlocks }, (_, i) => emptyBlock(spec.children!.blocks[i]));
+  return block;
+}
+
+export function emptySet(set: SetSpec): EventBlock[] {
+  return Array.from({ length: set.minBlocks }, (_, i) => emptyBlock(set.blocks[i]));
+}
+
+export function newSection(layout: LayoutSpec, servers: string): EventSection {
+  const sets: Record<string, EventBlock[]> = {};
+  for (const set of layout.sets) sets[set.key] = emptySet(set);
+  return { id: newId(), layoutId: layout.id, servers, fields: {}, sets };
+}
+
+export function newItem(partial: Partial<EventItem> = {}): EventItem {
+  return { id: "XXX", name: "", qty: 1, duration: "Permanent", bind: "Bound", ...partial };
+}
+
+/** Number of item slots a layout offers (used in the layout picker). */
+export function capacitySummary(layout: LayoutSpec): string {
+  return layout.sets
+    .map((set) => {
+      const first = set.blocks[0];
+      const items = first?.groups.reduce((n, g) => n + (g.kind === "items" ? g.slots.length : 0), 0) ?? 0;
+      if (first?.children) return `${set.blocks.length} ${set.blockLabel.toLowerCase()}(s)`;
+      return set.blocks.length > 1 ? `${set.blocks.length} × ${items} itens` : `${items} itens`;
+    })
+    .join(" + ");
+}
+
+// ------------------------------------------------------------------ documentos antigos
+
+interface LegacyItem { id?: string; name?: string; qty?: number; validity?: string; condition?: string; price?: string }
+interface LegacyGroup { label?: string; value?: string; items?: LegacyItem[] }
+interface LegacySection {
+  id?: string; type?: string; titleEn?: string; titlePt?: string; descPt?: string; servers?: string;
+  start?: string; end?: string; notes?: string; exchangeItem?: string; groups?: LegacyGroup[];
+}
+
+const LEGACY_LAYOUT: Record<string, string> = {
+  daily: "daily-14d", mission: "missions-8x5", doit: "doit-double", tribe: "tribe", exchange: "exchange-11groups",
+  ammo: "ammo-7x6", recharge: "recharge-13", consume: "consume-10", recharge_extra: "recharge-extra-5",
+  consume_extra: "consume-extra-5", ranking_recharge: "ranking-recharge", ranking_consume: "ranking-consume",
+};
+
+function legacyItem(i: LegacyItem): EventItem {
+  const parsed = parseItemLabel(`x ${i.validity ?? ""}`);
+  const item = newItem({ id: i.id || "XXX", name: i.name ?? "", qty: Number(i.qty) || 1, duration: parsed.duration, bind: parsed.bind });
+  const extra: Record<string, string> = {};
+  if (i.price) extra.price = i.price.replace(/[^\d.,]/g, "");
+  if (i.condition) extra.condition = i.condition;
+  if (Object.keys(extra).length) item.extra = { currency: "Coupons", ...extra };
+  return item;
+}
+
+export function isLegacySection(s: unknown): s is LegacySection {
+  return !!s && typeof s === "object" && !("layoutId" in (s as object)) && "type" in (s as object);
+}
+
+/** Converts a section saved by the first version of the editor. Returns null if the type has no layout. */
+export function convertLegacySection(old: LegacySection): EventSection | null {
+  const layout = getLayout(LEGACY_LAYOUT[old.type ?? ""] ?? "");
+  if (!layout) return null;
+  const section = newSection(layout, old.servers || "s1-s401");
+  section.fields.start = old.start ?? "";
+  section.fields.end = old.end ?? "";
+  const groups = old.groups ?? [];
+  const set = layout.sets[layout.type === "exchange" ? 1 : 0];
+  const blocks: EventBlock[] = [];
+  groups.slice(0, set.blocks.length).forEach((g, gi) => {
+    const spec = set.blocks[gi];
+    const block = emptyBlock(spec);
+    const items = (g.items ?? []).map(legacyItem);
+    if (layout.type === "exchange") {
+      block.fields.title = g.label ?? "";
+      block.children = items.slice(0, spec.children?.blocks.length ?? 0).map((item, k) => {
+        const child = emptyBlock(spec.children!.blocks[k]);
+        child.fields.value = g.value ?? "";
+        child.fields.total = String(item.qty);
+        child.groups.items = [item];
+        return child;
+      });
+    } else {
+      const key = spec.groups.find((x) => x.kind === "items")?.key ?? "items";
+      const capacity = spec.groups.find((x) => x.key === key)?.slots.length ?? 0;
+      block.groups[key] = items.slice(0, capacity);
+      if (layout.type === "daily") block.fields.label = g.label ?? "";
+      if (/recharge|consume/.test(layout.type)) block.fields.value = (g.label ?? "").replace(/^\D+/, "");
+      if (["mission", "doit", "tribe"].includes(layout.type) && gi === 0) {
+        block.fields.titleEn = old.titleEn ?? "";
+        block.fields.titlePt = old.titlePt ?? "";
+        block.fields.descPt = old.descPt ?? "";
+        block.fields.start = old.start ?? "";
+        block.fields.end = old.end ?? "";
+      }
+    }
+    blocks.push(block);
+  });
+  if (layout.type === "daily") {
+    section.sets.queues = blocks;
+    section.sets.days = emptySet(layout.sets[1]);
+  } else if (blocks.length) section.sets[set.key] = blocks;
+  if (layout.type === "exchange" && old.exchangeItem) {
+    const id = /(\d{3,})/.exec(old.exchangeItem)?.[1] ?? "XXX";
+    section.sets.coins = [{ fields: {}, groups: { items: [newItem({ id, name: old.exchangeItem.replace(/\s*-?\s*ID\s*\d+/i, "").trim() })] } }];
+  }
+  return section;
+}
+
+export function normalizeSections(raw: unknown): { sections: EventSection[]; converted: number; dropped: number } {
+  const list = Array.isArray(raw) ? raw : [];
+  let converted = 0;
+  let dropped = 0;
+  const sections: EventSection[] = [];
+  for (const s of list) {
+    if (isLegacySection(s)) {
+      const c = convertLegacySection(s);
+      if (c) {
+        sections.push(c);
+        converted += 1;
+      } else dropped += 1;
+    } else sections.push(s as EventSection);
+  }
+  return { sections, converted, dropped };
+}
