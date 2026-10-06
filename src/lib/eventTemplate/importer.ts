@@ -156,28 +156,78 @@ export async function readSection(pkg: XlsxPackage, layout: LayoutSpec, sheetNam
   return normalizeSection(layout, { id: newId(), layoutId: layout.id, servers: servers ?? guessServers(sheetName) ?? "s1-s401", fields, sets });
 }
 
-const patternRegex = (pattern: string) =>
-  new RegExp(`^${pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace("\\{servers\\}", "s\\d+(?:\\s*-\\s*s?\\d+)?")}(\\s+\\d+)*$`, "i");
+/**
+ * Layout types a tab name points to. Sheet names vary a lot across past spreadsheets
+ * ("BR-Recharge s401", "(BR) Recharge s1-s400", "BR - Ranking Consume s402 100k"), and some
+ * layouts share the exact same structure (Recharge × Consume, the two Rankings), so the name
+ * decides the type and the structure decides the layout inside it.
+ */
+function typesFromName(name: string): string[] {
+  const n = name.toLowerCase();
+  if (/ranking/.test(n)) return /recharge|recarga/.test(n) ? ["ranking_recharge"] : /consum/.test(n) ? ["ranking_consume"] : [];
+  if (/mission|missõ|missao/.test(n)) return ["mission"];
+  if (/daily|entrada/.test(n)) return ["daily"];
+  if (/do it if you can|faça se/.test(n)) return ["doit"];
+  if (/tribe|tribo/.test(n)) return ["tribe"];
+  if (/ammunition|munição|municao/.test(n)) return /vip/.test(n) ? [] : ["ammo"];
+  if (/exchange|troca/.test(n)) return /extra|kick/.test(n) ? [] : ["exchange"];
+  if (/newbie|novato/.test(n)) return [];
+  if (/recharge|recarga/.test(n)) return /extra/.test(n) ? ["recharge_extra"] : ["recharge"];
+  if (/consum/.test(n)) return /extra/.test(n) ? ["consume_extra"] : ["consume"];
+  return [];
+}
+
+const hasLiteral = (format: string) => /[A-Za-z]{3}/.test(format.replace(/\{[^}]+\}/g, ""));
+
+/** Fraction of the layout's fixed texts ("ACTIVE MISSIONS {servers}", "RECHARGE OF {value} COUPONS") found in place. */
+async function anchorScore(ws: Worksheet, layout: LayoutSpec): Promise<number> {
+  const fields = [...layout.fields, ...layout.sets.flatMap((s) => s.blocks[0]?.fields ?? [])].filter((f) => hasLiteral(f.format));
+  if (fields.length === 0) return 0;
+  let ok = 0;
+  for (const f of fields) {
+    const text = await ws.getText(f.cell);
+    if (text.trim() && parseFormat(f.format, text)) ok += 1;
+  }
+  return ok / fields.length;
+}
+
+/** Minimum structure (merged cells + fixed texts) to read a tab with a layout. */
+const MIN_MATCH = 0.75;
 
 /**
- * Finds the layout of a tab. Several layouts share a name pattern ("BR-Missions {servers}"),
- * so among the candidates the one whose merged cells match the tab best wins.
+ * Finds the layout of a tab: the name gives the type, the merged cells and the fixed texts
+ * choose among the layouts of that type. Tabs that do not look like any layout are skipped.
  */
 export async function detectLayout(pkg: XlsxPackage, manifest: TemplateManifest, sheetName: string): Promise<LayoutSpec | null> {
-  const candidates = manifest.layouts.filter((l) => l.sheet === sheetName || patternRegex(l.sheetNamePattern).test(sheetName.trim()));
-  if (candidates.length <= 1) return candidates[0] ?? null;
+  const exact = manifest.layouts.find((l) => l.sheet === sheetName);
+  const types = typesFromName(sheetName);
+  const candidates = manifest.layouts.filter((l) => l === exact || types.includes(l.type));
+  if (candidates.length === 0) return null;
   const ws = await pkg.worksheet(sheetName);
   let best: LayoutSpec | null = null;
   let bestScore = -1;
   for (const l of candidates) {
-    // Same structure: the tab named exactly like the template tab wins the tie.
-    const score = ws.mergeScore(l.signature ?? []) + (l.sheet === sheetName ? 0.001 : 0);
+    const score = ws.mergeScore(l.signature ?? []) + (await anchorScore(ws, l)) + (l === exact ? 0.001 : 0);
     if (score > bestScore) {
       best = l;
       bestScore = score;
     }
   }
-  return best;
+  return bestScore >= MIN_MATCH ? best : null;
+}
+
+/** Headers or ID lines read as item names: the tab is shifted compared with the layout. */
+const looksMisread = (name: string) => /^(item name|name:|id\s*[:/]|the above items)/i.test(name.trim()) || /\S\*\d/.test(name);
+
+function allItems(blocks: EventBlock[]): EventItem[] {
+  return blocks.flatMap((b) => [...Object.values(b.groups).flat(), ...allItems(b.children ?? [])]);
+}
+
+/** Drops a section read from a tab that does not really follow the layout (old variations of a tab). */
+function plausible(section: EventSection): boolean {
+  const items = allItems(Object.values(section.sets).flat());
+  if (items.length === 0) return true;
+  return items.filter((i) => looksMisread(i.name)).length / items.length <= 0.3;
 }
 
 /** "BR-Missions s1-s401 2" is the continuation of "BR-Missions s1-s401": join them back into one section. */
@@ -199,6 +249,7 @@ export async function readDocument(data: ArrayBuffer, manifest: TemplateManifest
     const layout = await detectLayout(pkg, manifest, sheet.name);
     if (!layout) continue;
     const section = await readSection(pkg, layout, sheet.name);
+    if (!plausible(section)) continue;
     if (isContinuation(prev, layout, sheet.name)) {
       const target = sections[sections.length - 1];
       for (const [key, blocks] of Object.entries(section.sets)) target.sets[key] = [...(target.sets[key] ?? []), ...blocks];
@@ -219,6 +270,12 @@ export async function readDocument(data: ArrayBuffer, manifest: TemplateManifest
     // A capa sem Entrada Diária (e abas vazias) não vira seção.
     if (Object.values(section.sets).every((blocks) => blocks.length === 0)) continue;
     sections.push(section);
+  }
+  // Sem capa: os servidores mais comuns entre as abas ("s402" em planilhas de servidores novos).
+  if (!title && sections.length) {
+    const count = new Map<string, number>();
+    for (const s of sections) count.set(s.servers, (count.get(s.servers) ?? 0) + 1);
+    servers = [...count.entries()].sort((a, b) => b[1] - a[1])[0][0];
   }
   return {
     title: title || "Documento importado",

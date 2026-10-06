@@ -19,6 +19,9 @@ import {
 } from "@/lib/eventTemplate/rules";
 import type { BlockSpec, EventBlock, EventItem, EventSection, FieldSpec, LayoutSpec, SetSpec } from "@/lib/eventTemplate/types";
 import type { IdStatus } from "@/lib/eventTemplate/itemLookup";
+import type { ItemUsage, UsageKind } from "@/lib/eventTemplate/usage";
+import { isMissionBlock } from "@/lib/eventTemplate/presets";
+import { PresetControls, type PresetApi } from "@/components/events/PresetControls";
 
 export interface EditorContext {
   idStatus: (id: string) => IdStatus;
@@ -27,6 +30,8 @@ export interface EditorContext {
   section: EventSection;
   servers: string;
   sectionFields: Record<string, string>;
+  getUsage?: (id: string) => Record<UsageKind, ItemUsage[]>;
+  presets?: PresetApi;
 }
 
 function Field({ label, children, wide }: { label: string; children: React.ReactNode; wide?: boolean }) {
@@ -140,7 +145,7 @@ function DerivedLines({ spec, block, ctx }: { spec: BlockSpec; block: EventBlock
   );
 }
 
-function BlockEditor({ spec, setKey, block, title, ctx, onChange, onRemove }: {
+export function BlockEditor({ spec, setKey, block, title, ctx, onChange, onRemove }: {
   spec: BlockSpec; setKey: string; block: EventBlock; title: string; ctx: EditorContext; onChange: (b: EventBlock) => void; onRemove?: () => void;
 }) {
   const setGroup = (key: string, items: EventItem[]) => onChange({ ...block, groups: { ...block.groups, [key]: items } });
@@ -161,6 +166,7 @@ function BlockEditor({ spec, setKey, block, title, ctx, onChange, onRemove }: {
       <div className="flex items-center gap-2">
         <span className="text-sm font-semibold">{title}</span>
         <span className="flex-1" />
+        {ctx.presets && isMissionBlock(spec) && <PresetControls api={ctx.presets} spec={spec} block={block} onChange={onChange} />}
         {onRemove && <Button size="icon" variant="ghost" className="h-7 w-7" title={`Remover ${title.toLowerCase()}`} onClick={onRemove}><Trash2 className="h-4 w-4" /></Button>}
       </div>
       {fields.length > 0 && (
@@ -184,6 +190,7 @@ function BlockEditor({ spec, setKey, block, title, ctx, onChange, onRemove }: {
               <span className="flex-1" />
               <ItemPicker
                 getImage={ctx.getImage}
+                getUsage={ctx.getUsage}
                 disabled={full}
                 onPick={(p) => {
                   const extra: Record<string, string> = {};
@@ -201,6 +208,7 @@ function BlockEditor({ spec, setKey, block, title, ctx, onChange, onRemove }: {
                 itemFields={ctx.layout.itemFields}
                 idStatus={ctx.idStatus}
                 getImage={ctx.getImage}
+                usage={ctx.getUsage && item.id ? ctx.getUsage(item.id) : undefined}
                 onChange={(patch) => setGroup(g.key, items.map((x, k) => (k === i ? { ...x, ...patch } : x)))}
                 onRemove={() => setGroup(g.key, items.filter((_, k) => k !== i))}
               />
@@ -307,12 +315,14 @@ interface SectionProps {
   onToggleCollapse?: () => void;
   idStatus: (id: string) => IdStatus;
   getImage: (id: string) => string;
+  getUsage?: (id: string) => Record<UsageKind, ItemUsage[]>;
+  presets?: PresetApi;
   onChange: (s: EventSection) => void;
   onRemove: () => void;
   onMove: (dir: -1 | 1) => void;
 }
 
-export function SectionEditor({ section, index, isFirst, isLast, collapsed, onToggleCollapse, idStatus, getImage, onChange, onRemove, onMove }: SectionProps) {
+export function SectionEditor({ section, index, isFirst, isLast, collapsed, onToggleCollapse, idStatus, getImage, getUsage, presets, onChange, onRemove, onMove }: SectionProps) {
   const layout = getLayout(section.layoutId);
   if (!layout) {
     return (
@@ -322,7 +332,7 @@ export function SectionEditor({ section, index, isFirst, isLast, collapsed, onTo
       </Card>
     );
   }
-  const ctx: EditorContext = { idStatus, getImage, layout, section, servers: section.servers, sectionFields: section.fields };
+  const ctx: EditorContext = { idStatus, getImage, getUsage, presets, layout, section, servers: section.servers, sectionFields: section.fields };
   const fields = editable(layout.fields);
   const items = itemCount(Object.values(section.sets).flat());
   return (

@@ -137,6 +137,11 @@ export interface EventDocument {
   template_version?: string | null;
   sections: EventSection[];
   updated_at?: string;
+  /** "old" (s1-s401) ou "new" (s402): bases separadas. */
+  server_group?: string;
+  /** "editor" (criado no painel) ou "import" (evento anterior importado). */
+  source?: string;
+  source_file?: string | null;
 }
 
 export const DURATIONS = ["Permanent", "30 Days - renewable", "30 Days - non-renewable", "7 Days", "15 Days", "30 Days", "90 Days"];

@@ -93,7 +93,8 @@ export function parseIdLine(text: string): { id: string; qty: number }[] {
     .map((s) => s.trim())
     .filter(Boolean)
     .map((tok) => {
-      const m = /^([^*\s]+)\s*\*\s*([\d.]+)/.exec(tok);
+      // "*250" (planilhas sem ID): ID vazio, quantidade 250.
+      const m = /^([^*\s]*)\s*\*\s*([\d.]+)/.exec(tok);
       if (!m) return { id: tok.replace(/^ID:\s*/i, ""), qty: 1 };
       return { id: m[1], qty: Number(m[2].replace(/\./g, "")) || 1 };
     });

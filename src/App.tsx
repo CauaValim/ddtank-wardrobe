@@ -15,9 +15,9 @@ import { lazy, Suspense } from "react";
 
 // Página pesada (modelo oficial + motor OOXML): carregada só quando aberta.
 const EventDocuments = lazy(() => import("./pages/EventDocuments"));
-const eventDocuments = (
+const eventDocuments = (group: "old" | "new") => (
   <Suspense fallback={<p className="p-6 text-sm text-muted-foreground">Carregando...</p>}>
-    <EventDocuments />
+    <EventDocuments group={group} />
   </Suspense>
 );
 
@@ -55,8 +55,9 @@ function AppRoutes() {
             {auth.role === "super_admin" && (
               <Route path="/users" element={<UserManagement />} />
             )}
-            {auth.canImport && <Route path="/eventos" element={eventDocuments} />}
-            {auth.canImport && <Route path="/eventos/:id" element={eventDocuments} />}
+            {auth.canImport && <Route path="/eventos" element={eventDocuments("old")} />}
+            {auth.canImport && <Route path="/eventos/novos" element={eventDocuments("new")} />}
+            {auth.canImport && <Route path="/eventos/:id" element={eventDocuments("old")} />}
             <Route path="/trust" element={<Trust />} />
             <Route path="/login" element={<Navigate to="/" replace />} />
             <Route path="*" element={<NotFound />} />

@@ -4,9 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Loader2, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { usageSummary, type ItemUsage, type UsageKind } from "@/lib/eventTemplate/usage";
 
 interface Props {
   getImage: (id: string) => string;
+  /** Onde o item já foi usado na mesma base de servidores (mostrado em cada resultado). */
+  getUsage?: (id: string) => Record<UsageKind, ItemUsage[]>;
   onPick: (item: { id: string; name: string }) => void;
   disabled?: boolean;
 }
@@ -37,7 +40,7 @@ async function searchItems(term: string): Promise<Result[]> {
   return out.slice(0, LIMIT);
 }
 
-export function ItemPicker({ getImage, onPick, disabled }: Props) {
+export function ItemPicker({ getImage, getUsage, onPick, disabled }: Props) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const [results, setResults] = useState<Result[]>([]);
@@ -98,7 +101,12 @@ export function ItemPicker({ getImage, onPick, disabled }: Props) {
                 ) : (
                   <div className="h-8 w-8 rounded bg-muted" />
                 )}
-                <span className="flex-1 truncate">{it.name}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate">{it.name}</span>
+                  {getUsage && usageSummary(getUsage(it.id)) && (
+                    <span className="block truncate text-[11px] text-amber-700 dark:text-amber-400">{usageSummary(getUsage(it.id))}</span>
+                  )}
+                </span>
                 <span className="text-xs text-muted-foreground">{it.id}</span>
               </button>
             );

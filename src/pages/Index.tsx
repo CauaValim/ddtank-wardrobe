@@ -247,6 +247,15 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
                 <FileSpreadsheet className="h-3.5 w-3.5" /> Criação de Eventos
               </button>
             )}
+            {auth.canImport && (
+              <button
+                onClick={() => navigate("/eventos/novos")}
+                className="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-muted transition-all"
+                title="Documentos, eventos anteriores e pré-definições dos servidores novos (s402)"
+              >
+                <FileSpreadsheet className="h-3.5 w-3.5" /> Eventos – Servidores Novos
+              </button>
+            )}
             <button
               onClick={() => setGameDataOpen(true)}
               className="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-muted transition-all"

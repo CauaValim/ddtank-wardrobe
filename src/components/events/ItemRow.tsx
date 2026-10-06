@@ -8,6 +8,7 @@ import { BINDS, DURATIONS, type EventItem, type ItemFieldSpec } from "@/lib/even
 import { fileToItemImage } from "@/lib/eventTemplate/browserImages";
 import type { IdStatus } from "@/lib/eventTemplate/itemLookup";
 import { isRenewable } from "@/lib/eventTemplate/rules";
+import { ItemUsageBadges, type UsageByKind } from "@/components/events/ItemUsageBadges";
 
 interface Props {
   item: EventItem;
@@ -16,13 +17,15 @@ interface Props {
   itemFields?: ItemFieldSpec[];
   idStatus: (id: string) => IdStatus;
   getImage: (id: string) => string;
+  /** Onde o item já foi usado (troca, ranking, vendas recentes) na mesma base de servidores. */
+  usage?: UsageByKind;
   onChange: (patch: Partial<EventItem>) => void;
   onRemove: () => void;
 }
 
 const NO_BIND = "__none__";
 
-export function ItemRow({ item, index, kind, itemFields, idStatus, getImage, onChange, onRemove }: Props) {
+export function ItemRow({ item, index, kind, itemFields, idStatus, getImage, usage, onChange, onRemove }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const isPending = !item.id.trim() || /^x+$/i.test(item.id.trim());
   const image = item.imageUrl || (isPending ? "" : getImage(item.id));
@@ -63,6 +66,7 @@ export function ItemRow({ item, index, kind, itemFields, idStatus, getImage, onC
         value={item.name}
         onChange={(e) => onChange({ name: e.target.value })}
       />
+      <ItemUsageBadges usage={usage} />
       <Input
         className={`w-28 tabular-nums ${unknownId ? "border-amber-500" : ""}`}
         title={unknownId ? "Este ID não existe no painel" : "ID do item (XXX se ainda não existe)"}

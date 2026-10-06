@@ -1,19 +1,26 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, ChevronsDownUp, ChevronsUpDown, Copy, Download, FileText, FileUp, Plus, Save, ShieldCheck, Trash2 } from "lucide-react";
+import { ArrowLeft, ChevronsDownUp, ChevronsUpDown, Copy, Download, FileText, FileUp, History, Plus, Save, ShieldCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useEventItemLookup } from "@/hooks/useEventItemLookup";
+import { useItemUsage, invalidateItemUsage } from "@/hooks/useItemUsage";
+import { useEventPresets } from "@/hooks/useEventPresets";
 import { useAuth } from "@/hooks/useAuth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SectionEditor } from "@/components/events/SectionEditor";
 import { LayoutPicker } from "@/components/events/LayoutPicker";
 import { TemplateBanner } from "@/components/events/TemplateBanner";
 import { DateField } from "@/components/events/DateInputs";
+import { PresetsPanel } from "@/components/events/PresetsPanel";
+import { HistoryPanel } from "@/components/events/HistoryPanel";
+import { PastEventsImport } from "@/components/events/PastEventsImport";
+import type { PresetApi } from "@/components/events/PresetControls";
 import { isoToUs } from "@/lib/eventTemplate/format";
 import { manifest, newId, newSection, normalizeSections } from "@/lib/eventTemplate/model";
 import { exportDocument } from "@/lib/eventTemplate/exporter";
@@ -22,16 +29,26 @@ import { loadTemplate } from "@/lib/eventTemplate/templateSource";
 import { downloadBlob, loadImageForWorkbook } from "@/lib/eventTemplate/browserImages";
 import { validateEventDocument, type ValidationIssue } from "@/lib/eventTemplate/validate";
 import { collectItemIds, lookupItems, validationOptions, type ItemLookup } from "@/lib/eventTemplate/itemLookup";
+import { SERVER_GROUPS, asServerGroup, type ServerGroup } from "@/lib/eventTemplate/serverGroups";
 import type { EventDocument, EventItem } from "@/lib/eventTemplate/types";
 import type { Json } from "@/integrations/supabase/types";
 
 type Row = Omit<EventDocument, "sections"> & { sections: Json };
+/** Linha da lista (sem as seções, que podem ser grandes nos eventos importados). */
+type ListRow = Omit<EventDocument, "sections">;
 
 const table = () => supabase.from("event_documents");
+const LIST_COLUMNS = "id, title, theme, servers, start_date, end_date, status, template_version, updated_at, server_group, source, source_file";
 
 function fromRow(row: Row): { doc: EventDocument; converted: number; dropped: number } {
   const { sections, converted, dropped } = normalizeSections(row.sections);
   return { doc: { ...row, status: row.status === "final" ? "final" : "draft", sections }, converted, dropped };
+}
+
+async function fetchDoc(id: string): Promise<EventDocument> {
+  const { data, error } = await table().select("*").eq("id", id).single();
+  if (error) throw error;
+  return fromRow(data as Row).doc;
 }
 
 async function runExport(doc: EventDocument, lookup: ItemLookup): Promise<ValidationIssue[]> {
@@ -51,31 +68,60 @@ async function runExport(doc: EventDocument, lookup: ItemLookup): Promise<Valida
   return issues;
 }
 
-export default function EventDocuments() {
+const isAdminRole = (role: string | null | undefined) => role === "admin" || role === "super_admin";
+
+export default function EventDocuments({ group }: { group?: ServerGroup }) {
   const { id } = useParams();
-  return id ? <Editor id={id} /> : <DocList />;
+  return id ? <Editor id={id} /> : <DocList group={group ?? "old"} />;
 }
 
-function DocList() {
+function GroupSwitch({ group }: { group: ServerGroup }) {
+  const navigate = useNavigate();
+  return (
+    <div className="inline-flex rounded-md border border-border p-0.5">
+      {(["old", "new"] as ServerGroup[]).map((g) => (
+        <Button key={g} size="sm" variant={g === group ? "default" : "ghost"} className="h-7" onClick={() => navigate(SERVER_GROUPS[g].path)}>
+          {SERVER_GROUPS[g].label} ({SERVER_GROUPS[g].servers})
+        </Button>
+      ))}
+    </div>
+  );
+}
+
+function DocList({ group }: { group: ServerGroup }) {
   const navigate = useNavigate();
   const { role } = useAuth();
-  const [docs, setDocs] = useState<EventDocument[]>([]);
+  const isAdmin = isAdminRole(role);
+  const [docs, setDocs] = useState<ListRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const importRef = useRef<HTMLInputElement>(null);
+  const info = SERVER_GROUPS[group];
 
   const load = useCallback(async () => {
-    const { data, error } = await table().select("*").order("updated_at", { ascending: false });
+    setLoading(true);
+    const { data, error } = await table().select(LIST_COLUMNS).eq("server_group", group).order("updated_at", { ascending: false });
     if (error) toast.error(error.message);
-    setDocs(((data ?? []) as Row[]).map((r) => fromRow(r).doc));
+    setDocs(((data ?? []) as ListRow[]).map((r) => ({ ...r, status: r.status === "final" ? "final" : "draft" })));
     setLoading(false);
-  }, []);
+  }, [group]);
   useEffect(() => { load(); }, [load]);
 
+  const created = docs.filter((d) => d.source !== "import");
+  const past = docs.filter((d) => d.source === "import");
+
   const insert = async (payload: Partial<EventDocument>) => {
-    const { data: u } = await supabase.auth.getUser();
     const { data, error } = await table()
-      .insert({ ...payload, title: payload.title ?? "Novo documento", sections: (payload.sections ?? []) as unknown as Json, template_version: manifest.version, created_by: u.user?.id })
+      .insert({
+        ...payload,
+        title: payload.title ?? "Novo documento",
+        servers: payload.servers ?? info.servers,
+        sections: (payload.sections ?? []) as unknown as Json,
+        template_version: manifest.version,
+        server_group: group,
+        source: "editor",
+        source_file: null,
+      })
       .select("id")
       .single();
     if (error) {
@@ -85,13 +131,24 @@ function DocList() {
     navigate(`/eventos/${data.id}`);
   };
 
-  const duplicate = (d: EventDocument) =>
-    insert({ title: `${d.title} (cópia)`, theme: d.theme, servers: d.servers, start_date: d.start_date, end_date: d.end_date, sections: d.sections.map((s) => ({ ...s, id: newId() })) });
+  const withDoc = async (d: ListRow, key: string, fn: (doc: EventDocument) => Promise<unknown>) => {
+    setBusy(key);
+    try { await fn(await fetchDoc(d.id)); }
+    catch (e) { toast.error(e instanceof Error ? e.message : "Falha ao abrir o documento"); }
+    finally { setBusy(null); }
+  };
 
-  const remove = async (d: EventDocument) => {
+  const duplicate = (d: ListRow) => withDoc(d, `dup-${d.id}`, (doc) => insert({
+    title: d.source === "import" ? `${d.title} (nova semana)` : `${d.title} (cópia)`,
+    theme: doc.theme, servers: doc.servers, start_date: doc.start_date, end_date: doc.end_date,
+    sections: doc.sections.map((s) => ({ ...s, id: newId() })),
+  }));
+
+  const remove = async (d: ListRow) => {
     if (!confirm(`Excluir "${d.title}"? Essa ação não pode ser desfeita.`)) return;
     const { error } = await table().delete().eq("id", d.id);
     if (error) return toast.error(error.message);
+    invalidateItemUsage(group);
     load();
   };
 
@@ -113,53 +170,81 @@ function DocList() {
     }
   };
 
+  const list = (rows: ListRow[], empty: string) =>
+    loading ? (
+      <p className="text-sm text-muted-foreground">Carregando...</p>
+    ) : rows.length === 0 ? (
+      <Card className="p-6 text-sm text-muted-foreground">{empty}</Card>
+    ) : rows.map((d) => (
+      <Card key={d.id} className="flex flex-wrap items-center gap-3 p-4">
+        <FileText className="h-5 w-5 text-primary" />
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-semibold">{d.title}</p>
+          <p className="truncate text-xs text-muted-foreground">
+            {d.servers}, {isoToUs(d.start_date) || "sem início"} a {isoToUs(d.end_date) || "sem fim"}
+            {d.source_file ? ` · ${d.source_file}` : ""}
+          </p>
+        </div>
+        {d.source !== "import" && <Badge variant={d.status === "final" ? "default" : "secondary"}>{d.status === "final" ? "Finalizado" : "Rascunho"}</Badge>}
+        <Button size="sm" onClick={() => navigate(`/eventos/${d.id}`)}>Abrir</Button>
+        <Button size="icon" variant="ghost" title={d.source === "import" ? "Criar um documento novo a partir deste evento" : "Duplicar"} disabled={busy === `dup-${d.id}`} onClick={() => duplicate(d)}><Copy className="h-4 w-4" /></Button>
+        <Button
+          size="icon"
+          variant="ghost"
+          title="Exportar .xlsx"
+          disabled={busy === d.id}
+          onClick={() => withDoc(d, d.id, async (doc) => runExport(doc, await lookupItems(collectItemIds(doc))))}
+        >
+          <Download className="h-4 w-4" />
+        </Button>
+        <Button size="icon" variant="ghost" title="Excluir" onClick={() => remove(d)}><Trash2 className="h-4 w-4" /></Button>
+      </Card>
+    ));
+
   return (
     <div className="mx-auto w-full max-w-5xl space-y-4 p-6">
       <div className="flex flex-wrap items-center gap-2">
         <Button variant="ghost" size="sm" title="Voltar ao painel" onClick={() => navigate("/")}><ArrowLeft className="h-4 w-4" /></Button>
-        <h1 className="flex-1 text-xl font-bold">Criação de Eventos</h1>
-        <input ref={importRef} type="file" accept=".xlsx" className="hidden" onChange={(e) => { importFile(e.target.files?.[0]); e.target.value = ""; }} />
-        <Button variant="outline" className="gap-1" disabled={busy === "import"} onClick={() => importRef.current?.click()}>
-          <FileUp className="h-4 w-4" /> {busy === "import" ? "Importando..." : "Importar planilha"}
-        </Button>
-        <Button className="gap-1" onClick={() => insert({ servers: "s1-s401", sections: [] })}><Plus className="h-4 w-4" /> Novo documento</Button>
+        <h1 className="text-xl font-bold">Criação de Eventos</h1>
+        <span className="flex-1" />
+        <GroupSwitch group={group} />
       </div>
       <TemplateBanner canUpload={role === "super_admin"} />
-      {loading ? (
-        <p className="text-sm text-muted-foreground">Carregando...</p>
-      ) : docs.length === 0 ? (
-        <Card className="p-6 text-sm text-muted-foreground">
-          Nenhum documento ainda. Crie um novo ou importe a planilha da semana anterior para começar a partir dela.
-        </Card>
-      ) : docs.map((d) => (
-        <Card key={d.id} className="flex flex-wrap items-center gap-3 p-4">
-          <FileText className="h-5 w-5 text-primary" />
-          <div className="min-w-0 flex-1">
-            <p className="truncate font-semibold">{d.title}</p>
-            <p className="text-xs text-muted-foreground">
-              {d.servers}, {isoToUs(d.start_date) || "sem início"} a {isoToUs(d.end_date) || "sem fim"}, {d.sections.length} seção(ões)
-            </p>
+
+      <Tabs defaultValue="docs">
+        <TabsList className="flex-wrap">
+          <TabsTrigger value="docs">Documentos ({created.length})</TabsTrigger>
+          <TabsTrigger value="past">Eventos anteriores ({past.length})</TabsTrigger>
+          <TabsTrigger value="presets">Pré-definições</TabsTrigger>
+          {isAdmin && <TabsTrigger value="history" className="gap-1"><History className="h-3.5 w-3.5" /> Histórico</TabsTrigger>}
+        </TabsList>
+
+        <TabsContent value="docs" className="space-y-3">
+          <div className="flex flex-wrap justify-end gap-2">
+            <input ref={importRef} type="file" accept=".xlsx" className="hidden" onChange={(e) => { importFile(e.target.files?.[0]); e.target.value = ""; }} />
+            <Button variant="outline" className="gap-1" disabled={busy === "import"} onClick={() => importRef.current?.click()}>
+              <FileUp className="h-4 w-4" /> {busy === "import" ? "Importando..." : "Começar de uma planilha"}
+            </Button>
+            <Button className="gap-1" onClick={() => insert({ sections: [] })}><Plus className="h-4 w-4" /> Novo documento ({info.servers})</Button>
           </div>
-          <Badge variant={d.status === "final" ? "default" : "secondary"}>{d.status === "final" ? "Finalizado" : "Rascunho"}</Badge>
-          <Button size="sm" onClick={() => navigate(`/eventos/${d.id}`)}>Abrir</Button>
-          <Button size="icon" variant="ghost" title="Duplicar" onClick={() => duplicate(d)}><Copy className="h-4 w-4" /></Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            title="Exportar .xlsx"
-            disabled={busy === d.id}
-            onClick={async () => {
-              setBusy(d.id);
-              try { await runExport(d, await lookupItems(collectItemIds(d))); }
-              catch (e) { toast.error(e instanceof Error ? e.message : "Falha ao exportar"); }
-              finally { setBusy(null); }
-            }}
-          >
-            <Download className="h-4 w-4" />
-          </Button>
-          <Button size="icon" variant="ghost" title="Excluir" onClick={() => remove(d)}><Trash2 className="h-4 w-4" /></Button>
-        </Card>
-      ))}
+          {list(created, "Nenhum documento ainda. Crie um novo, comece de uma planilha ou de um evento anterior.")}
+        </TabsContent>
+
+        <TabsContent value="past" className="space-y-3">
+          <PastEventsImport onDone={load} />
+          {list(past, `Nenhum evento anterior importado para ${info.label.toLowerCase()}.`)}
+        </TabsContent>
+
+        <TabsContent value="presets">
+          <PresetsPanel group={group} canEdit={isAdmin} />
+        </TabsContent>
+
+        {isAdmin && (
+          <TabsContent value="history">
+            <HistoryPanel group={group} onOpen={(docId) => navigate(`/eventos/${docId}`)} />
+          </TabsContent>
+        )}
+      </Tabs>
     </div>
   );
 }
@@ -168,7 +253,11 @@ function Editor({ id }: { id: string }) {
   const navigate = useNavigate();
   const { role } = useAuth();
   const [doc, setDoc] = useState<EventDocument | null>(null);
+  const group = doc ? asServerGroup(doc.server_group) : null;
   const { idStatus, getImage, ensure } = useEventItemLookup(doc);
+  const { getUsage } = useItemUsage(group, doc?.id ?? null);
+  const { presets, save: savePreset } = useEventPresets(group);
+  const presetApi = useMemo<PresetApi>(() => ({ list: presets, canSave: isAdminRole(role), save: savePreset }), [presets, role, savePreset]);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -212,10 +301,11 @@ function Editor({ id }: { id: string }) {
     setSaving(false);
     if (error) return toast.error(error.message);
     setDirty(false);
+    invalidateItemUsage(asServerGroup(doc.server_group));
     toast.success("Documento salvo");
   };
 
-  if (!doc) return <p className="p-6 text-sm text-muted-foreground">Carregando...</p>;
+  if (!doc || !group) return <p className="p-6 text-sm text-muted-foreground">Carregando...</p>;
 
   const move = (i: number, dir: -1 | 1) => {
     const arr = [...doc.sections];
@@ -233,8 +323,10 @@ function Editor({ id }: { id: string }) {
   return (
     <div className="mx-auto w-full max-w-6xl space-y-4 p-6">
       <div className="sticky top-0 z-10 flex flex-wrap items-center gap-2 border-b border-border bg-background py-2">
-        <Button variant="ghost" size="sm" title="Voltar à lista" onClick={() => (!dirty || confirm("Sair sem salvar as alterações?")) && navigate("/eventos")}><ArrowLeft className="h-4 w-4" /></Button>
+        <Button variant="ghost" size="sm" title="Voltar à lista" onClick={() => (!dirty || confirm("Sair sem salvar as alterações?")) && navigate(SERVER_GROUPS[group].path)}><ArrowLeft className="h-4 w-4" /></Button>
         <Input className="min-w-[200px] flex-1 font-semibold" value={doc.title} onChange={(e) => update({ title: e.target.value })} aria-label="Nome do documento" />
+        <Badge variant="outline" title="Base de servidores deste documento">{SERVER_GROUPS[group].label}</Badge>
+        {doc.source === "import" && <Badge variant="secondary">Evento anterior</Badge>}
         <Select value={doc.status} onValueChange={(v) => update({ status: v as EventDocument["status"] })}>
           <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
           <SelectContent><SelectItem value="draft">Rascunho</SelectItem><SelectItem value="final">Finalizado</SelectItem></SelectContent>
@@ -279,7 +371,7 @@ function Editor({ id }: { id: string }) {
         </div>
         <p className="text-xs text-muted-foreground sm:col-span-2 lg:col-span-4">
           A capa (primeira aba do modelo) sempre sai no arquivo. Se o documento tiver uma seção de Entrada Diária, ela ocupa a capa.
-          Modelo: {manifest.version}.
+          Modelo: {manifest.version}. Os selos Troca, Ranking e 30 dias mostram onde cada item já foi usado em {SERVER_GROUPS[group].label.toLowerCase()}.
         </p>
       </Card>
 
@@ -328,6 +420,8 @@ function Editor({ id }: { id: string }) {
           })}
           idStatus={idStatus}
           getImage={getImage}
+          getUsage={getUsage}
+          presets={presetApi}
           onChange={(ns) => update({ sections: doc.sections.map((x) => (x.id === s.id ? ns : x)) })}
           onRemove={() => confirm("Remover esta seção?") && update({ sections: doc.sections.filter((x) => x.id !== s.id) })}
           onMove={(d) => move(i, d)}

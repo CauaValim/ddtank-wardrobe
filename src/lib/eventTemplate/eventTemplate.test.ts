@@ -6,6 +6,8 @@ import manifestJson from "./manifest.json";
 import { exportDocument } from "./exporter";
 import { readDocument, readSection } from "./importer";
 import { applyDailyLength } from "./rules";
+import { archiveDocument } from "./pastEvents";
+import { buildUsageIndex } from "./usage";
 import { XlsxPackage, descendants, parseRange } from "./ooxml";
 import { Drawing } from "./drawing";
 import type { BlockSpec, EventBlock, EventDocument, LayoutSpec, SetSpec, TemplateManifest } from "./types";
@@ -221,6 +223,19 @@ describe.skipIf(!hasTemplate)("modelo oficial de eventos", () => {
     expect(back.sections.map((s) => s.layoutId)).toEqual(["missions-8x5", "missions-3x3-choice"]);
     expect(back.sections[0].sets.missions.map((m) => m.fields.titlePt)).toEqual(Array.from({ length: 10 }, (_, i) => `Missão ${i + 1}`));
     expect(back.sections[1].sets.missions.map((m) => [m.fields.titlePt, m.groups.choice?.length ?? 0])).toEqual([["Com escolha 1", 2], [b.fields.titlePt, 0], ["Sem escolha", 0]]);
+  }, 120_000);
+
+  it("evento anterior: a planilha inteira é reconhecida aba por aba e guardada sem imagens", async () => {
+    const doc = await readDocument(template, manifest);
+    // Cada aba do modelo volta com o próprio layout, mesmo as que dividem o padrão de nome.
+    expect(doc.sections.map((s) => s.layoutId)).toEqual(manifest.layouts.map((l) => l.id));
+    const archived = archiveDocument(doc, "(BR) 16 years of DDTank Week - s1-s401 (ID) (2).xlsx");
+    expect(archived.title).toBe("(BR) 16 years of DDTank Week - s1-s401 (ID) (2)");
+    expect(archived.start_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(JSON.stringify(archived.sections)).not.toContain("imageUrl");
+    const usage = buildUsageIndex([{ id: "x", title: archived.title, start_date: archived.start_date, sections: archived.sections }]);
+    expect([...usage.values()].flat().some((u) => u.kind === "exchange")).toBe(true);
+    expect([...usage.values()].flat().some((u) => u.kind === "ranking")).toBe(true);
   }, 120_000);
 
   it("cenário: Entrada Diária de 7 dias e fundo laranja nos itens renováveis", async () => {
