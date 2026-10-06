@@ -95,9 +95,9 @@ export type Database = {
       event_item_categories: {
         Row: {
           allowed: string[]
-          forbidden: string[]
           created_at: string
           created_by: string | null
+          forbidden: string[]
           id: string
           item_id: string
           item_name: string
@@ -107,9 +107,9 @@ export type Database = {
         }
         Insert: {
           allowed?: string[]
-          forbidden?: string[]
           created_at?: string
           created_by?: string | null
+          forbidden?: string[]
           id?: string
           item_id: string
           item_name?: string
@@ -119,9 +119,9 @@ export type Database = {
         }
         Update: {
           allowed?: string[]
-          forbidden?: string[]
           created_at?: string
           created_by?: string | null
+          forbidden?: string[]
           id?: string
           item_id?: string
           item_name?: string
