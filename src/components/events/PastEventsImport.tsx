@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { CheckCircle2, FileStack, Loader2, XCircle } from "lucide-react";
+import { CheckCircle2, FileStack, Loader2, Search, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -8,11 +8,17 @@ import { Card } from "@/components/ui/card";
 import { manifest } from "@/lib/eventTemplate/model";
 import { readDocument } from "@/lib/eventTemplate/importer";
 import { archiveDocument } from "@/lib/eventTemplate/pastEvents";
+import { resolveIdsByName } from "@/lib/eventTemplate/resolveNames";
+import { normalizeSections } from "@/lib/eventTemplate/model";
+import { namesWithoutId } from "@/lib/eventTemplate/nameMatch";
 import { SERVER_GROUPS, type ServerGroup } from "@/lib/eventTemplate/serverGroups";
 import { invalidateItemUsage } from "@/hooks/useItemUsage";
 import type { Json } from "@/integrations/supabase/types";
 
 type Result = { file: string; ok: boolean; message: string };
+
+const nameSummary = ({ resolved, missing }: { resolved: number; missing: number }) =>
+  `${resolved ? `, ${resolved} item(ns) sem ID encontrados pelo nome` : ""}${missing ? `, ${missing} sem correspondência na base` : ""}`;
 
 /**
  * Dois botões (servidores antigos / novos) que enviam várias planilhas de eventos anteriores
@@ -24,6 +30,37 @@ export function PastEventsImport({ current, onDone }: { current: ServerGroup; on
   const [running, setRunning] = useState<{ group: ServerGroup; done: number; total: number } | null>(null);
   const [results, setResults] = useState<Result[]>([]);
   const [lastGroup, setLastGroup] = useState<ServerGroup | null>(null);
+  const [fixing, setFixing] = useState<string | null>(null);
+
+  /** Eventos já importados sem ID: procura os nomes na base e grava os IDs encontrados. */
+  const fillMissingIds = async () => {
+    setFixing("Buscando eventos importados...");
+    try {
+      const { data, error } = await supabase.from("event_documents").select("id, title, sections").eq("server_group", current).eq("source", "import");
+      if (error) throw error;
+      let docs = 0;
+      let resolved = 0;
+      let missing = 0;
+      const pending = (data ?? []).map((d) => ({ ...d, sections: normalizeSections(d.sections).sections })).filter((d) => namesWithoutId(d.sections).length > 0);
+      for (const [i, d] of pending.entries()) {
+        setFixing(`Completando IDs: ${i + 1} de ${pending.length} evento(s)...`);
+        const named = await resolveIdsByName(d.sections);
+        missing += named.missing;
+        if (named.resolved === 0) continue;
+        const { error: upErr } = await supabase.from("event_documents").update({ sections: named.sections as unknown as Json }).eq("id", d.id);
+        if (upErr) throw upErr;
+        docs += 1;
+        resolved += named.resolved;
+      }
+      invalidateItemUsage(current);
+      toast.success(`${resolved} item(ns) completados pelo nome em ${docs} evento(s)${missing ? `; ${missing} continuam sem correspondência na base` : ""}`);
+      onDone();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Falha ao completar os IDs");
+    } finally {
+      setFixing(null);
+    }
+  };
   // O botão da base aberta vem primeiro; o da outra base grava lá (e avisa onde ver).
   const order: ServerGroup[] = current === "old" ? ["old", "new"] : ["new", "old"];
 
@@ -39,7 +76,9 @@ export function PastEventsImport({ current, onDone }: { current: ServerGroup; on
         if (doc.sections.length === 0) {
           out.push({ file: file.name, ok: false, message: "nenhuma aba segue o modelo oficial" });
         } else {
-          const archived = archiveDocument(doc, file.name);
+          // Planilhas sem ID: o item é procurado na base pelo nome.
+          const named = await resolveIdsByName(doc.sections);
+          const archived = archiveDocument({ ...doc, sections: named.sections }, file.name);
           const { error } = await supabase.from("event_documents").insert({
             ...archived,
             sections: archived.sections as unknown as Json,
@@ -49,7 +88,7 @@ export function PastEventsImport({ current, onDone }: { current: ServerGroup; on
           });
           if (error?.code === "23505") out.push({ file: file.name, ok: false, message: "já tinha sido importado" });
           else if (error) out.push({ file: file.name, ok: false, message: error.message });
-          else out.push({ file: file.name, ok: true, message: `${archived.sections.length} aba(s)` });
+          else out.push({ file: file.name, ok: true, message: `${archived.sections.length} aba(s)${nameSummary(named)}` });
         }
       } catch (e) {
         out.push({ file: file.name, ok: false, message: e instanceof Error ? e.message : "falha ao ler a planilha" });
@@ -102,6 +141,13 @@ export function PastEventsImport({ current, onDone }: { current: ServerGroup; on
             </Button>
           </span>
         ))}
+      </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button variant="ghost" size="sm" className="gap-1" disabled={!!running || !!fixing} onClick={fillMissingIds}
+          title="Para eventos já importados de planilhas sem ID: procura cada item pelo nome na base do painel">
+          <Search className="h-4 w-4" /> Completar IDs pelo nome ({SERVER_GROUPS[current].label.toLowerCase()})
+        </Button>
+        {fixing && <span className="flex items-center gap-1 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> {fixing}</span>}
       </div>
       {running && (
         <p className="flex items-center gap-2 text-sm">

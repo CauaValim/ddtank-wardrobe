@@ -27,6 +27,7 @@ import { isoToUs } from "@/lib/eventTemplate/format";
 import { manifest, newId, newSection, normalizeSections } from "@/lib/eventTemplate/model";
 import { exportDocument } from "@/lib/eventTemplate/exporter";
 import { readDocument } from "@/lib/eventTemplate/importer";
+import { resolveIdsByName } from "@/lib/eventTemplate/resolveNames";
 import { loadTemplate } from "@/lib/eventTemplate/templateSource";
 import { downloadBlob, loadImageForWorkbook } from "@/lib/eventTemplate/browserImages";
 import { validateEventDocument, type ValidationIssue } from "@/lib/eventTemplate/validate";
@@ -167,8 +168,10 @@ function DocList({ group }: { group: ServerGroup }) {
         toast.error("Nenhuma aba dessa planilha segue o modelo oficial");
         return;
       }
-      toast.success(`${doc.sections.length} aba(s) importada(s)`);
-      await insert({ ...doc, title: file.name.replace(/\.xlsx$/i, "") });
+      // Planilhas sem ID: o item é procurado na base pelo nome.
+      const named = await resolveIdsByName(doc.sections);
+      toast.success(`${doc.sections.length} aba(s) importada(s)${named.resolved ? `; ${named.resolved} item(ns) sem ID encontrados pelo nome` : ""}${named.missing ? `; ${named.missing} sem correspondência (ficam como XXX)` : ""}`);
+      await insert({ ...doc, sections: named.sections, title: file.name.replace(/\.xlsx$/i, "") });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Falha ao ler a planilha");
     } finally {
