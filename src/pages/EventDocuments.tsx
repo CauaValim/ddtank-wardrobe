@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useEventItemLookup } from "@/hooks/useEventItemLookup";
 import { useItemUsage, invalidateItemUsage } from "@/hooks/useItemUsage";
 import { useEventPresets } from "@/hooks/useEventPresets";
+import { useItemRules } from "@/hooks/useItemRules";
 import { useAuth } from "@/hooks/useAuth";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ import { LayoutPicker } from "@/components/events/LayoutPicker";
 import { TemplateBanner } from "@/components/events/TemplateBanner";
 import { DateField } from "@/components/events/DateInputs";
 import { PresetsPanel } from "@/components/events/PresetsPanel";
+import { ItemRulesPanel } from "@/components/events/ItemRulesPanel";
 import { HistoryPanel } from "@/components/events/HistoryPanel";
 import { PastEventsImport } from "@/components/events/PastEventsImport";
 import type { PresetApi } from "@/components/events/PresetControls";
@@ -30,6 +32,7 @@ import { downloadBlob, loadImageForWorkbook } from "@/lib/eventTemplate/browserI
 import { validateEventDocument, type ValidationIssue } from "@/lib/eventTemplate/validate";
 import { collectItemIds, lookupItems, validationOptions, type ItemLookup } from "@/lib/eventTemplate/itemLookup";
 import { SERVER_GROUPS, asServerGroup, type ServerGroup } from "@/lib/eventTemplate/serverGroups";
+import { ruleIssues, type ItemRule } from "@/lib/eventTemplate/itemRules";
 import type { EventDocument, EventItem } from "@/lib/eventTemplate/types";
 import type { Json } from "@/integrations/supabase/types";
 
@@ -51,8 +54,8 @@ async function fetchDoc(id: string): Promise<EventDocument> {
   return fromRow(data as Row).doc;
 }
 
-async function runExport(doc: EventDocument, lookup: ItemLookup): Promise<ValidationIssue[]> {
-  const issues = validateEventDocument(doc, manifest, validationOptions(lookup));
+async function runExport(doc: EventDocument, lookup: ItemLookup, rules?: Map<string, ItemRule>): Promise<ValidationIssue[]> {
+  const issues = [...validateEventDocument(doc, manifest, validationOptions(lookup)), ...(rules ? ruleIssues(doc, rules) : [])];
   const errors = issues.filter((i) => i.level === "error");
   if (errors.length > 0) {
     toast.error(`Corrija ${errors.length} erro(s) antes de exportar`);
@@ -221,6 +224,7 @@ function DocList({ group }: { group: ServerGroup }) {
           <TabsTrigger value="docs">Documentos ({created.length})</TabsTrigger>
           <TabsTrigger value="past">Eventos anteriores ({past.length})</TabsTrigger>
           <TabsTrigger value="presets">Pré-definições</TabsTrigger>
+          <TabsTrigger value="items">Categorias de itens</TabsTrigger>
           {isAdmin && <TabsTrigger value="history" className="gap-1"><History className="h-3.5 w-3.5" /> Histórico</TabsTrigger>}
         </TabsList>
 
@@ -244,6 +248,10 @@ function DocList({ group }: { group: ServerGroup }) {
           <PresetsPanel group={group} canEdit={isAdmin} />
         </TabsContent>
 
+        <TabsContent value="items">
+          <ItemRulesPanel group={group} canEdit={isAdmin} />
+        </TabsContent>
+
         {isAdmin && (
           <TabsContent value="history">
             <HistoryPanel group={group} onOpen={(docId) => navigate(`/eventos/${docId}`)} />
@@ -263,6 +271,8 @@ function Editor({ id }: { id: string }) {
   const { getUsage } = useItemUsage(group, doc?.id ?? null);
   const { presets, save: savePreset } = useEventPresets(group);
   const presetApi = useMemo<PresetApi>(() => ({ list: presets, canSave: isAdminRole(role), save: savePreset }), [presets, role, savePreset]);
+  const { rules, byItem: rulesByItem } = useItemRules(group);
+  const rulesApi = useMemo(() => ({ get: (id: string) => rulesByItem.get(id), list: rules }), [rules, rulesByItem]);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
@@ -321,7 +331,7 @@ function Editor({ id }: { id: string }) {
   };
 
   const validate = async () => {
-    try { setIssues(validateEventDocument(doc, manifest, validationOptions(await ensure(doc)))); }
+    try { setIssues([...validateEventDocument(doc, manifest, validationOptions(await ensure(doc))), ...ruleIssues(doc, rulesByItem)]); }
     catch (e) { toast.error(e instanceof Error ? e.message : "Falha ao verificar os IDs no painel"); }
   };
 
@@ -343,7 +353,7 @@ function Editor({ id }: { id: string }) {
           disabled={exporting}
           onClick={async () => {
             setExporting(true);
-            try { setIssues(await runExport(doc, await ensure(doc))); }
+            try { setIssues(await runExport(doc, await ensure(doc), rulesByItem)); }
             catch (e) { toast.error(e instanceof Error ? e.message : "Falha ao exportar"); }
             finally { setExporting(false); }
           }}
@@ -427,6 +437,7 @@ function Editor({ id }: { id: string }) {
           getImage={getImage}
           getUsage={getUsage}
           presets={presetApi}
+          rules={rulesApi}
           onChange={(ns) => update({ sections: doc.sections.map((x) => (x.id === s.id ? ns : x)) })}
           onRemove={() => confirm("Remover esta seção?") && update({ sections: doc.sections.filter((x) => x.id !== s.id) })}
           onMove={(d) => move(i, d)}

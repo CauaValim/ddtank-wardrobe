@@ -1,19 +1,19 @@
 import { ArrowLeftRight, Clock, Trophy } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { isoToUs } from "@/lib/eventTemplate/format";
-import { RECENT_DAYS, type ItemUsage, type UsageKind } from "@/lib/eventTemplate/usage";
+import { RECENT_DAYS, recentText, type ItemUsage, type UsageKind } from "@/lib/eventTemplate/usage";
 
 export type UsageByKind = Record<UsageKind, ItemUsage[]>;
 
 const KINDS: { kind: UsageKind; label: string; title: string; icon: typeof Trophy; className: string }[] = [
   { kind: "exchange", label: "Troca", title: "Já usado em troca", icon: ArrowLeftRight, className: "border-amber-500/60 text-amber-700 dark:text-amber-400" },
   { kind: "ranking", label: "Ranking", title: "Já usado em ranking", icon: Trophy, className: "border-violet-500/60 text-violet-700 dark:text-violet-400" },
-  { kind: "sale", label: `${RECENT_DAYS} dias`, title: `Venda de munição, recarga ou consumo nos últimos ${RECENT_DAYS} dias`, icon: Clock, className: "border-sky-500/60 text-sky-700 dark:text-sky-400" },
+  { kind: "sale", label: "", title: `Venda de munição, recarga ou consumo nos últimos ${RECENT_DAYS} dias`, icon: Clock, className: "border-sky-500/60 text-sky-700 dark:text-sky-400" },
 ];
 
 const MAX = 12;
 
-/** Selos "Troca", "Ranking" e "30 dias" com a lista de eventos (data, evento e detalhe). */
+/** Selos "Troca", "Ranking" e "Entrou x vezes nos últimos 30 dias" com a lista de eventos (data, evento e detalhe). */
 export function ItemUsageBadges({ usage }: { usage?: UsageByKind }) {
   if (!usage) return null;
   return (
@@ -24,7 +24,7 @@ export function ItemUsageBadges({ usage }: { usage?: UsageByKind }) {
           <Popover key={kind}>
             <PopoverTrigger asChild>
               <button type="button" title={title} className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] font-medium ${className}`}>
-                <Icon className="h-3 w-3" /> {label} {list.length > 1 ? `(${list.length})` : ""}
+                <Icon className="h-3 w-3" /> {kind === "sale" ? recentText(list.length) : `${label}${list.length > 1 ? ` (${list.length})` : ""}`}
               </button>
             </PopoverTrigger>
             <PopoverContent className="w-96 p-2" align="start">

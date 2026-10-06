@@ -5,14 +5,23 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Loader2, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { usageSummary, type ItemUsage, type UsageKind } from "@/lib/eventTemplate/usage";
+import { categoryLabel, ruleStatus, type ItemRule } from "@/lib/eventTemplate/itemRules";
+import { ItemRuleBadge } from "@/components/events/ItemRuleBadge";
 
 interface Props {
   getImage: (id: string) => string;
   /** Onde o item já foi usado na mesma base de servidores (mostrado em cada resultado). */
   getUsage?: (id: string) => Record<UsageKind, ItemUsage[]>;
+  /** Tipo da seção (recharge, exchange...) e cadastro de categorias permitidas/proibidas dos itens. */
+  category?: string;
+  getRule?: (id: string) => ItemRule | undefined;
+  /** Itens cadastrados como permitidos nesta categoria (sugeridos com a busca vazia). */
+  suggestions?: ItemRule[];
   onPick: (item: { id: string; name: string }) => void;
   disabled?: boolean;
 }
+
+const RANK = { allowed: 0, null: 1, forbidden: 2 } as const;
 
 type Result = { id: string; name: string; imageUrl: string };
 
@@ -40,13 +49,18 @@ async function searchItems(term: string): Promise<Result[]> {
   return out.slice(0, LIMIT);
 }
 
-export function ItemPicker({ getImage, getUsage, onPick, disabled }: Props) {
+export function ItemPicker({ getImage, getUsage, category, getRule, suggestions, onPick, disabled }: Props) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const [results, setResults] = useState<Result[]>([]);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
   const term = q.trim();
+  const rank = (id: string) => RANK[String(category ? ruleStatus(getRule?.(id), category) : null) as keyof typeof RANK];
+  // Permitidos nesta seção primeiro, proibidos por último.
+  const ordered = [...results].sort((a, b) => rank(a.id) - rank(b.id));
+  const suggested = term.length < 2 ? (suggestions ?? []).map((r) => ({ id: r.item_id, name: r.item_name, imageUrl: "" })) : [];
+  const list = term.length < 2 ? suggested : ordered;
 
   useEffect(() => {
     if (term.length < 2) {
@@ -81,10 +95,13 @@ export function ItemPicker({ getImage, getUsage, onPick, disabled }: Props) {
           <Plus className="h-3.5 w-3.5" /> Item
         </Button>
       </PopoverTrigger>
-      <PopoverContent className="w-96 p-2" align="start">
+      <PopoverContent className="w-[28rem] max-w-[calc(100vw-2rem)] p-2" align="start">
         <Input autoFocus placeholder="Buscar por nome ou ID..." value={q} onChange={(e) => setQ(e.target.value)} />
         <div className="mt-2 max-h-72 overflow-y-auto space-y-1">
-          {results.map((it) => {
+          {suggested.length > 0 && category && (
+            <p className="px-2 pt-1 text-[11px] font-medium text-muted-foreground">Cadastrados como permitidos em {categoryLabel(category)}</p>
+          )}
+          {list.map((it) => {
             const image = it.imageUrl || getImage(it.id);
             return (
               <button
@@ -102,7 +119,10 @@ export function ItemPicker({ getImage, getUsage, onPick, disabled }: Props) {
                   <div className="h-8 w-8 rounded bg-muted" />
                 )}
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate">{it.name}</span>
+                  <span className="flex items-center gap-1">
+                    <span className="truncate">{it.name}</span>
+                    <ItemRuleBadge rule={getRule?.(it.id)} category={category} />
+                  </span>
                   {getUsage && usageSummary(getUsage(it.id)) && (
                     <span className="block truncate text-[11px] text-amber-700 dark:text-amber-400">{usageSummary(getUsage(it.id))}</span>
                   )}

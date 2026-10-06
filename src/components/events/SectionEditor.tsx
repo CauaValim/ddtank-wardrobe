@@ -22,6 +22,7 @@ import type { IdStatus } from "@/lib/eventTemplate/itemLookup";
 import type { ItemUsage, UsageKind } from "@/lib/eventTemplate/usage";
 import { isMissionBlock } from "@/lib/eventTemplate/presets";
 import { PresetControls, type PresetApi } from "@/components/events/PresetControls";
+import type { ItemRule } from "@/lib/eventTemplate/itemRules";
 
 export interface EditorContext {
   idStatus: (id: string) => IdStatus;
@@ -32,6 +33,8 @@ export interface EditorContext {
   sectionFields: Record<string, string>;
   getUsage?: (id: string) => Record<UsageKind, ItemUsage[]>;
   presets?: PresetApi;
+  /** Categorias permitidas/proibidas dos itens (cadastro da aba "Categorias de itens"). */
+  rules?: { get: (id: string) => ItemRule | undefined; list: ItemRule[] };
 }
 
 function Field({ label, children, wide }: { label: string; children: React.ReactNode; wide?: boolean }) {
@@ -191,6 +194,9 @@ export function BlockEditor({ spec, setKey, block, title, ctx, onChange, onRemov
               <ItemPicker
                 getImage={ctx.getImage}
                 getUsage={ctx.getUsage}
+                category={ctx.layout.type}
+                getRule={ctx.rules?.get}
+                suggestions={ctx.rules?.list.filter((r) => r.allowed.includes(ctx.layout.type) && !r.forbidden.includes(ctx.layout.type))}
                 disabled={full}
                 onPick={(p) => {
                   const extra: Record<string, string> = {};
@@ -209,6 +215,8 @@ export function BlockEditor({ spec, setKey, block, title, ctx, onChange, onRemov
                 idStatus={ctx.idStatus}
                 getImage={ctx.getImage}
                 usage={ctx.getUsage && item.id ? ctx.getUsage(item.id) : undefined}
+                rule={ctx.rules?.get(item.id.trim())}
+                category={ctx.layout.type}
                 onChange={(patch) => setGroup(g.key, items.map((x, k) => (k === i ? { ...x, ...patch } : x)))}
                 onRemove={() => setGroup(g.key, items.filter((_, k) => k !== i))}
               />
@@ -317,12 +325,13 @@ interface SectionProps {
   getImage: (id: string) => string;
   getUsage?: (id: string) => Record<UsageKind, ItemUsage[]>;
   presets?: PresetApi;
+  rules?: EditorContext["rules"];
   onChange: (s: EventSection) => void;
   onRemove: () => void;
   onMove: (dir: -1 | 1) => void;
 }
 
-export function SectionEditor({ section, index, isFirst, isLast, collapsed, onToggleCollapse, idStatus, getImage, getUsage, presets, onChange, onRemove, onMove }: SectionProps) {
+export function SectionEditor({ section, index, isFirst, isLast, collapsed, onToggleCollapse, idStatus, getImage, getUsage, presets, rules, onChange, onRemove, onMove }: SectionProps) {
   const layout = getLayout(section.layoutId);
   if (!layout) {
     return (
@@ -332,7 +341,7 @@ export function SectionEditor({ section, index, isFirst, isLast, collapsed, onTo
       </Card>
     );
   }
-  const ctx: EditorContext = { idStatus, getImage, getUsage, presets, layout, section, servers: section.servers, sectionFields: section.fields };
+  const ctx: EditorContext = { idStatus, getImage, getUsage, presets, rules, layout, section, servers: section.servers, sectionFields: section.fields };
   const fields = editable(layout.fields);
   const items = itemCount(Object.values(section.sets).flat());
   return (

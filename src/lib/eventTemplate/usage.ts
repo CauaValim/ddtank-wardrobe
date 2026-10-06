@@ -104,9 +104,15 @@ export function buildUsageIndex(docs: UsageDoc[]): Map<string, ItemUsage[]> {
 /** Resumo curto para a busca de itens: "Troca 2× · Ranking 1×". */
 export function usageSummary(usage?: Record<UsageKind, ItemUsage[]>): string {
   if (!usage) return "";
-  const labels: Record<UsageKind, string> = { exchange: "Troca", ranking: "Ranking", sale: `${RECENT_DAYS} dias` };
-  return (Object.keys(labels) as UsageKind[]).filter((k) => usage[k].length > 0).map((k) => `${labels[k]} ${usage[k].length}×`).join(" · ");
+  const parts: string[] = [];
+  if (usage.exchange.length) parts.push(`Troca ${usage.exchange.length}×`);
+  if (usage.ranking.length) parts.push(`Ranking ${usage.ranking.length}×`);
+  if (usage.sale.length) parts.push(recentText(usage.sale.length));
+  return parts.join(" · ");
 }
+
+/** "Entrou 1 vez nos últimos 30 dias" / "Entrou 3 vezes nos últimos 30 dias". */
+export const recentText = (n: number) => `Entrou ${n} ${n === 1 ? "vez" : "vezes"} nos últimos ${RECENT_DAYS} dias`;
 
 /** Usos a mostrar para um item: trocas e rankings sempre; vendas só dos últimos 30 dias. */
 export function visibleUsage(list: ItemUsage[] | undefined, excludeDocId: string | null, today = new Date()): Record<UsageKind, ItemUsage[]> {
