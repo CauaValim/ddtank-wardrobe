@@ -42,13 +42,17 @@ export type Database = {
           end_date: string | null
           id: string
           sections: Json
+          server_group: string
           servers: string
+          source: string
+          source_file: string | null
           start_date: string | null
           status: string
           template_version: string | null
           theme: string | null
           title: string
           updated_at: string
+          updated_by: string | null
         }
         Insert: {
           created_at?: string
@@ -56,13 +60,17 @@ export type Database = {
           end_date?: string | null
           id?: string
           sections?: Json
+          server_group?: string
           servers?: string
+          source?: string
+          source_file?: string | null
           start_date?: string | null
           status?: string
           template_version?: string | null
           theme?: string | null
           title: string
           updated_at?: string
+          updated_by?: string | null
         }
         Update: {
           created_at?: string
@@ -70,12 +78,46 @@ export type Database = {
           end_date?: string | null
           id?: string
           sections?: Json
+          server_group?: string
           servers?: string
+          source?: string
+          source_file?: string | null
           start_date?: string | null
           status?: string
           template_version?: string | null
           theme?: string | null
           title?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+      event_presets: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          data: Json
+          id: string
+          name: string
+          server_group: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          data?: Json
+          id?: string
+          name: string
+          server_group?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          data?: Json
+          id?: string
+          name?: string
+          server_group?: string
           updated_at?: string
         }
         Relationships: []
@@ -478,7 +520,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      event_document_history: {
+        Args: { _server_group: string }
+        Returns: {
+          created_at: string
+          created_by_email: string
+          id: string
+          source: string
+          title: string
+          updated_at: string
+          updated_by_email: string
+        }[]
+      }
     }
     Enums: {
       app_role: "admin" | "user" | "moderador" | "analista" | "super_admin"
