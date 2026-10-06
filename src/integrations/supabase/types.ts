@@ -92,6 +92,45 @@ export type Database = {
         }
         Relationships: []
       }
+      event_item_categories: {
+        Row: {
+          allowed: string[]
+          created_at: string
+          created_by: string | null
+          forbidden: string[]
+          id: string
+          item_id: string
+          item_name: string
+          note: string | null
+          server_group: string
+          updated_at: string
+        }
+        Insert: {
+          allowed?: string[]
+          created_at?: string
+          created_by?: string | null
+          forbidden?: string[]
+          id?: string
+          item_id: string
+          item_name?: string
+          note?: string | null
+          server_group?: string
+          updated_at?: string
+        }
+        Update: {
+          allowed?: string[]
+          created_at?: string
+          created_by?: string | null
+          forbidden?: string[]
+          id?: string
+          item_id?: string
+          item_name?: string
+          note?: string | null
+          server_group?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       event_presets: {
         Row: {
           created_at: string
