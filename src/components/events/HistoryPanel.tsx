@@ -27,12 +27,18 @@ function stamp(iso: string): string {
 /** Aba "Histórico" (ADM ou superior): quem criou cada documento, quando, e a última modificação. */
 export function HistoryPanel({ group, onOpen }: { group: ServerGroup; onOpen: (id: string) => void }) {
   const [rows, setRows] = useState<Row[] | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    setRows(null);
+    setFailure(null);
     supabase.rpc("event_document_history", { _server_group: group }).then(({ data, error }) => {
       if (cancelled) return;
-      if (error) toast.error(`Histórico: ${error.message}`);
+      if (error) {
+        toast.error(`Histórico: ${error.message}`);
+        setFailure(error.message);
+      }
       setRows((data ?? []) as Row[]);
     });
     return () => {
@@ -41,6 +47,7 @@ export function HistoryPanel({ group, onOpen }: { group: ServerGroup; onOpen: (i
   }, [group]);
 
   if (!rows) return <p className="text-sm text-muted-foreground">Carregando...</p>;
+  if (failure) return <Card className="p-6 text-sm text-destructive">Não foi possível carregar o histórico: {failure}</Card>;
   if (rows.length === 0) return <Card className="p-6 text-sm text-muted-foreground">Nenhum documento nesta base ainda.</Card>;
 
   return (

@@ -98,10 +98,13 @@ function DocList({ group }: { group: ServerGroup }) {
   const importRef = useRef<HTMLInputElement>(null);
   const info = SERVER_GROUPS[group];
 
+  const [failure, setFailure] = useState<string | null>(null);
+
   const load = useCallback(async () => {
     setLoading(true);
     const { data, error } = await table().select(LIST_COLUMNS).eq("server_group", group).order("updated_at", { ascending: false });
     if (error) toast.error(error.message);
+    setFailure(error?.message ?? null);
     setDocs(((data ?? []) as ListRow[]).map((r) => ({ ...r, status: r.status === "final" ? "final" : "draft" })));
     setLoading(false);
   }, [group]);
@@ -173,6 +176,8 @@ function DocList({ group }: { group: ServerGroup }) {
   const list = (rows: ListRow[], empty: string) =>
     loading ? (
       <p className="text-sm text-muted-foreground">Carregando...</p>
+    ) : failure ? (
+      <Card className="p-6 text-sm text-destructive">Não foi possível carregar a lista: {failure}</Card>
     ) : rows.length === 0 ? (
       <Card className="p-6 text-sm text-muted-foreground">{empty}</Card>
     ) : rows.map((d) => (
@@ -231,7 +236,7 @@ function DocList({ group }: { group: ServerGroup }) {
         </TabsContent>
 
         <TabsContent value="past" className="space-y-3">
-          <PastEventsImport onDone={load} />
+          <PastEventsImport current={group} onDone={load} />
           {list(past, `Nenhum evento anterior importado para ${info.label.toLowerCase()}.`)}
         </TabsContent>
 
