@@ -1,4 +1,4 @@
-# Modelo oficial dos Documentos de Eventos
+# Modelo oficial da Criação de Eventos
 
 A exportação `.xlsx` preenche o modelo oficial (`BR_16_years_of_DDTank_Week_-_s1-s401_ID_2.xlsx`)
 seguindo o manifesto `src/lib/eventTemplate/manifest.json`. Só as células e imagens mapeadas
@@ -12,7 +12,7 @@ são alteradas; o resto do arquivo (estilos, mesclagens, artes) fica igual ao mo
 3. Rode o teste de ida e volta com o arquivo novo:
    `EVENT_TEMPLATE_PATH=novo-modelo.xlsx npx vitest run src/lib/eventTemplate src/components/events`
    Cada aba é lida para um documento e exportada de novo; todas as células mapeadas precisam sair iguais.
-4. Publique e, no painel, um Super Admin envia o arquivo em **Documentos de Eventos** (o envio só é aceito se o SHA-256 bater com o manifesto).
+4. Publique e, no painel, um Super Admin envia o arquivo em **Criação de Eventos** (o envio só é aceito se o SHA-256 bater com o manifesto).
 
 Documentos salvos guardam `template_version`; seções cujo layout não existir na versão nova aparecem com aviso no editor.
 

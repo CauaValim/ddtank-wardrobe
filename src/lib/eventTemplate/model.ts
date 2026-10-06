@@ -1,5 +1,6 @@
 import manifestJson from "./manifest.json";
 import { parseItemLabel } from "./format";
+import { applyDailyLength, normalizeSection } from "./rules";
 import type { BlockSpec, EventBlock, EventItem, EventSection, LayoutSpec, SetSpec, TemplateManifest } from "./types";
 
 export const manifest = manifestJson as TemplateManifest;
@@ -39,7 +40,8 @@ export function emptySet(set: SetSpec): EventBlock[] {
 export function newSection(layout: LayoutSpec, servers: string): EventSection {
   const sets: Record<string, EventBlock[]> = {};
   for (const set of layout.sets) sets[set.key] = emptySet(set);
-  return { id: newId(), layoutId: layout.id, servers, fields: {}, sets };
+  const section: EventSection = { id: newId(), layoutId: layout.id, servers, fields: {}, sets };
+  return layout.type === "daily" ? applyDailyLength(layout, section, 14) : section;
 }
 
 export function newItem(partial: Partial<EventItem> = {}): EventItem {
@@ -149,7 +151,7 @@ export function normalizeSections(raw: unknown): { sections: EventSection[]; con
         sections.push(c);
         converted += 1;
       } else dropped += 1;
-    } else sections.push(s as EventSection);
+    } else sections.push(normalizeSection(getLayout((s as EventSection).layoutId), s as EventSection));
   }
   return { sections, converted, dropped };
 }

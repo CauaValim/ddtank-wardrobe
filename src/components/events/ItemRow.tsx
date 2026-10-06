@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { BINDS, DURATIONS, type EventItem, type ItemFieldSpec } from "@/lib/eventTemplate/types";
 import { fileToItemImage } from "@/lib/eventTemplate/browserImages";
 import type { IdStatus } from "@/lib/eventTemplate/itemLookup";
+import { isRenewable } from "@/lib/eventTemplate/rules";
 
 interface Props {
   item: EventItem;
@@ -55,7 +56,13 @@ export function ItemRow({ item, index, kind, itemFields, idStatus, getImage, onC
           <X className="h-3 w-3" />
         </Button>
       )}
-      <Input className="min-w-[180px] flex-1" placeholder="Nome do item" value={item.name} onChange={(e) => onChange({ name: e.target.value })} />
+      <Input
+        className={`min-w-[180px] flex-1 ${isRenewable(item.duration) ? "bg-orange-100 dark:bg-orange-950/50" : ""}`}
+        title={isRenewable(item.duration) ? "Validade renovável: o nome sai com fundo laranja no arquivo" : undefined}
+        placeholder="Nome do item"
+        value={item.name}
+        onChange={(e) => onChange({ name: e.target.value })}
+      />
       <Input
         className={`w-28 tabular-nums ${unknownId ? "border-amber-500" : ""}`}
         title={unknownId ? "Este ID não existe no painel" : "ID do item (XXX se ainda não existe)"}

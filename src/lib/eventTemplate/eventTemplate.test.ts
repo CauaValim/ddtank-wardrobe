@@ -4,7 +4,8 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import manifestJson from "./manifest.json";
 import { exportDocument } from "./exporter";
-import { readSection } from "./importer";
+import { readDocument, readSection } from "./importer";
+import { applyDailyLength } from "./rules";
 import { XlsxPackage, descendants, parseRange } from "./ooxml";
 import { Drawing } from "./drawing";
 import type { BlockSpec, EventBlock, EventDocument, LayoutSpec, SetSpec, TemplateManifest } from "./types";
@@ -26,7 +27,8 @@ const hasTemplate = existsSync(templatePath);
 const PNG = Uint8Array.from(Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64"));
 const fakeImage = async () => ({ data: PNG, width: 60, height: 60 });
 
-const norm = (s: string) => s.replace(/\s+/g, " ").replace(/\[\s+/g, "[").replace(/\s+\]/g, "]").trim();
+// O limite de troca sai sempre no plural ("LIMIT OF 1 ITEMS PER EXCHANGE"), como pedido pela equipe.
+const norm = (s: string) => s.replace(/\s+/g, " ").replace(/\[\s+/g, "[").replace(/\s+\]/g, "]").trim().replace(/^(LIMIT OF \d+ ITEM)S?( PER EXCHANGE)$/i, "$1S$2");
 
 /**
  * Diferenças intencionais em relação ao modelo de 16 anos:
@@ -188,5 +190,65 @@ describe.skipIf(!hasTemplate)("modelo oficial de eventos", () => {
     expect(await r.getText("B8")).toBe("RECHARGE OF 2.000 COUPONS");
     expect(await r.getText("N5")).toBe(""); // colunas auxiliares limpas
     expect(r.isRowHidden(11)).toBe(true);
+  }, 120_000);
+
+  it("cenário: missões sem limite viram abas de continuação e voltam como uma seção", async () => {
+    const pkg = await XlsxPackage.load(template);
+    const base = await readSection(pkg, getLayout("missions-8x5")!);
+    const missions = { ...base, sets: { missions: Array.from({ length: 10 }, (_, i) => ({ ...base.sets.missions[i % base.sets.missions.length], fields: { ...base.sets.missions[i % base.sets.missions.length].fields, titlePt: `Missão ${i + 1}` } })) } };
+    const choiceBase = await readSection(pkg, getLayout("missions-3x3-choice")!);
+    const [a, b, c] = choiceBase.sets.missions;
+    const choice = { ...choiceBase, sets: { missions: [{ ...a, fields: { ...a.fields, titlePt: "Com escolha 1" }, groups: { ...a.groups, choice: c.groups.choice.slice(0, 2) } }, b, { ...c, fields: { ...c.fields, titlePt: "Sem escolha" }, groups: { items: c.groups.items } }] } };
+    const doc: EventDocument = { ...docWith(missions), sections: [missions, choice] };
+
+    const result = await exportDocument(template, manifest, doc, { loadImage: fakeImage });
+    const out = await XlsxPackage.load(result.data);
+    const names = (await out.sheets()).map((x) => x.name);
+    // A aba de missões com escolha do modelo é dos servidores s1-s402.
+    expect(names).toEqual(["BR-Daily Entry - 14D s1-s401", "BR-Missions s1-s401", "BR-Missions s1-s401 2", "BR-Missions s1-s402", "BR-Missions s1-s402 2"]);
+
+    const page2 = await out.worksheet("BR-Missions s1-s401 2");
+    expect(await page2.getText("V11")).toBe("Missão 9");
+    expect(page2.isRowHidden(51)).toBe(true); // 3ª missão em diante oculta
+
+    // Missão com escolha na 3ª posição da aba, posição 2 oculta.
+    const choice1 = await out.worksheet("BR-Missions s1-s402");
+    expect(await choice1.getText("H41")).toBe("Com escolha 1");
+    expect(choice1.isRowHidden(24)).toBe(true);
+    expect(choice1.isRowHidden(55)).toBe(false);
+
+    const back = await readDocument(result.data, manifest);
+    expect(back.sections.map((s) => s.layoutId)).toEqual(["missions-8x5", "missions-3x3-choice"]);
+    expect(back.sections[0].sets.missions.map((m) => m.fields.titlePt)).toEqual(Array.from({ length: 10 }, (_, i) => `Missão ${i + 1}`));
+    expect(back.sections[1].sets.missions.map((m) => [m.fields.titlePt, m.groups.choice?.length ?? 0])).toEqual([["Com escolha 1", 2], [b.fields.titlePt, 0], ["Sem escolha", 0]]);
+  }, 120_000);
+
+  it("cenário: Entrada Diária de 7 dias e fundo laranja nos itens renováveis", async () => {
+    const pkg = await XlsxPackage.load(template);
+    const dailyLayout = getLayout("daily-14d")!;
+    const daily = applyDailyLength(dailyLayout, await readSection(pkg, dailyLayout), 7);
+    daily.sets.days[0].groups.items = daily.sets.days[0].groups.items.slice(0, 7);
+    const missions = await readSection(pkg, getLayout("missions-8x5")!);
+    missions.sets.missions = missions.sets.missions.slice(0, 1);
+    missions.sets.missions[0].groups.items[0] = { ...missions.sets.missions[0].groups.items[0], duration: "30 Days - non-renewable" };
+    const doc: EventDocument = { ...docWith(daily), sections: [daily, missions] };
+
+    const result = await exportDocument(template, manifest, doc, { loadImage: fakeImage });
+    const out = await XlsxPackage.load(result.data);
+    const cover = await out.worksheet("BR-Daily Entry - 14D s1-s401");
+    expect(await cover.getText("N25")).toBe("Queue 7");
+    expect(cover.isRowHidden(28)).toBe(true); // fila de 14 dias
+    expect(cover.isRowHidden(40)).toBe(false); // 7º dia
+    expect(cover.isRowHidden(41)).toBe(true); // 8º dia
+
+    const m = await out.worksheet("BR-Missions s1-s401");
+    const fillOf = async (ref: string) => {
+      const cell = descendants(m.doc, "c").find((c) => c.getAttribute("r") === ref)!;
+      const fillId = await out.styleAttr(Number(cell.getAttribute("s") ?? 0), "fillId");
+      const fill = descendants(await out.xml("xl/styles.xml"), "fill")[fillId];
+      const fg = descendants(fill, "fgColor")[0];
+      return `${fg?.getAttribute("theme")}|${Number(fg?.getAttribute("tint")).toFixed(2)}`;
+    };
+    expect(await fillOf("P14")).toBe("5|0.80"); // Laranja, Ênfase 2, Mais Claro 80%
   }, 120_000);
 });

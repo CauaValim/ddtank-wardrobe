@@ -244,7 +244,7 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
                 onClick={() => navigate("/eventos")}
                 className="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-muted transition-all"
               >
-                <FileSpreadsheet className="h-3.5 w-3.5" /> Documentos de Eventos
+                <FileSpreadsheet className="h-3.5 w-3.5" /> Criação de Eventos
               </button>
             )}
             <button

@@ -12,6 +12,12 @@ export function splitDateTime(value: string | undefined): { date: string; time: 
   return { date: `${m}/${day}/${y}`, time: (t ?? "00:00").slice(0, 5) };
 }
 
+/** "2026-09-28" (ou "2026-09-28T10:00") -> "09/28/2026"; vazio se não for data. */
+export function isoToUs(iso: string | null | undefined): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso ?? "");
+  return m ? `${m[2]}/${m[3]}/${m[1]}` : "";
+}
+
 export function joinDateTime(date: string, time = "00:00"): string {
   const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(date.trim());
   if (!m) return "";

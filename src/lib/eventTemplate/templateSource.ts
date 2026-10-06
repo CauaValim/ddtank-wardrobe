@@ -45,7 +45,7 @@ export function loadTemplate(m: TemplateManifest): Promise<ArrayBuffer> {
         const data = await source(m);
         if (data && (await sha256(data)) === m.sha256) return data;
       }
-      throw new Error("O modelo oficial ainda não foi enviado para o painel. Peça a um Super Admin para enviá-lo em Documentos de Eventos.");
+      throw new Error("O modelo oficial ainda não foi enviado para o painel. Peça a um Super Admin para enviá-lo em Criação de Eventos.");
     })();
     p.catch(() => cache.delete(key));
     cache.set(key, p);

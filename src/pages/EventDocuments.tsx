@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Copy, Download, FileText, FileUp, Plus, Save, ShieldCheck, Trash2 } from "lucide-react";
+import { ArrowLeft, ChevronsDownUp, ChevronsUpDown, Copy, Download, FileText, FileUp, Plus, Save, ShieldCheck, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useEventItemLookup } from "@/hooks/useEventItemLookup";
@@ -13,6 +13,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SectionEditor } from "@/components/events/SectionEditor";
 import { LayoutPicker } from "@/components/events/LayoutPicker";
 import { TemplateBanner } from "@/components/events/TemplateBanner";
+import { DateField } from "@/components/events/DateInputs";
+import { isoToUs } from "@/lib/eventTemplate/format";
 import { manifest, newId, newSection, normalizeSections } from "@/lib/eventTemplate/model";
 import { exportDocument } from "@/lib/eventTemplate/exporter";
 import { readDocument } from "@/lib/eventTemplate/importer";
@@ -115,7 +117,7 @@ function DocList() {
     <div className="mx-auto w-full max-w-5xl space-y-4 p-6">
       <div className="flex flex-wrap items-center gap-2">
         <Button variant="ghost" size="sm" title="Voltar ao painel" onClick={() => navigate("/")}><ArrowLeft className="h-4 w-4" /></Button>
-        <h1 className="flex-1 text-xl font-bold">Documentos de Eventos</h1>
+        <h1 className="flex-1 text-xl font-bold">Criação de Eventos</h1>
         <input ref={importRef} type="file" accept=".xlsx" className="hidden" onChange={(e) => { importFile(e.target.files?.[0]); e.target.value = ""; }} />
         <Button variant="outline" className="gap-1" disabled={busy === "import"} onClick={() => importRef.current?.click()}>
           <FileUp className="h-4 w-4" /> {busy === "import" ? "Importando..." : "Importar planilha"}
@@ -135,7 +137,7 @@ function DocList() {
           <div className="min-w-0 flex-1">
             <p className="truncate font-semibold">{d.title}</p>
             <p className="text-xs text-muted-foreground">
-              {d.servers}, {d.start_date ?? "sem início"} a {d.end_date ?? "sem fim"}, {d.sections.length} seção(ões)
+              {d.servers}, {isoToUs(d.start_date) || "sem início"} a {isoToUs(d.end_date) || "sem fim"}, {d.sections.length} seção(ões)
             </p>
           </div>
           <Badge variant={d.status === "final" ? "default" : "secondary"}>{d.status === "final" ? "Finalizado" : "Rascunho"}</Badge>
@@ -171,6 +173,7 @@ function Editor({ id }: { id: string }) {
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [issues, setIssues] = useState<ValidationIssue[] | null>(null);
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
 
   useEffect(() => {
     table().select("*").eq("id", id).single().then(({ data, error }) => {
@@ -266,12 +269,12 @@ function Editor({ id }: { id: string }) {
         </label>
         <div className="grid grid-cols-2 gap-2">
           <label className="block space-y-1">
-            <span className="text-xs text-muted-foreground">Início</span>
-            <Input type="date" value={doc.start_date ?? ""} onChange={(e) => update({ start_date: e.target.value })} />
+            <span className="text-xs text-muted-foreground">Início (MM/DD/YYYY)</span>
+            <DateField value={doc.start_date} onChange={(v) => update({ start_date: v })} />
           </label>
           <label className="block space-y-1">
-            <span className="text-xs text-muted-foreground">Fim</span>
-            <Input type="date" value={doc.end_date ?? ""} onChange={(e) => update({ end_date: e.target.value })} />
+            <span className="text-xs text-muted-foreground">Fim (MM/DD/YYYY)</span>
+            <DateField value={doc.end_date} onChange={(v) => update({ end_date: v })} />
           </label>
         </div>
         <p className="text-xs text-muted-foreground sm:col-span-2 lg:col-span-4">
@@ -293,8 +296,20 @@ function Editor({ id }: { id: string }) {
         </Card>
       )}
 
-      {doc.sections.length === 0 && (
+      {doc.sections.length === 0 ? (
         <Card className="p-6 text-sm text-muted-foreground">Este documento ainda não tem seções. Adicione a primeira escolhendo o layout da aba.</Card>
+      ) : (
+        <div className="flex justify-end">
+          {(() => {
+            const allCollapsed = doc.sections.every((s) => collapsed.has(s.id));
+            return (
+              <Button size="sm" variant="ghost" className="gap-1" onClick={() => setCollapsed(allCollapsed ? new Set() : new Set(doc.sections.map((s) => s.id)))}>
+                {allCollapsed ? <ChevronsUpDown className="h-4 w-4" /> : <ChevronsDownUp className="h-4 w-4" />}
+                {allCollapsed ? "Expandir todas" : "Recolher todas"}
+              </Button>
+            );
+          })()}
+        </div>
       )}
 
       {doc.sections.map((s, i) => (
@@ -304,6 +319,13 @@ function Editor({ id }: { id: string }) {
           index={i}
           isFirst={i === 0}
           isLast={i === doc.sections.length - 1}
+          collapsed={collapsed.has(s.id)}
+          onToggleCollapse={() => setCollapsed((prev) => {
+            const next = new Set(prev);
+            if (next.has(s.id)) next.delete(s.id);
+            else next.add(s.id);
+            return next;
+          })}
           idStatus={idStatus}
           getImage={getImage}
           onChange={(ns) => update({ sections: doc.sections.map((x) => (x.id === s.id ? ns : x)) })}

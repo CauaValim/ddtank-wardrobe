@@ -1,4 +1,5 @@
 import type { BlockSpec, EventBlock, EventDocument, LayoutSpec, SetSpec, TemplateManifest } from "./types";
+import { editorBlockSpec, sectionIssues, setCapacity } from "./rules";
 
 export interface ValidationIssue {
   level: "error" | "warning";
@@ -17,7 +18,7 @@ function checkDates(issues: ValidationIssue[], where: string, fields: Record<str
   if (fields.start && fields.end && fields.end < fields.start) issues.push({ level: "error", where, message: "Data final antes da inicial" });
 }
 
-function checkBlock(issues: ValidationIssue[], where: string, spec: BlockSpec, block: EventBlock, opts: ValidationOptions) {
+function checkBlock(issues: ValidationIssue[], where: string, spec: BlockSpec, block: EventBlock, opts: ValidationOptions, layout: LayoutSpec) {
   checkDates(issues, where, block.fields, spec.fields);
   for (const f of spec.fields) {
     if ((f.input === "text" || f.input === "textarea") && !block.fields[f.key] && f.format !== "{value}") {
@@ -43,14 +44,15 @@ function checkBlock(issues: ValidationIssue[], where: string, spec: BlockSpec, b
       if (!(item.qty > 0)) issues.push({ level: "error", where, message: `${label}: quantidade inválida` });
     });
   }
-  if (spec.children) checkSet(issues, where, spec.children, block.children ?? [], opts);
+  if (spec.children) checkSet(issues, where, spec.children, block.children ?? [], opts, layout);
 }
 
-function checkSet(issues: ValidationIssue[], where: string, set: SetSpec, blocks: EventBlock[], opts: ValidationOptions) {
-  if (blocks.length > set.blocks.length) {
+function checkSet(issues: ValidationIssue[], where: string, set: SetSpec, blocks: EventBlock[], opts: ValidationOptions, layout: LayoutSpec) {
+  const capacity = setCapacity(layout, set);
+  if (blocks.length > capacity) {
     issues.push({ level: "error", where, message: `${set.label}: ${blocks.length} ${set.blockLabel.toLowerCase()}(s), o modelo comporta ${set.blocks.length}` });
   }
-  blocks.slice(0, set.blocks.length).forEach((b, i) => checkBlock(issues, `${where} › ${set.blockLabel} ${i + 1}`, set.blocks[i], b, opts));
+  blocks.slice(0, capacity).forEach((b, i) => checkBlock(issues, `${where} › ${set.blockLabel} ${i + 1}`, editorBlockSpec(layout, set, i), b, opts, layout));
 }
 
 export function validateEventDocument(doc: EventDocument, manifest: TemplateManifest, opts: ValidationOptions): ValidationIssue[] {
@@ -64,14 +66,15 @@ export function validateEventDocument(doc: EventDocument, manifest: TemplateMani
       issues.push({ level: "error", where, message: "Layout não existe nesta versão do modelo" });
       return;
     }
-    if (!/^s\d+\s*-\s*s?\d+$/i.test(section.servers.trim())) issues.push({ level: "warning", where, message: `Servidores "${section.servers}" fora do padrão s1-s401` });
+    if (!/^s\d+(\s*-\s*s?\d+)?$/i.test(section.servers.trim())) issues.push({ level: "warning", where, message: `Servidores "${section.servers}" fora do padrão (s1-s401 ou s402)` });
     checkDates(issues, where, section.fields, layout.fields);
     let total = 0;
     for (const set of layout.sets) {
       const blocks = section.sets[set.key] ?? [];
       total += blocks.length;
-      checkSet(issues, where, set, blocks, opts);
+      checkSet(issues, where, set, blocks, opts, layout);
     }
+    issues.push(...sectionIssues(layout, section, where));
     if (total === 0) issues.push({ level: "warning", where, message: "Seção sem conteúdo" });
   });
   return issues;

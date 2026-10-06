@@ -556,6 +556,44 @@ export class XlsxPackage {
     return Number(xf?.getAttribute(name) ?? 0);
   }
 
+  private themeFills = new Map<string, number>();
+
+  /** Id of a solid fill with a theme colour (an identical fill of the template is reused, otherwise one is appended). */
+  async themeFill(theme: number, tint: number): Promise<number> {
+    const key = `${theme}|${tint}`;
+    const cached = this.themeFills.get(key);
+    if (cached != null) return cached;
+    const styles = await this.xml("xl/styles.xml");
+    const root = descendants(styles, "fills")[0];
+    const fills = childrenByName(root, "fill");
+    let id = fills.findIndex((f) => {
+      const pattern = firstChild(f, "patternFill");
+      const fg = pattern ? firstChild(pattern, "fgColor") : null;
+      return pattern?.getAttribute("patternType") === "solid" && fg?.getAttribute("theme") === String(theme)
+        && Math.abs(Number(fg.getAttribute("tint") ?? 0) - tint) < 1e-6;
+    });
+    if (id < 0) {
+      const ns = root.namespaceURI;
+      const fill = styles.createElementNS(ns, "fill");
+      const pattern = styles.createElementNS(ns, "patternFill");
+      pattern.setAttribute("patternType", "solid");
+      const fg = styles.createElementNS(ns, "fgColor");
+      fg.setAttribute("theme", String(theme));
+      fg.setAttribute("tint", String(tint));
+      const bg = styles.createElementNS(ns, "bgColor");
+      bg.setAttribute("indexed", "64");
+      pattern.appendChild(fg);
+      pattern.appendChild(bg);
+      fill.appendChild(pattern);
+      root.appendChild(fill);
+      id = fills.length;
+      root.setAttribute("count", String(fills.length + 1));
+      this.touch("xl/styles.xml");
+    }
+    this.themeFills.set(key, id);
+    return id;
+  }
+
   // ---------------------------------------------------------------- save
 
   async save(): Promise<ArrayBuffer> {
@@ -592,6 +630,13 @@ export class Worksheet {
 
   private sheetData(): Element {
     return this.sd;
+  }
+
+  /** Fraction of the given merge ranges ("B9:N10") present in this sheet. */
+  mergeScore(refs: string[]): number {
+    if (refs.length === 0) return 0;
+    const have = new Set(this.merges.map((m) => `${formatRef({ col: m.c1, row: m.r1 })}:${formatRef({ col: m.c2, row: m.r2 })}`));
+    return refs.filter((r) => have.has(r)).length / refs.length;
   }
 
   /** Returns the merge range that contains the cell, if any. */
@@ -790,6 +835,11 @@ export class Worksheet {
       target.setAttribute("s", String(style));
     }
     this.pkg.touch(this.path);
+  }
+
+  /** "Orange, Accent 2, Lighter 80%" (theme colour 5, tint 0.8): background of renewable items. */
+  renewableFill(): Promise<number> {
+    return this.pkg.themeFill(5, 0.79998168889431442);
   }
 
   async setFill(ref: string, fillId: number) {

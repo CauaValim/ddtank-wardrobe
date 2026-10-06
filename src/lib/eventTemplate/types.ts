@@ -83,6 +83,8 @@ export interface LayoutSpec {
   cover?: { hideColsWithoutSection: string };
   /** fillId da célula do nome para itens com validade em dias / permanentes. */
   durationFill?: { timed: number; permanent: number };
+  /** Células mescladas do topo da aba no modelo (reconhece o layout ao importar). */
+  signature?: string[];
 }
 
 export interface TemplateManifest {
@@ -137,5 +139,5 @@ export interface EventDocument {
   updated_at?: string;
 }
 
-export const DURATIONS = ["Permanent", "30 Days - renewable", "7 Days", "15 Days", "30 Days", "90 Days"];
+export const DURATIONS = ["Permanent", "30 Days - renewable", "30 Days - non-renewable", "7 Days", "15 Days", "30 Days", "90 Days"];
 export const BINDS = ["Bound", "Unbound"];

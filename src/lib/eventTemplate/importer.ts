@@ -1,5 +1,6 @@
 import { joinDateTime, parseFormat, parseIdLine, parseItemLabel, serialToDate, splitBundle } from "./format";
 import { Worksheet, XlsxPackage } from "./ooxml";
+import { normalizeSection, pagination } from "./rules";
 import type { BlockSpec, EventBlock, EventDocument, EventItem, EventSection, FieldSpec, GroupSpec, LayoutSpec, SetSpec, TemplateManifest } from "./types";
 
 /**
@@ -28,8 +29,11 @@ async function readField(ws: Worksheet, field: FieldSpec): Promise<string> {
   return (parsed?.value ?? text).trim();
 }
 
+/** "s1-s401", "s1 - s401" or a single new server such as "s402". */
+const SERVERS = /\bs\d+(?:\s*-\s*s?\d+)?\b/i;
+
 function guessServers(text: string): string | null {
-  const m = /s1\s*-\s*s?\d{3}/.exec(text);
+  const m = SERVERS.exec(text);
   return m ? m[0].replace(/\s+/g, "") : null;
 }
 
@@ -118,11 +122,15 @@ async function readBlock(ws: Worksheet, spec: BlockSpec): Promise<EventBlock | n
   return block;
 }
 
-async function readSet(ws: Worksheet, set: SetSpec): Promise<EventBlock[]> {
+/** `skipEmpty`: continuation tabs may leave a position empty before a mission with choices. */
+async function readSet(ws: Worksheet, set: SetSpec, skipEmpty = false): Promise<EventBlock[]> {
   const out: EventBlock[] = [];
-  for (const spec of set.blocks) {
+  for (const [i, spec] of set.blocks.entries()) {
     const block = await readBlock(ws, spec);
-    if (!block) break;
+    if (!block) {
+      if (skipEmpty && (spec.hideRows ? ws.isRowHidden(spec.hideRows[0]) : true) && i < set.blocks.length - 1) continue;
+      break;
+    }
     out.push(block);
   }
   return out;
@@ -140,12 +148,43 @@ export async function readSection(pkg: XlsxPackage, layout: LayoutSpec, sheetNam
     fields[f.key] = await readField(ws, f);
   }
   const sets: Record<string, EventBlock[]> = {};
-  for (const set of layout.sets) sets[set.key] = await readSet(ws, set);
+  for (const set of layout.sets) sets[set.key] = await readSet(ws, set, !!pagination(layout, set.key));
   // Some layouts keep dates per block (Faça se Puder em 2 dias): mirror the first one at section level.
   const firstBlock = Object.values(sets)[0]?.[0];
   if (!fields.start && firstBlock?.fields.start) fields.start = firstBlock.fields.start;
   if (!fields.end && firstBlock?.fields.end) fields.end = firstBlock.fields.end;
-  return { id: newId(), layoutId: layout.id, servers: servers ?? guessServers(sheetName) ?? "s1-s401", fields, sets };
+  return normalizeSection(layout, { id: newId(), layoutId: layout.id, servers: servers ?? guessServers(sheetName) ?? "s1-s401", fields, sets });
+}
+
+const patternRegex = (pattern: string) =>
+  new RegExp(`^${pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace("\\{servers\\}", "s\\d+(?:\\s*-\\s*s?\\d+)?")}(\\s+\\d+)*$`, "i");
+
+/**
+ * Finds the layout of a tab. Several layouts share a name pattern ("BR-Missions {servers}"),
+ * so among the candidates the one whose merged cells match the tab best wins.
+ */
+export async function detectLayout(pkg: XlsxPackage, manifest: TemplateManifest, sheetName: string): Promise<LayoutSpec | null> {
+  const candidates = manifest.layouts.filter((l) => l.sheet === sheetName || patternRegex(l.sheetNamePattern).test(sheetName.trim()));
+  if (candidates.length <= 1) return candidates[0] ?? null;
+  const ws = await pkg.worksheet(sheetName);
+  let best: LayoutSpec | null = null;
+  let bestScore = -1;
+  for (const l of candidates) {
+    // Same structure: the tab named exactly like the template tab wins the tie.
+    const score = ws.mergeScore(l.signature ?? []) + (l.sheet === sheetName ? 0.001 : 0);
+    if (score > bestScore) {
+      best = l;
+      bestScore = score;
+    }
+  }
+  return best;
+}
+
+/** "BR-Missions s1-s401 2" is the continuation of "BR-Missions s1-s401": join them back into one section. */
+function isContinuation(prev: { layout: LayoutSpec; sheet: string } | null, layout: LayoutSpec, sheet: string): boolean {
+  if (!prev || prev.layout.id !== layout.id || !layout.sets.some((s) => pagination(layout, s.key))) return false;
+  const base = (name: string) => name.replace(/\s+\d+$/, "");
+  return /\s+\d+$/.test(sheet) && base(sheet) === base(prev.sheet);
 }
 
 /** Builds a document from a workbook that follows the template (one section per recognised tab). */
@@ -155,11 +194,18 @@ export async function readDocument(data: ArrayBuffer, manifest: TemplateManifest
   const sections: EventSection[] = [];
   let title = "";
   let servers = "s1-s401";
+  let prev: { layout: LayoutSpec; sheet: string } | null = null;
   for (const sheet of sheets) {
-    const layout = manifest.layouts.find((l) => l.sheet === sheet.name)
-      ?? manifest.layouts.find((l) => new RegExp(`^${l.sheetNamePattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace("\\{servers\\}", "s1\\s*-\\s*s?\\d{3}")}(\\s+\\d+)?$`).test(sheet.name));
+    const layout = await detectLayout(pkg, manifest, sheet.name);
     if (!layout) continue;
     const section = await readSection(pkg, layout, sheet.name);
+    if (isContinuation(prev, layout, sheet.name)) {
+      const target = sections[sections.length - 1];
+      for (const [key, blocks] of Object.entries(section.sets)) target.sets[key] = [...(target.sets[key] ?? []), ...blocks];
+      prev = { layout, sheet: sheet.name };
+      continue;
+    }
+    prev = { layout, sheet: sheet.name };
     if (layout.id === manifest.coverLayout) {
       const cover = layout.fields.find((f) => f.key === "coverTitle");
       if (cover) {
@@ -170,6 +216,8 @@ export async function readDocument(data: ArrayBuffer, manifest: TemplateManifest
         }
       }
     }
+    // A capa sem Entrada Diária (e abas vazias) não vira seção.
+    if (Object.values(section.sets).every((blocks) => blocks.length === 0)) continue;
     sections.push(section);
   }
   return {

@@ -1,4 +1,5 @@
-import { ChevronDown, ChevronUp, Copy, Plus, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { ChevronDown, ChevronRight, ChevronUp, Copy, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -8,8 +9,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ItemPicker } from "@/components/events/ItemPicker";
 import { ItemRow } from "@/components/events/ItemRow";
+import { DateTimeField } from "@/components/events/DateInputs";
 import { renderFormat } from "@/lib/eventTemplate/format";
 import { capacitySummary, emptyBlock, getLayout, newItem } from "@/lib/eventTemplate/model";
+import {
+  DAILY_LENGTHS, NO_LIMIT, applyDailyLength, dailyLength, editorBlockSpec, exchangeLimitText, groupLimit, highestStandardTier,
+  isAutoField, isExchangeCondition, isFixedSet, normalizeTier, pagination, parseExchangeLimit, setCapacity, tierCondition, tierLadder,
+  tiersUpTo, type DailyLength, type TierLadder,
+} from "@/lib/eventTemplate/rules";
 import type { BlockSpec, EventBlock, EventItem, EventSection, FieldSpec, LayoutSpec, SetSpec } from "@/lib/eventTemplate/types";
 import type { IdStatus } from "@/lib/eventTemplate/itemLookup";
 
@@ -17,6 +24,7 @@ export interface EditorContext {
   idStatus: (id: string) => IdStatus;
   getImage: (id: string) => string;
   layout: LayoutSpec;
+  section: EventSection;
   servers: string;
   sectionFields: Record<string, string>;
 }
@@ -40,9 +48,70 @@ function FieldInput({ spec, value, onChange }: { spec: FieldSpec; value: string;
     );
   }
   if (spec.input === "textarea") return <Textarea rows={3} value={value} onChange={(e) => onChange(e.target.value)} />;
-  if (spec.input === "datetime") return <Input type="datetime-local" value={value} onChange={(e) => onChange(e.target.value)} />;
+  if (spec.input === "datetime") return <DateTimeField value={value} onChange={onChange} />;
   const hint = spec.format !== "{value}" ? spec.format.replace("{value}", "…") : undefined;
   return <Input value={value} placeholder={hint} onChange={(e) => onChange(e.target.value)} />;
+}
+
+const MANUAL = "__manual__";
+
+/** Piso: um dos valores padrão ou um valor manual (para pisos novos no futuro). */
+function TierValueInput({ ladder, value, onChange }: { ladder: TierLadder; value: string; onChange: (v: string) => void }) {
+  const normalized = value ? normalizeTier(value) : "";
+  const [manual, setManual] = useState(!!normalized && !ladder.values.includes(normalized));
+  return (
+    <div className="flex gap-1">
+      <Select
+        value={manual ? MANUAL : normalized || undefined}
+        onValueChange={(v) => {
+          if (v === MANUAL) {
+            setManual(true);
+            return;
+          }
+          setManual(false);
+          onChange(v);
+        }}
+      >
+        <SelectTrigger className={manual ? "w-32" : ""}><SelectValue placeholder="Escolha o piso" /></SelectTrigger>
+        <SelectContent>
+          {ladder.values.map((v) => (
+            <SelectItem key={v} value={v}>{v} cupons{ladder.repeatable.includes(v) ? " (repetível)" : ""}</SelectItem>
+          ))}
+          <SelectItem value={MANUAL}>Outro valor (manual)</SelectItem>
+        </SelectContent>
+      </Select>
+      {manual && <Input inputMode="numeric" placeholder="25.000" value={value} onChange={(e) => onChange(e.target.value)} onBlur={() => value && onChange(normalizeTier(value))} />}
+    </div>
+  );
+}
+
+/** Condição da troca: "No limit" ou "LIMIT OF x ITEMS PER EXCHANGE". */
+function ExchangeLimitInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const parsed = parseExchangeLimit(value);
+  const limited = parsed != null;
+  const custom = parsed === undefined;
+  return (
+    <div className="flex gap-1">
+      <Select value={limited ? "limit" : "none"} onValueChange={(v) => onChange(v === "limit" ? exchangeLimitText(1) : NO_LIMIT)}>
+        <SelectTrigger className={limited ? "w-36" : ""}><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="none">Sem limite (No limit)</SelectItem>
+          <SelectItem value="limit">Com limite de troca</SelectItem>
+        </SelectContent>
+      </Select>
+      {limited && (
+        <Input
+          type="number"
+          min={1}
+          className="w-24 tabular-nums"
+          title="LIMIT OF x ITEMS PER EXCHANGE"
+          value={parsed ?? 1}
+          onChange={(e) => onChange(exchangeLimitText(Math.max(1, Number(e.target.value) || 1)))}
+        />
+      )}
+      {custom && value && <span className="self-center text-xs text-amber-600" title={value}>Texto antigo: será trocado ao escolher</span>}
+    </div>
+  );
 }
 
 function editable(fields: FieldSpec[]) {
@@ -71,11 +140,22 @@ function DerivedLines({ spec, block, ctx }: { spec: BlockSpec; block: EventBlock
   );
 }
 
-function BlockEditor({ spec, block, title, ctx, onChange, onRemove }: {
-  spec: BlockSpec; block: EventBlock; title: string; ctx: EditorContext; onChange: (b: EventBlock) => void; onRemove?: () => void;
+function BlockEditor({ spec, setKey, block, title, ctx, onChange, onRemove }: {
+  spec: BlockSpec; setKey: string; block: EventBlock; title: string; ctx: EditorContext; onChange: (b: EventBlock) => void; onRemove?: () => void;
 }) {
   const setGroup = (key: string, items: EventItem[]) => onChange({ ...block, groups: { ...block.groups, [key]: items } });
+  const setField = (key: string, v: string) => onChange({ ...block, fields: { ...block.fields, [key]: v } });
   const fields = editable(spec.fields);
+  const ladder = setKey === "tiers" ? tierLadder(ctx.layout) : null;
+  const renderField = (f: FieldSpec) => {
+    const value = block.fields[f.key] ?? "";
+    if (isAutoField(ctx.layout, setKey, f.key)) return <Input value={value} disabled title="Preenchido automaticamente pela duração da Entrada Diária" />;
+    if (ladder && f.key === "value") {
+      return <TierValueInput ladder={ladder} value={value} onChange={(v) => onChange({ ...block, fields: { ...block.fields, value: v, condition: tierCondition(ladder, v) } })} />;
+    }
+    if (isExchangeCondition(ctx.layout, setKey, f.key)) return <ExchangeLimitInput value={value} onChange={(v) => setField(f.key, v)} />;
+    return <FieldInput spec={f} value={value} onChange={(v) => setField(f.key, v)} />;
+  };
   return (
     <div className="space-y-3 rounded-lg border border-border p-3">
       <div className="flex items-center gap-2">
@@ -87,19 +167,20 @@ function BlockEditor({ spec, block, title, ctx, onChange, onRemove }: {
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {fields.map((f) => (
             <Field key={f.key} label={f.label} wide={f.input === "textarea"}>
-              <FieldInput spec={f} value={block.fields[f.key] ?? ""} onChange={(v) => onChange({ ...block, fields: { ...block.fields, [f.key]: v } })} />
+              {renderField(f)}
             </Field>
           ))}
         </div>
       )}
       {spec.groups.map((g) => {
         const items = block.groups[g.key] ?? [];
-        const full = items.length >= g.slots.length;
+        const limit = groupLimit(ctx.layout, ctx.section, setKey, g.key, g.slots.length);
+        const full = items.length >= limit;
         return (
           <div key={g.key} className="space-y-2">
             <div className="flex items-center gap-2">
               <span className="text-xs font-medium">{g.label}</span>
-              <Badge variant={full ? "default" : "outline"} className="tabular-nums">{items.length} de {g.slots.length}</Badge>
+              <Badge variant={items.length > limit ? "destructive" : full ? "default" : "outline"} className="tabular-nums">{items.length} de {limit}</Badge>
               <span className="flex-1" />
               <ItemPicker
                 getImage={ctx.getImage}
@@ -138,28 +219,43 @@ function BlockEditor({ spec, block, title, ctx, onChange, onRemove }: {
 export function SetEditor({ set, blocks, ctx, onChange, nested }: {
   set: SetSpec; blocks: EventBlock[]; ctx: EditorContext; onChange: (b: EventBlock[]) => void; nested?: boolean;
 }) {
-  const full = blocks.length >= set.blocks.length;
+  const capacity = setCapacity(ctx.layout, set);
+  const unlimited = capacity === Infinity;
+  const fixed = isFixedSet(ctx.layout, set.key);
+  const full = blocks.length >= capacity;
+  const pages = unlimited ? Math.ceil(blocks.length / set.blocks.length) : 1;
   return (
     <div className={`space-y-2 ${nested ? "border-l-2 border-primary/30 pl-3" : ""}`}>
-      {(set.blocks.length > 1 || nested) && (
+      {(set.blocks.length > 1 || nested || unlimited) && (
         <div className="flex items-center gap-2">
           <span className="text-sm font-medium">{set.label}</span>
-          <Badge variant="outline" className="tabular-nums">{blocks.length} de {set.blocks.length}</Badge>
+          <Badge variant="outline" className="tabular-nums">{unlimited ? blocks.length : `${blocks.length} de ${set.blocks.length}`}</Badge>
+          {unlimited && pagination(ctx.layout, set.key)?.lastBlockGroup && (
+            <span className="text-xs text-muted-foreground">Cada missão com opções de escolha fica na 3ª posição de uma aba.</span>
+          )}
+          {unlimited && !pagination(ctx.layout, set.key)?.lastBlockGroup && pages > 1 && (
+            <span className="text-xs text-muted-foreground">{pages} abas no arquivo ({set.blocks.length} por aba)</span>
+          )}
         </div>
       )}
       {blocks.map((b, i) => (
         <BlockEditor
           key={i}
-          spec={set.blocks[i]}
+          spec={editorBlockSpec(ctx.layout, set, i)}
+          setKey={set.key}
           block={b}
-          title={set.blocks.length > 1 ? `${set.blockLabel} ${i + 1}` : set.blockLabel}
+          title={set.blocks.length > 1 || unlimited ? `${set.blockLabel} ${i + 1}` : set.blockLabel}
           ctx={ctx}
           onChange={(nb) => onChange(blocks.map((x, k) => (k === i ? nb : x)))}
-          onRemove={blocks.length > set.minBlocks && i === blocks.length - 1 ? () => onChange(blocks.slice(0, -1)) : undefined}
+          onRemove={
+            fixed || blocks.length <= set.minBlocks ? undefined
+              : unlimited ? () => onChange(blocks.filter((_, k) => k !== i))
+              : i === blocks.length - 1 ? () => onChange(blocks.slice(0, -1)) : undefined
+          }
         />
       ))}
-      {set.blocks.length > 1 && (
-        <Button size="sm" variant="outline" className="gap-1" disabled={full} onClick={() => onChange([...blocks, emptyBlock(set.blocks[blocks.length])])}>
+      {!fixed && (set.blocks.length > 1 || unlimited) && (
+        <Button size="sm" variant="outline" className="gap-1" disabled={full} onClick={() => onChange([...blocks, emptyBlock(editorBlockSpec(ctx.layout, set, blocks.length))])}>
           <Plus className="h-3.5 w-3.5" /> {full ? `Limite do modelo: ${set.blocks.length}` : `Adicionar ${set.blockLabel.toLowerCase()}`}
         </Button>
       )}
@@ -167,11 +263,48 @@ export function SetEditor({ set, blocks, ctx, onChange, nested }: {
   );
 }
 
+/** Controles próprios de alguns layouts, acima dos blocos. */
+function SectionRules({ layout, section, onChange }: { layout: LayoutSpec; section: EventSection; onChange: (s: EventSection) => void }) {
+  if (layout.type === "daily") {
+    return (
+      <Field label="Duração da Entrada Diária">
+        <Select value={String(dailyLength(section))} onValueChange={(v) => onChange(applyDailyLength(layout, section, Number(v) as DailyLength))}>
+          <SelectTrigger><SelectValue /></SelectTrigger>
+          <SelectContent>
+            {DAILY_LENGTHS.map((d) => <SelectItem key={d} value={String(d)}>{d} dias (filas de {d === 7 ? "3 e 7" : "3, 7 e 14"} dias)</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </Field>
+    );
+  }
+  const ladder = tierLadder(layout);
+  if (ladder) {
+    const current = highestStandardTier(layout, section);
+    return (
+      <Field label="Pisos até">
+        <Select value={current || undefined} onValueChange={(v) => onChange(tiersUpTo(layout, section, v))}>
+          <SelectTrigger><SelectValue placeholder="Escolha o último piso" /></SelectTrigger>
+          <SelectContent>
+            {ladder.values.map((v) => <SelectItem key={v} value={v}>{v} cupons</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </Field>
+    );
+  }
+  return null;
+}
+
+function itemCount(blocks: EventBlock[]): number {
+  return blocks.reduce((n, b) => n + Object.values(b.groups).reduce((m, g) => m + g.length, 0) + itemCount(b.children ?? []), 0);
+}
+
 interface SectionProps {
   section: EventSection;
   index: number;
   isFirst: boolean;
   isLast: boolean;
+  collapsed?: boolean;
+  onToggleCollapse?: () => void;
   idStatus: (id: string) => IdStatus;
   getImage: (id: string) => string;
   onChange: (s: EventSection) => void;
@@ -179,7 +312,7 @@ interface SectionProps {
   onMove: (dir: -1 | 1) => void;
 }
 
-export function SectionEditor({ section, index, isFirst, isLast, idStatus, getImage, onChange, onRemove, onMove }: SectionProps) {
+export function SectionEditor({ section, index, isFirst, isLast, collapsed, onToggleCollapse, idStatus, getImage, onChange, onRemove, onMove }: SectionProps) {
   const layout = getLayout(section.layoutId);
   if (!layout) {
     return (
@@ -189,42 +322,53 @@ export function SectionEditor({ section, index, isFirst, isLast, idStatus, getIm
       </Card>
     );
   }
-  const ctx: EditorContext = { idStatus, getImage, layout, servers: section.servers, sectionFields: section.fields };
+  const ctx: EditorContext = { idStatus, getImage, layout, section, servers: section.servers, sectionFields: section.fields };
   const fields = editable(layout.fields);
+  const items = itemCount(Object.values(section.sets).flat());
   return (
     <Card className="space-y-4 p-4">
       <div className="flex flex-wrap items-start gap-2">
+        {onToggleCollapse && (
+          <Button size="icon" variant="ghost" title={collapsed ? "Expandir seção" : "Recolher seção"} aria-expanded={!collapsed} onClick={onToggleCollapse}>
+            {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </Button>
+        )}
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <Badge>{index + 1}</Badge>
             <h2 className="font-semibold">{layout.label}</h2>
-            <span className="text-xs text-muted-foreground">{capacitySummary(layout)}</span>
+            <span className="text-xs text-muted-foreground">{collapsed ? `${section.servers} · ${items} item(ns)` : capacitySummary(layout)}</span>
           </div>
-          <p className="mt-1 text-xs text-muted-foreground">{layout.description} Aba do modelo: {layout.sheet}.</p>
+          {!collapsed && <p className="mt-1 text-xs text-muted-foreground">{layout.description} Aba do modelo: {layout.sheet}.</p>}
         </div>
         <Button size="icon" variant="ghost" disabled={isFirst} title="Mover para cima" onClick={() => onMove(-1)}><ChevronUp className="h-4 w-4" /></Button>
         <Button size="icon" variant="ghost" disabled={isLast} title="Mover para baixo" onClick={() => onMove(1)}><ChevronDown className="h-4 w-4" /></Button>
         <Button size="icon" variant="ghost" title="Remover seção" onClick={onRemove}><Trash2 className="h-4 w-4" /></Button>
       </div>
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <Field label="Servidores">
-          <Input value={section.servers} onChange={(e) => onChange({ ...section, servers: e.target.value })} />
-        </Field>
-        {fields.map((f) => (
-          <Field key={f.key} label={f.label} wide={f.input === "textarea"}>
-            <FieldInput spec={f} value={section.fields[f.key] ?? ""} onChange={(v) => onChange({ ...section, fields: { ...section.fields, [f.key]: v } })} />
-          </Field>
-        ))}
-      </div>
-      {layout.sets.map((set) => (
-        <SetEditor
-          key={set.key}
-          set={set}
-          blocks={section.sets[set.key] ?? []}
-          ctx={ctx}
-          onChange={(blocks) => onChange({ ...section, sets: { ...section.sets, [set.key]: blocks } })}
-        />
-      ))}
+      {!collapsed && (
+        <>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <Field label="Servidores">
+              <Input value={section.servers} onChange={(e) => onChange({ ...section, servers: e.target.value })} />
+            </Field>
+            {fields.map((f) => (
+              <Field key={f.key} label={f.label} wide={f.input === "textarea"}>
+                <FieldInput spec={f} value={section.fields[f.key] ?? ""} onChange={(v) => onChange({ ...section, fields: { ...section.fields, [f.key]: v } })} />
+              </Field>
+            ))}
+            <SectionRules layout={layout} section={section} onChange={onChange} />
+          </div>
+          {layout.sets.map((set) => (
+            <SetEditor
+              key={set.key}
+              set={set}
+              blocks={section.sets[set.key] ?? []}
+              ctx={ctx}
+              onChange={(blocks) => onChange({ ...section, sets: { ...section.sets, [set.key]: blocks } })}
+            />
+          ))}
+        </>
+      )}
     </Card>
   );
 }

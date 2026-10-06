@@ -1,6 +1,7 @@
 import { Drawing, type ImageData } from "./drawing";
 import { FormatContext, itemLabel, renderFormat, richRuns } from "./format";
 import { Worksheet, XlsxPackage, parseRange } from "./ooxml";
+import { isRenewable, paginateSection } from "./rules";
 import type { BlockSpec, EventBlock, EventDocument, EventItem, EventSection, FieldSpec, LayoutSpec, SetSpec, SlotSpec, TemplateManifest } from "./types";
 
 export interface ExportDeps {
@@ -127,16 +128,23 @@ async function fillBlock(ctx: FillContext, spec: BlockSpec, data: EventBlock | u
       if (!text) ctx.ws.clear(cell);
       else await ctx.ws.setRich(cell, richRuns(entry.rich, text));
     }
-    // Background of the name cell follows the item's validity, like in the template.
-    const fills = ctx.layout.durationFill;
-    if (fills && group.kind === "items") {
-      const done = new Set<string>();
+    // Background of the name cell follows the item's validity, like in the template:
+    // timed items (and every renewable / non-renewable one) get "Orange, Accent 2, Lighter 80%".
+    if (group.kind === "items") {
+      const fills = ctx.layout.durationFill;
+      const byCell = new Map<string, EventItem[]>();
       for (const [i, slot] of group.slots.entries()) {
-        const item = items[i];
         const cell = slot.cells.find((c) => c.format === "{label}")?.cell;
-        if (!item || !cell || done.has(cell)) continue;
-        done.add(cell);
-        await ctx.ws.setFill(cell, /\d+\s*(days?|dias?)/i.test(item.duration) ? fills.timed : fills.permanent);
+        if (items[i] && cell) byCell.set(cell, [...(byCell.get(cell) ?? []), items[i]]);
+      }
+      for (const [cell, cellItems] of byCell) {
+        const renewable = cellItems.some((it) => isRenewable(it.duration));
+        if (fills) {
+          const timed = renewable || /\d+\s*(days?|dias?)/i.test(cellItems[0].duration);
+          await ctx.ws.setFill(cell, timed ? fills.timed : fills.permanent);
+        } else if (renewable) {
+          await ctx.ws.setFill(cell, await ctx.ws.renewableFill());
+        }
       }
     }
     // Images: slots sharing the same box are filled together.
@@ -177,7 +185,8 @@ async function fillBlock(ctx: FillContext, spec: BlockSpec, data: EventBlock | u
   }
 }
 
-async function fillSet(ctx: FillContext, set: SetSpec, blocks: EventBlock[], parent = "") {
+/** `blocks` may have holes (undefined): those positions are cleared and hidden, like unused blocks. */
+async function fillSet(ctx: FillContext, set: SetSpec, blocks: (EventBlock | undefined)[], parent = "") {
   if (blocks.length > set.blocks.length) {
     throw new Error(`${ctx.where}: "${set.label}" tem ${blocks.length} ${set.blockLabel.toLowerCase()}(s), mas o modelo comporta ${set.blocks.length}`);
   }
@@ -222,9 +231,13 @@ export async function exportDocument(template: ArrayBuffer, manifest: TemplateMa
   const sections = [...doc.sections];
   const coverIndex = sections.findIndex((s) => s.layoutId === cover.id);
   const coverSection = coverIndex >= 0 ? sections.splice(coverIndex, 1)[0] : null;
+  // Sections larger than one tab (missions without limit) become continuation tabs.
   const entries: { section: EventSection | null; layout: LayoutSpec }[] = [
     { section: coverSection, layout: cover },
-    ...sections.map((s) => ({ section: s, layout: layoutById(manifest, s.layoutId) })),
+    ...sections.flatMap((s) => {
+      const layout = layoutById(manifest, s.layoutId);
+      return paginateSection(layout, s).map((page) => ({ section: page, layout }));
+    }),
   ];
 
   const usedSources = new Set<string>();

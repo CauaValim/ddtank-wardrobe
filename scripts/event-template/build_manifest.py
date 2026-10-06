@@ -112,6 +112,9 @@ def layout(idx, lid, type_, label, description, fields, sets, **extra):
         "id": lid, "type": type_, "label": label, "description": description,
         "sheet": ws.title, "sheetNamePattern": sheet_name_pattern(ws.title),
         "fields": fields, "sets": sets,
+        # Células mescladas do topo da aba: várias abas têm o mesmo padrão de nome
+        # ("BR-Missions {servers}"), então a importação reconhece o layout pela estrutura.
+        "signature": sorted(str(m) for m in ws.merged_cells.ranges if m.min_row <= 30)[:40],
     }
     d.update(extra)
     layouts.append(d)
@@ -128,8 +131,8 @@ queues = [block(
 days = block([], [group("items", "Dias", [
     item_slot(f"P{r}", f"U{r}:U{r}", [{"cell": f"V{r}", "format": "{idAmount}", "rich": "idLine"}], hide=[r, r])
     for r in range(34, 48)])])
-layout(0, "daily-14d", "daily", "Entrada Diária – 14 dias",
-       "Capa do documento, 3 filas acumuladas com 3 itens e lista de 14 dias.",
+layout(0, "daily-14d", "daily", "Entrada Diária (7 ou 14 dias)",
+       "Capa do documento, filas acumuladas de 3, 7 e 14 dias com 3 itens cada e um item por dia.",
        [title(ws, "P2"), *dates(ws, "P5", "P6"),
         field("coverTitle", "Linha do evento (capa)", "B17", "derived", "EVENT FOR THE SERVERS: {docTitle} - {docServers}")],
        [sset("queues", "Filas acumuladas", queues, 0, "Fila"), sset("days", "Itens por dia", [days], 1, "Lista")],
@@ -198,8 +201,8 @@ def choice_group(name_col, img1, img2, rows, or_cell, hide_rows=True):
 ws = wb.worksheets[2]
 cols = {"en": "P", "pt": "V", "ptTitleRow": lambda r: r + 2, "ptDescRow": lambda r: r + 3, "id": "V", "name": "P", "img1": "T", "img2": "U"}
 mblocks = [mission_block(ws, r, cols, 5, 3, r + 5, hide=[r, r + 20]) for r in range(9, 9 + 21 * 8, 21)]
-layout(2, "missions-8x5", "mission", "Missões – até 8 missões",
-       "Missões semanais (A, B, C...) com até 5 recompensas cada.",
+layout(2, "missions-8x5", "mission", "Missões",
+       "Missões semanais (A, B, C...) com até 5 recompensas cada, sem limite: a cada 8 missões o arquivo ganha uma aba de continuação.",
        [title(ws, "P2"), *dates(ws, "P4", "P5")],
        [sset("missions", "Missões", mblocks, 1, "Missão")])
 
@@ -210,8 +213,8 @@ mblocks = []
 for k, r in enumerate((9, 24, 39)):
     ch = choice_group("B", "F", "G", [55, 61, 67, 73], "H55") if k == 2 else None
     mblocks.append(mission_block(ws, r, cols, 3, 3, r + 5, hide=[r, r + 14], choice=ch))
-layout(3, "missions-3x3-choice", "mission", "Missões – 3 missões com escolha",
-       "Até 3 missões com 3 recompensas; a terceira tem até 4 opções \"escolha um\".",
+layout(3, "missions-3x3-choice", "mission", "Missões com escolha",
+       "Missões com 3 recompensas e, se quiser, até 4 opções \"escolha um\"; sem limite de missões (o arquivo ganha abas de continuação).",
        [title(ws, "B2"), *dates(ws, "B4", "B5")],
        [sset("missions", "Missões", mblocks, 1, "Missão")],
        hideWhenEmpty=[{"set": "missions", "block": 2, "group": "choice", "rows": [53, 75]}])
