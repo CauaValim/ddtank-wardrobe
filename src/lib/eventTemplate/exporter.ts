@@ -1,8 +1,8 @@
 import { Drawing, type ImageData } from "./drawing";
 import { FormatContext, itemLabel, renderFormat, richRuns } from "./format";
 import { Worksheet, XlsxPackage, parseRange } from "./ooxml";
-import { isRenewable, paginateSection } from "./rules";
-import type { BlockSpec, EventBlock, EventDocument, EventItem, EventSection, FieldSpec, LayoutSpec, SetSpec, SlotSpec, TemplateManifest } from "./types";
+import { isRenewable, normalizeSection, paginateSection } from "./rules";
+import type { BlockSpec, DecorationSpec, EventBlock, EventDocument, EventItem, EventSection, FieldSpec, LayoutSpec, SetSpec, SlotSpec, TemplateManifest } from "./types";
 
 export interface ExportDeps {
   /** Returns the PNG of an item (or null when there is no image). */
@@ -160,11 +160,15 @@ async function fillBlock(ctx: FillContext, spec: BlockSpec, data: EventBlock | u
       for (const [range, images] of boxes) {
         await ctx.drawing.fillBox(parseRange(range), images, `${label} ${group.label}`);
       }
+      const defaults = Object.fromEntries((ctx.layout.itemFields ?? []).map((f) => [f.key, f.default ?? ""]));
       for (const [i, slot] of group.slots.entries()) {
-        for (const deco of slot.decorations ?? []) {
+        // The same picture may be listed once per variant (e.g. the coupon icon centred or beside the Lcps one).
+        const byMedia = new Map<string, DecorationSpec[]>();
+        for (const deco of slot.decorations ?? []) byMedia.set(`${deco.media} ${deco.box}`, [...(byMedia.get(`${deco.media} ${deco.box}`) ?? []), deco]);
+        for (const variants of byMedia.values()) {
           const item = items[i];
-          const wanted = !!item && Object.entries(deco.when).every(([k, v]) => (item.extra?.[k] ?? "") === v);
-          await ctx.drawing.ensureDecoration(deco.media, parseRange(deco.box), wanted);
+          const match = item && variants.find((d) => Object.entries(d.when).every(([k, v]) => (item.extra?.[k] || defaults[k] || "") === v));
+          await ctx.drawing.ensureDecoration(variants[0].media, parseRange(variants[0].box), !!match, match ? match.offset : undefined);
         }
       }
     }
@@ -236,7 +240,8 @@ export async function exportDocument(template: ArrayBuffer, manifest: TemplateMa
     { section: coverSection, layout: cover },
     ...sections.flatMap((s) => {
       const layout = layoutById(manifest, s.layoutId);
-      return paginateSection(layout, s).map((page) => ({ section: page, layout }));
+      // Textos padronizados (preço com ponto, limite da munição) mesmo em seções editadas depois de abertas.
+      return paginateSection(layout, normalizeSection(layout, s)).map((page) => ({ section: page, layout }));
     }),
   ];
 

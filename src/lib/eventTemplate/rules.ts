@@ -1,4 +1,4 @@
-import type { BlockSpec, EventBlock, EventSection, LayoutSpec, SetSpec } from "./types";
+import type { BlockSpec, EventBlock, EventItem, EventSection, LayoutSpec, SetSpec } from "./types";
 import type { ValidationIssue } from "./validate";
 
 /**
@@ -193,6 +193,35 @@ export function parseExchangeLimit(text: string): number | null | undefined {
 export const isExchangeCondition = (layout: LayoutSpec, setKey: string, fieldKey: string) =>
   layout.type === "exchange" && setKey === "groups" && fieldKey === "condition";
 
+// ------------------------------------------------------------------ venda de munição
+
+export const ammoLimitText = (n: number) => `Limit ${n} items per server`;
+
+/** "No limit"/vazio -> null; "Limit 10 item(s) per server" -> 10; outro texto -> undefined. */
+export function parseAmmoLimit(text: string): number | null | undefined {
+  const t = (text ?? "").trim();
+  if (!t || /^no\s+limit$/i.test(t)) return null;
+  const m = /^limit\s+(?:of\s+)?(\d+)\s+items?\s+per\s+server$/i.exec(t);
+  return m ? Number(m[1]) : undefined;
+}
+
+/** "120000" / "120.000" / "120 000" -> "120.000". Texto com letras fica como está. */
+export function formatPrice(value: string): string {
+  const t = (value ?? "").trim();
+  if (!/^[\d.,\s]+$/.test(t)) return t;
+  const digits = t.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
+  return digits.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
+function normalizeAmmoItem(item: EventItem): EventItem {
+  const extra = item.extra ?? {};
+  const limit = parseAmmoLimit(extra.condition ?? "");
+  const condition = limit === undefined ? extra.condition ?? "" : limit === null ? NO_LIMIT : ammoLimitText(limit);
+  const price = formatPrice(extra.price ?? "");
+  if (condition === extra.condition && price === (extra.price ?? "")) return item;
+  return { ...item, extra: { ...extra, price, condition } };
+}
+
 // ------------------------------------------------------------------ validade renovável
 
 /** "30 Days - renewable" / "7 Days - non-renewable": nome com fundo laranja (Ênfase 2, 80%). */
@@ -236,6 +265,10 @@ export function normalizeSection(layout: LayoutSpec | undefined, section: EventS
       return { ...g, fields: { ...g.fields, condition: exchangeLimitText(n) } };
     });
     return { ...section, sets: { ...section.sets, groups } };
+  }
+  if (layout.type === "ammo" && section.sets.blocks) {
+    const blocks = section.sets.blocks.map((b) => ({ ...b, groups: { ...b.groups, items: (b.groups.items ?? []).map(normalizeAmmoItem) } }));
+    return { ...section, sets: { ...section.sets, blocks } };
   }
   if (layout.type === "daily" && !section.fields.days) {
     return { ...section, fields: { ...section.fields, days: String(dailyLength(section)) } };

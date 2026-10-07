@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { getLayout, newItem, newSection } from "./model";
 import {
-  applyDailyLength, dailyLength, editorBlockSpec, exchangeLimitText, highestStandardTier, isRenewable, normalizeSection,
-  normalizeTier, paginateSection, parseExchangeLimit, sectionIssues, setCapacity, tierCondition, tierLadder, tiersUpTo,
+  ammoLimitText, applyDailyLength, dailyLength, formatPrice, editorBlockSpec, exchangeLimitText, highestStandardTier, isRenewable, normalizeSection,
+  normalizeTier, paginateSection, parseAmmoLimit, parseExchangeLimit, sectionIssues, setCapacity, tierCondition, tierLadder, tiersUpTo,
 } from "./rules";
 import type { EventBlock } from "./types";
 
@@ -129,4 +129,26 @@ describe("limite de troca", () => {
 
 it("validade renovável", () => {
   expect(["30 Days - renewable", "30 Days - non-renewable", "Permanent", "7 Days"].map(isRenewable)).toEqual([true, true, false, false]);
+});
+
+describe("venda de munição", () => {
+  it("preço com ponto de milhar", () => {
+    expect(["120000", "4000", "120.000", "1 500", "500", "", "Grátis"].map(formatPrice)).toEqual(["120.000", "4.000", "120.000", "1.500", "500", "", "Grátis"]);
+  });
+
+  it("limite por servidor ou No limit", () => {
+    expect(ammoLimitText(10)).toBe("Limit 10 items per server");
+    expect(["", "No limit", "Limit 1 item per server", "limit 20 items per server", "outro"].map(parseAmmoLimit)).toEqual([null, null, 1, 20, undefined]);
+  });
+
+  it("padroniza preço e condição ao abrir e exportar", () => {
+    const layout = getLayout("ammo-7x6")!;
+    const s = newSection(layout, "s1-s401");
+    s.sets.blocks = [{ fields: {}, groups: { items: [
+      newItem({ name: "A", extra: { price: "120000", currency: "Coupons", condition: "" } }),
+      newItem({ name: "B", extra: { price: "4.000", currency: "Coupons / Lcps", condition: "Limit 1 item per server" } }),
+    ] } }];
+    const items = normalizeSection(layout, s).sets.blocks[0].groups.items;
+    expect(items.map((i) => [i.extra?.price, i.extra?.condition])).toEqual([["120.000", "No limit"], ["4.000", "Limit 1 items per server"]]);
+  });
 });

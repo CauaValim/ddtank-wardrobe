@@ -242,15 +242,36 @@ export class Drawing {
     }
   }
 
-  /** Clones a picture that uses `mediaName` into `range` (same offsets relative to its row). */
-  async ensureDecoration(mediaName: string, range: Range, wanted: boolean) {
-    const units = await this.list();
+  /**
+   * Clones a picture that uses `mediaName` into `range` (same offsets relative to its row).
+   * With `offset` ([colOff, rowOff] in EMU from the range's top-left cell) the picture is moved there.
+   */
+  async ensureDecoration(mediaName: string, range: Range, wanted: boolean, offset?: [number, number]) {
     const inside = (await this.inBox(range)).filter((u) => u.media?.endsWith(`/${mediaName}`));
     if (!wanted) {
       inside.forEach((u) => this.remove(u));
       return;
     }
-    if (inside.length > 0) return;
+    if (inside.length === 0) await this.cloneDecoration(mediaName, range);
+    if (!offset) return;
+    const [keep, ...extra] = (await this.inBox(range)).filter((u) => u.media?.endsWith(`/${mediaName}`));
+    extra.forEach((u) => this.remove(u));
+    const from = keep && keep.anchor.localName === "oneCellAnchor" ? firstChild(keep.anchor, "from") : null;
+    if (!from) return;
+    const set = (name: string, value: number) => {
+      const el = firstChild(from, name);
+      if (el) el.textContent = String(value);
+    };
+    set("col", range.c1 - 1);
+    set("colOff", offset[0]);
+    set("row", range.r1 - 1);
+    set("rowOff", offset[1]);
+    this.units = null;
+    this.pkg.touch(this.path);
+  }
+
+  private async cloneDecoration(mediaName: string, range: Range) {
+    const units = await this.list();
     const proto = units.find((u) => u.media?.endsWith(`/${mediaName}`));
     if (!proto) return;
     const protoRow = this.geometry.cellAt((proto.rect.x1 + proto.rect.x2) / 2, (proto.rect.y1 + proto.rect.y2) / 2).row;

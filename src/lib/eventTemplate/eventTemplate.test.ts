@@ -29,8 +29,8 @@ const hasTemplate = existsSync(templatePath);
 const PNG = Uint8Array.from(Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64"));
 const fakeImage = async () => ({ data: PNG, width: 60, height: 60 });
 
-// O limite de troca sai sempre no plural ("LIMIT OF 1 ITEMS PER EXCHANGE"), como pedido pela equipe.
-const norm = (s: string) => s.replace(/\s+/g, " ").replace(/\[\s+/g, "[").replace(/\s+\]/g, "]").trim().replace(/^(LIMIT OF \d+ ITEM)S?( PER EXCHANGE)$/i, "$1S$2");
+// O limite de troca sai sempre no plural ("LIMIT OF 1 ITEMS PER EXCHANGE") e "No limit" com l minúsculo, como pedido pela equipe.
+const norm = (s: string) => s.replace(/\s+/g, " ").replace(/\[\s+/g, "[").replace(/\s+\]/g, "]").trim().replace(/^(LIMIT OF \d+ ITEM)S?( PER EXCHANGE)$/i, "$1S$2").replace(/^no limit$/i, "No limit");
 
 /**
  * Diferenças intencionais em relação ao modelo de 16 anos:

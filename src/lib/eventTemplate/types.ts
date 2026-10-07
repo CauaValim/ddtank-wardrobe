@@ -27,6 +27,8 @@ export interface DecorationSpec {
   media: string;
   box: string;
   when: Record<string, string>;
+  /** [colOff, rowOff] em EMU a partir do canto da célula; sem isso a imagem fica onde está no modelo. */
+  offset?: [number, number];
 }
 
 export interface SlotSpec {

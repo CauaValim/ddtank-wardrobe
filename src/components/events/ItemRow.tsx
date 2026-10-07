@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { BINDS, DURATIONS, type EventItem, type ItemFieldSpec } from "@/lib/eventTemplate/types";
 import { fileToItemImage } from "@/lib/eventTemplate/browserImages";
 import type { IdStatus } from "@/lib/eventTemplate/itemLookup";
-import { isRenewable } from "@/lib/eventTemplate/rules";
+import { NO_LIMIT, ammoLimitText, formatPrice, isRenewable, parseAmmoLimit } from "@/lib/eventTemplate/rules";
 import { ItemUsageBadges, type UsageByKind } from "@/components/events/ItemUsageBadges";
 import { ItemRuleBadge } from "@/components/events/ItemRuleBadge";
 import type { ItemRule } from "@/lib/eventTemplate/itemRules";
@@ -96,14 +96,52 @@ export function ItemRow({ item, index, kind, itemFields, idStatus, getImage, usa
                 <SelectTrigger className="w-40" title={f.label}><SelectValue /></SelectTrigger>
                 <SelectContent>{f.options.map((o) => <SelectItem key={o} value={o}>{o}</SelectItem>)}</SelectContent>
               </Select>
+            ) : f.key === "condition" ? (
+              <AmmoLimitInput key={f.key} value={item.extra?.[f.key] ?? ""} onChange={(v) => setExtra(f.key, v)} />
             ) : (
-              <Input key={f.key} className="w-44" title={f.label} placeholder={f.placeholder ?? f.label} value={item.extra?.[f.key] ?? ""} onChange={(e) => setExtra(f.key, e.target.value)} />
+              <Input
+                key={f.key}
+                className="w-44"
+                title={f.label}
+                placeholder={f.placeholder ?? f.label}
+                inputMode={f.key === "price" ? "numeric" : undefined}
+                value={item.extra?.[f.key] ?? ""}
+                onChange={(e) => setExtra(f.key, e.target.value)}
+                onBlur={f.key === "price" ? (e) => setExtra(f.key, formatPrice(e.target.value)) : undefined}
+              />
             ),
           )}
         </>
       )}
       <Button type="button" size="icon" variant="ghost" title="Remover item" onClick={onRemove}><Trash2 className="h-4 w-4" /></Button>
       <datalist id="event-durations">{DURATIONS.map((d) => <option key={d} value={d} />)}</datalist>
+    </div>
+  );
+}
+
+/** Condição da venda de munição: "No limit" ou "Limit x items per server". */
+function AmmoLimitInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const parsed = parseAmmoLimit(value);
+  const limited = parsed != null;
+  return (
+    <div className="flex gap-1">
+      <Select value={limited ? "limit" : "none"} onValueChange={(v) => onChange(v === "limit" ? ammoLimitText(10) : NO_LIMIT)}>
+        <SelectTrigger className="w-36" title={parsed === undefined && value ? `Texto antigo: ${value}` : "Limite por servidor"}><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="none">Sem limite (No limit)</SelectItem>
+          <SelectItem value="limit">Limite por servidor</SelectItem>
+        </SelectContent>
+      </Select>
+      {limited && (
+        <Input
+          type="number"
+          min={1}
+          className="w-20 tabular-nums"
+          title="Limit x items per server"
+          value={parsed ?? 1}
+          onChange={(e) => onChange(ammoLimitText(Math.max(1, Number(e.target.value) || 1)))}
+        />
+      )}
     </div>
   );
 }

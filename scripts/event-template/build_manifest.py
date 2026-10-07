@@ -138,6 +138,17 @@ layout(0, "daily-14d", "daily", "Entrada Diária (7 ou 14 dias)",
        [sset("queues", "Filas acumuladas", queues, 0, "Fila"), sset("days", "Itens por dia", [days], 1, "Lista")],
        cover={"hideColsWithoutSection": "L:AQ"})
 
+# Ícones de moeda na célula de preço (posições do modelo): só Coupons fica centralizado;
+# com "Coupons / Lcps" o ícone de Coupons vai para a esquerda e o de Lcps fica ao lado.
+def ammo_currency_icons(r):
+    box = f"E{r}:E{r}"
+    return [
+        {"media": "image28.png", "box": box, "when": {"currency": "Coupons"}, "offset": [605118, 481853]},
+        {"media": "image28.png", "box": box, "when": {"currency": "Coupons / Lcps"}, "offset": [485775, 495300]},
+        {"media": "image29.png", "box": box, "when": {"currency": "Coupons / Lcps"}, "offset": [733425, 495300]},
+    ]
+
+
 # ---------------------------------------------------------------- Venda de munição
 ws = wb.worksheets[1]
 ammo_blocks = []
@@ -149,7 +160,7 @@ for h in (7, 15, 23, 31, 39, 47, 55):
             {"cell": f"F{r}", "format": "{id}", "rich": "plain"},
             {"cell": f"G{r}", "format": "*{qty}", "rich": "value"},
             {"cell": f"H{r}", "format": "{condition}", "rich": "plain"},
-        ], hide=[r, r], decorations=[{"media": "image29.png", "box": f"E{r}:E{r}", "when": {"currency": "Coupons / Lcps"}}]))
+        ], hide=[r, r], decorations=ammo_currency_icons(r)))
     ammo_blocks.append(block([], [group("items", "Itens", slots)], hide=[h, h + 7]))
 layout(1, "ammo-7x6", "ammo", "Venda de Munição",
        "Até 7 blocos com 6 itens cada, com preço em cupons, quantidade e limite por servidor.",
