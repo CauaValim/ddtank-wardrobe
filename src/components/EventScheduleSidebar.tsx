@@ -1,5 +1,5 @@
-import { CalendarDays, ChevronDown } from "lucide-react";
-import { useMemo } from "react";
+import { CalendarDays, ChevronDown, Pencil, Plus } from "lucide-react";
+import { useMemo, useState } from "react";
 import { isWithinInterval, parseISO, addDays } from "date-fns";
 import {
   Sidebar,
@@ -15,8 +15,8 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-import { cronograma } from "@/data/cronograma";
-import { cronogramaEconomica } from "@/data/cronogramaEconomica";
+import { periodFor, useSchedule, type ScheduleWeek } from "@/hooks/useSchedule";
+import { ScheduleWeekDialog } from "@/components/ScheduleWeekDialog";
 import { Badge } from "@/components/ui/badge";
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -31,18 +31,33 @@ const CATEGORY_COLORS: Record<string, string> = {
   "Código DDBooster": "bg-indigo-500/15 text-indigo-700 dark:text-indigo-400",
 };
 
-export function EventScheduleSidebar() {
+/** Próxima segunda-feira depois da última semana cadastrada. */
+function nextWeekStart(weeks: ScheduleWeek[]): string {
+  const last = weeks[weeks.length - 1];
+  const d = last ? addDays(parseISO(last.startDate), 7) : new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+export function EventScheduleSidebar({ canEdit = false }: { canEdit?: boolean }) {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
+  const { weeks, fromDb, save, remove } = useSchedule();
+  const [editing, setEditing] = useState<ScheduleWeek | null>(null);
+  const editable = canEdit && fromDb;
 
   const currentWeekIndex = useMemo(() => {
     const now = new Date();
-    return cronograma.findIndex((week) => {
+    return weeks.findIndex((week) => {
       const start = parseISO(week.startDate);
       const end = addDays(start, 6);
       return isWithinInterval(now, { start, end });
     });
-  }, []);
+  }, [weeks]);
+
+  const addWeek = () => {
+    const startDate = nextWeekStart(weeks);
+    setEditing({ startDate, periodo: periodFor(startDate), tema: "", eventos: {}, economica: [] });
+  };
 
   return (
     <Sidebar collapsible="icon" side="left" className="border-r border-border">
@@ -53,6 +68,16 @@ export function EventScheduleSidebar() {
             <span className="text-sm font-semibold text-foreground truncate">
               Cronograma Projetos
             </span>
+          )}
+          {!collapsed && editable && (
+            <button
+              type="button"
+              onClick={addWeek}
+              className="ml-auto rounded p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+              title="Adicionar semana ao cronograma"
+            >
+              <Plus className="h-4 w-4" />
+            </button>
           )}
         </div>
       </SidebarHeader>
@@ -70,14 +95,25 @@ export function EventScheduleSidebar() {
                 </CollapsibleTrigger>
                 <CollapsibleContent>
                   <div className="space-y-0.5 px-1 pb-4">
-                    {cronograma.map((week, idx) => {
+                    {weeks.map((week, idx) => {
                       const isCurrent = idx === currentWeekIndex;
                       const hasEvents = Object.values(week.eventos).some(
                         (arr) => arr.length > 0
                       );
 
                       return (
-                        <Collapsible key={idx} defaultOpen={isCurrent}>
+                        <Collapsible key={week.id ?? idx} defaultOpen={isCurrent}>
+                          <div className="group/week relative">
+                          {editable && (
+                            <button
+                              type="button"
+                              onClick={() => setEditing(week)}
+                              className="absolute right-7 top-1.5 z-10 rounded p-1 text-muted-foreground opacity-0 hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover/week:opacity-100"
+                              title={`Editar semana ${week.periodo}`}
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </button>
+                          )}
                           <CollapsibleTrigger className="w-full">
                             <div
                               className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-muted/60 ${
@@ -106,6 +142,7 @@ export function EventScheduleSidebar() {
                               )}
                             </div>
                           </CollapsibleTrigger>
+                          </div>
                           {hasEvents && (
                             <CollapsibleContent>
                               <div className="ml-3 border-l border-border pl-3 pb-1 space-y-2 mt-1">
@@ -157,13 +194,13 @@ export function EventScheduleSidebar() {
                 </CollapsibleTrigger>
                 <CollapsibleContent>
                   <div className="space-y-0.5 px-1 pb-4">
-                    {cronograma.map((week, idx) => {
+                    {weeks.map((week, idx) => {
                       const isCurrent = idx === currentWeekIndex;
-                      const ecoEvents = cronogramaEconomica[week.startDate] || [];
+                      const ecoEvents = week.economica;
                       if (ecoEvents.length === 0) return null;
 
                       return (
-                        <Collapsible key={idx} defaultOpen={isCurrent}>
+                        <Collapsible key={week.id ?? idx} defaultOpen={isCurrent}>
                           <CollapsibleTrigger className="w-full">
                             <div
                               className={`flex items-center gap-2 rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-muted/60 ${
@@ -214,11 +251,11 @@ export function EventScheduleSidebar() {
             )}
             {collapsed && (
               <div className="space-y-0.5 px-1 pb-4">
-                {cronograma.map((week, idx) => {
+                {weeks.map((week, idx) => {
                   const isCurrent = idx === currentWeekIndex;
                   return (
                     <div
-                      key={idx}
+                      key={week.id ?? idx}
                       className={`flex h-8 w-8 items-center justify-center rounded-md text-[10px] font-bold mx-auto my-0.5 ${
                         isCurrent
                           ? "bg-primary text-primary-foreground"
@@ -235,6 +272,7 @@ export function EventScheduleSidebar() {
           </SidebarGroup>
         </ScrollArea>
       </SidebarContent>
+      <ScheduleWeekDialog week={editing} onClose={() => setEditing(null)} onSave={save} onDelete={remove} />
     </Sidebar>
   );
 }

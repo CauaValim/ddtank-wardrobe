@@ -11,6 +11,7 @@ import { IdFillerModal } from "@/components/IdFillerModal";
 import { ItemValidatorModal } from "@/components/ItemValidatorModal";
 import { GameSyncButton } from "@/components/GameSyncButton";
 import { ExportItemImagesButton } from "@/components/ExportItemImagesButton";
+import { CodeRequestsButton } from "@/components/CodeRequestsButton";
 import { GameDataModal } from "@/components/GameDataModal";
 import { FugurasModal } from "@/components/FugurasModal";
 import { Database } from "lucide-react";
@@ -257,6 +258,9 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
               >
                 <FileSpreadsheet className="h-3.5 w-3.5" /> Eventos – Servidores Novos
               </button>
+            )}
+            {auth.canRequestCodes && auth.user && (
+              <CodeRequestsButton userId={auth.user.id} email={auth.user.email ?? ""} canManage={auth.canManageCodes} />
             )}
             <button
               onClick={() => setGameDataOpen(true)}

@@ -23,6 +23,7 @@ const ROLE_LABELS: Record<string, string> = {
   admin: "ADM",
   analista: "Analista",
   moderador: "Moderador",
+  midia: "Mídia",
   user: "Usuário",
 };
 
@@ -31,6 +32,7 @@ const ROLE_COLORS: Record<string, string> = {
   admin: "bg-primary/20 text-primary",
   analista: "bg-accent/20 text-accent",
   moderador: "bg-success/20 text-[hsl(var(--success))]",
+  midia: "bg-pink-500/15 text-pink-700 dark:text-pink-400",
   user: "bg-muted text-muted-foreground",
 };
 

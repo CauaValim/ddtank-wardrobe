@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { User } from "@supabase/supabase-js";
 
-export type AppRole = "admin" | "analista" | "moderador" | "user" | "super_admin";
+export type AppRole = "admin" | "analista" | "moderador" | "user" | "super_admin" | "midia";
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
@@ -82,6 +82,9 @@ export function useAuth() {
   const canImport = isAdmin; // .xlsx / .json import
   const canImportImages = isSuperAdmin; // .zip images
   const canSyncDescriptions = isSuperAdmin;
+  const canEditSchedule = isAdmin;
+  const canRequestCodes = isAdmin || role === "midia";
+  const canManageCodes = isAdmin;
 
-  return { user, role, loading, signIn, signOut, canViewId, canSelect, canImport, canImportImages, canSyncDescriptions };
+  return { user, role, loading, signIn, signOut, canViewId, canSelect, canImport, canImportImages, canSyncDescriptions, canEditSchedule, canRequestCodes, canManageCodes };
 }
