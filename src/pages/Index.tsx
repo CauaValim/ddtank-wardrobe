@@ -10,6 +10,7 @@ import { BulkTypeMover } from "@/components/BulkTypeMover";
 import { IdFillerModal } from "@/components/IdFillerModal";
 import { ItemValidatorModal } from "@/components/ItemValidatorModal";
 import { GameSyncButton } from "@/components/GameSyncButton";
+import { ExportItemImagesButton } from "@/components/ExportItemImagesButton";
 import { GameDataModal } from "@/components/GameDataModal";
 import { FugurasModal } from "@/components/FugurasModal";
 import { Database } from "lucide-react";
@@ -239,6 +240,7 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
               </>
             )}
             {realm === "br" && (auth.role === "super_admin" || auth.role === "admin") && <GameSyncButton />}
+            {(auth.role === "super_admin" || auth.role === "admin") && <ExportItemImagesButton realm={realm} />}
             {auth.canImport && (
               <button
                 onClick={() => navigate("/eventos")}
