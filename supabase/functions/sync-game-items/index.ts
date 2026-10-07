@@ -1,8 +1,8 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+import { imageCandidates, isJpeg, repairImage } from "./images.ts";
 
 const SOURCE = "http://quest132-ddt.337.com/TemplateAllList.xml";
-const RES_HOSTS = ["http://ddt-a.akamaihd.net", "http://res234.ddt.tr.elexddt.com"];
 const MAX_IMAGES = 200;
 
 const json = (b: unknown, status = 200) =>
@@ -35,24 +35,6 @@ function parseItems(xml: string) {
 
 const num = (v?: string) => (v == null || v === "" || isNaN(Number(v)) ? null : Number(v));
 const bool = (v?: string) => (v == null ? null : v === "true" || v === "1");
-
-const SEXED: Record<number, string> = { 1: "head", 2: "glass", 3: "hair", 4: "eff", 5: "cloth", 6: "face", 13: "suits" };
-const UNSEXED: Record<number, string> = { 8: "armlet", 9: "ring", 14: "necklace", 15: "wing", 17: "offhand" };
-const PET: Record<number, string> = { 50: "arm", 51: "hat", 52: "cloth" };
-
-function imageCandidates(type: number, sex: number, pic: string): string[] {
-  const paths: string[] = [];
-  if (SEXED[type]) {
-    const order = sex === 2 ? ["f", "m"] : ["m", "f"];
-    order.forEach((s) => paths.push(`image/equip/${s}/${SEXED[type]}/${pic}/icon_1.png`));
-  }
-  if (UNSEXED[type]) paths.push(`image/equip/${UNSEXED[type]}/${pic}/icon.png`);
-  if (type === 7 || type === 27) paths.push(`image/arm/${pic}/00.png`);
-  if (PET[type]) paths.push(`image/petequip/${PET[type]}/${pic}/icon.png`);
-  if (type === 16) paths.push(`image/specialprop/chatBall/${pic.toLowerCase()}/icon.png`);
-  paths.push(`image/unfrightprop/${pic}/icon.png`, `image/prop/${pic}/icon.png`);
-  return RES_HOSTS.flatMap((h) => paths.map((p) => `${h}/${p}`));
-}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -116,7 +98,8 @@ Deno.serve(async (req) => {
 
     // Verificação de imagens: todos os itens sem imagem (novos e antigos)
     const { data: missing } = await admin.from("items").select("id,type,need_sex,pic_path")
-      .is("image_url", null).not("pic_path", "is", null).order("id", { ascending: true }).limit(MAX_IMAGES);
+      // Mais novos primeiro: itens que o jogo não serve (antigos) não travam os recém-sincronizados.
+      .is("image_url", null).not("pic_path", "is", null).order("id", { ascending: false }).limit(MAX_IMAGES);
     let images = 0;
     const started = Date.now();
     for (const r of missing ?? []) {
@@ -127,9 +110,10 @@ Deno.serve(async (req) => {
         try {
           const resp = await fetch(c);
           if (!resp.ok || !(resp.headers.get("content-type") ?? "").includes("image")) { await resp.body?.cancel(); continue; }
-          const buf = new Uint8Array(await resp.arrayBuffer());
-          const path = `${r.id}/${Date.now()}.png`;
-          const { error } = await admin.storage.from("item-images").upload(path, buf, { upsert: true, contentType: "image/png" });
+          const buf = repairImage(new Uint8Array(await resp.arrayBuffer()));
+          const jpg = isJpeg(buf);
+          const path = `${r.id}/${Date.now()}.${jpg ? "jpg" : "png"}`;
+          const { error } = await admin.storage.from("item-images").upload(path, buf, { upsert: true, contentType: jpg ? "image/jpeg" : "image/png" });
           if (error) break;
           const pub = admin.storage.from("item-images").getPublicUrl(path).data.publicUrl;
           await admin.from("items").update({ image_url: pub }).eq("id", r.id);
