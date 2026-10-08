@@ -2,6 +2,7 @@ import { Drawing, type ImageData } from "./drawing";
 import { FormatContext, itemLabel, renderFormat, richRuns } from "./format";
 import { Worksheet, XlsxPackage, parseRange } from "./ooxml";
 import { isRenewable, normalizeSection, paginateSection } from "./rules";
+import { orderSections } from "./model";
 import type { BlockSpec, DecorationSpec, EventBlock, EventDocument, EventItem, EventSection, FieldSpec, LayoutSpec, SetSpec, SlotSpec, TemplateManifest } from "./types";
 
 export interface ExportDeps {
@@ -232,7 +233,7 @@ export async function exportDocument(template: ArrayBuffer, manifest: TemplateMa
   const pkg = await XlsxPackage.load(template);
   const warnings: string[] = [];
   const cover = layoutById(manifest, manifest.coverLayout);
-  const sections = [...doc.sections];
+  const sections = orderSections(doc.sections); // solicitações manuais saem no final
   const coverIndex = sections.findIndex((s) => s.layoutId === cover.id);
   const coverSection = coverIndex >= 0 ? sections.splice(coverIndex, 1)[0] : null;
   // Sections larger than one tab (missions without limit) become continuation tabs.

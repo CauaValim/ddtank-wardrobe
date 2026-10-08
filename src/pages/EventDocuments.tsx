@@ -25,7 +25,7 @@ import { HistoryPanel } from "@/components/events/HistoryPanel";
 import { PastEventsImport } from "@/components/events/PastEventsImport";
 import type { PresetApi } from "@/components/events/PresetControls";
 import { isoToUs } from "@/lib/eventTemplate/format";
-import { manifest, newId, newSection, normalizeSections } from "@/lib/eventTemplate/model";
+import { isRequestSection, manifest, newId, newSection, normalizeSections, orderSections } from "@/lib/eventTemplate/model";
 import { exportDocument } from "@/lib/eventTemplate/exporter";
 import { readDocument } from "@/lib/eventTemplate/importer";
 import { resolveIdsByName } from "@/lib/eventTemplate/resolveNames";
@@ -47,7 +47,7 @@ const LIST_COLUMNS = "id, title, theme, servers, start_date, end_date, status, t
 
 function fromRow(row: Row): { doc: EventDocument; converted: number; dropped: number } {
   const { sections, converted, dropped } = normalizeSections(row.sections);
-  return { doc: { ...row, status: row.status === "final" ? "final" : "draft", sections }, converted, dropped };
+  return { doc: { ...row, status: row.status === "final" ? "final" : "draft", sections: orderSections(sections) }, converted, dropped };
 }
 
 async function fetchDoc(id: string): Promise<EventDocument> {
@@ -336,7 +336,7 @@ function Editor({ id }: { id: string }) {
     const j = i + dir;
     if (j < 0 || j >= arr.length) return;
     [arr[i], arr[j]] = [arr[j], arr[i]];
-    update({ sections: arr });
+    update({ sections: orderSections(arr) });
   };
 
   const validate = async () => {
@@ -429,6 +429,13 @@ function Editor({ id }: { id: string }) {
       )}
 
       {doc.sections.map((s, i) => (
+        <div key={s.id} className="space-y-4">
+        {isRequestSection(s) && !isRequestSection(doc.sections[i - 1] ?? { layoutId: "" }) && (
+          <div className="border-t border-dashed border-border pt-3">
+            <h2 className="text-sm font-semibold">Solicitações manuais</h2>
+            <p className="text-xs text-muted-foreground">Parte extra: estas abas sempre saem no final do documento exportado.</p>
+          </div>
+        )}
         <SectionEditor
           key={s.id}
           section={s}
@@ -451,10 +458,11 @@ function Editor({ id }: { id: string }) {
           onRemove={() => confirm("Remover esta seção?") && update({ sections: doc.sections.filter((x) => x.id !== s.id) })}
           onMove={(d) => move(i, d)}
         />
+        </div>
       ))}
 
       <div className="flex justify-center border-t border-dashed border-border pt-4">
-        <LayoutPicker onPick={(layout) => update({ sections: [...doc.sections, newSection(layout, doc.servers)] })} />
+        <LayoutPicker onPick={(layout) => update({ sections: orderSections([...doc.sections, newSection(layout, doc.servers)]) })} />
       </div>
     </div>
   );

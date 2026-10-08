@@ -46,6 +46,14 @@ export function newSection(layout: LayoutSpec, servers: string): EventSection {
   return layout.type === "daily" ? applyDailyLength(layout, section, 14) : section;
 }
 
+/** Solicitação manual (Activity request): parte extra que sempre vai no final do documento. */
+export const isRequestSection = (s: Pick<EventSection, "layoutId">) => getLayout(s.layoutId)?.type === "request";
+
+/** Seções principais primeiro e as solicitações manuais no final, mantendo a ordem dentro de cada parte. */
+export function orderSections<T extends Pick<EventSection, "layoutId">>(sections: T[]): T[] {
+  return [...sections.filter((s) => !isRequestSection(s)), ...sections.filter(isRequestSection)];
+}
+
 export function newItem(partial: Partial<EventItem> = {}): EventItem {
   return { id: "XXX", name: "", qty: 1, duration: "Permanent", bind: "Bound", ...partial };
 }
