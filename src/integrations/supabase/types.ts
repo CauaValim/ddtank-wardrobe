@@ -593,117 +593,39 @@ export type Database = {
         }
         Relationships: []
       }
-      schedule_categories: {
-        Row: {
-          color: string
-          created_at: string
-          id: string
-          name: string
-          position: number
-          section_id: string
-          updated_at: string
-        }
-        Insert: {
-          color?: string
-          created_at?: string
-          id?: string
-          name: string
-          position?: number
-          section_id: string
-          updated_at?: string
-        }
-        Update: {
-          color?: string
-          created_at?: string
-          id?: string
-          name?: string
-          position?: number
-          section_id?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      schedule_entries: {
-        Row: {
-          category_id: string
-          created_at: string
-          id: string
-          period_id: string
-          position: number
-          text: string
-        }
-        Insert: {
-          category_id: string
-          created_at?: string
-          id?: string
-          period_id: string
-          position?: number
-          text: string
-        }
-        Update: {
-          category_id?: string
-          created_at?: string
-          id?: string
-          period_id?: string
-          position?: number
-          text?: string
-        }
-        Relationships: []
-      }
-      schedule_periods: {
+      schedule_weeks: {
         Row: {
           created_at: string
-          end_date: string
+          economica: Json
+          eventos: Json
           id: string
-          label: string
-          notes: string
+          periodo: string
           start_date: string
-          theme: string
+          tema: string
           updated_at: string
+          updated_by: string | null
         }
         Insert: {
           created_at?: string
-          end_date: string
+          economica?: Json
+          eventos?: Json
           id?: string
-          label?: string
-          notes?: string
+          periodo?: string
           start_date: string
-          theme?: string
+          tema?: string
           updated_at?: string
+          updated_by?: string | null
         }
         Update: {
           created_at?: string
-          end_date?: string
+          economica?: Json
+          eventos?: Json
           id?: string
-          label?: string
-          notes?: string
+          periodo?: string
           start_date?: string
-          theme?: string
+          tema?: string
           updated_at?: string
-        }
-        Relationships: []
-      }
-      schedule_sections: {
-        Row: {
-          created_at: string
-          id: string
-          name: string
-          position: number
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          name: string
-          position?: number
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          name?: string
-          position?: number
-          updated_at?: string
+          updated_by?: string | null
         }
         Relationships: []
       }
@@ -744,7 +666,13 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "admin" | "user" | "moderador" | "analista" | "super_admin" | "midia"
+      app_role:
+        | "admin"
+        | "user"
+        | "moderador"
+        | "analista"
+        | "super_admin"
+        | "midia"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -872,7 +800,14 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["admin", "user", "moderador", "analista", "super_admin", "midia"],
+      app_role: [
+        "admin",
+        "user",
+        "moderador",
+        "analista",
+        "super_admin",
+        "midia",
+      ],
     },
   },
 } as const
