@@ -24,8 +24,8 @@ rwb = openpyxl.load_workbook(REQ) if REQ else None
 VERSION = "16-anos-v2"
 # Nome do arquivo que o Super Admin envia no painel (o envio confere o SHA-256).
 FILE_NAME = "BR_16_years_of_DDTank_Week_-_s1-s401_ID_2.xlsx"
-REQ_VERSION = "solicitacoes-v1"
-REQ_FILE_NAME = "solicitacoes-manuais-v1.xlsx"
+REQ_VERSION = "solicitacoes-v2"
+REQ_FILE_NAME = "solicitacoes-manuais-v2.xlsx"
 
 
 def text(ws, ref):

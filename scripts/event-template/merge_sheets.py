@@ -7,12 +7,15 @@ Copia abas de outra planilha para o modelo oficial, mantendo formatação, mescl
 Usado para gerar o arquivo de "Solicitações manuais" (Activity request). Com --only, a saída fica
 só com as abas pedidas, mas mantém os estilos e textos do modelo: assim os índices de estilo do
 modelo continuam valendo e o painel junta as abas ao documento sem converter nada.
+Com --only, as imagens grandes sem transparência viram JPEG (qualidade 90): o arquivo cai de ~21 MB
+para ~4 MB e cabe no limite de envio do bucket.
 As duas planilhas usam temas de cor diferentes, então as cores de tema das abas copiadas
 (células, textos e caixas de texto) viram cores fixas, para ficarem iguais à origem.
 Requer lxml (pip install lxml).
 """
 import colorsys
 import copy
+import io
 import posixpath
 import re
 import sys
@@ -282,6 +285,36 @@ def keep_only(pkg, names):
     pkg.put("[Content_Types].xml", dump(ct))
 
 
+def shrink_images(pkg, min_bytes=150_000):
+    """PNG grandes e opacos -> JPEG (prints de eventos). Ajusta os vínculos dos desenhos."""
+    from PIL import Image
+
+    renamed = {}
+    for part in [p for p in pkg.order if p.startswith("xl/media/") and p.endswith(".png") and len(pkg.files[p]) > min_bytes]:
+        im = Image.open(io.BytesIO(pkg.files[part]))
+        if im.mode in ("RGBA", "LA") and im.getchannel("A").getextrema()[0] < 255:
+            continue
+        buf = io.BytesIO()
+        im.convert("RGB").save(buf, "JPEG", quality=90, optimize=True)
+        new = pkg.unique(part[:-4] + "c{}.jpeg")
+        pkg.order[pkg.order.index(part)] = new
+        pkg.files[new] = buf.getvalue()
+        del pkg.files[part]
+        renamed[posixpath.basename(part)] = posixpath.basename(new)
+    for part in [p for p in pkg.order if p.startswith("xl/drawings/_rels/")]:
+        root = xml(pkg.files[part])
+        for r in root:
+            name = posixpath.basename(r.get("Target", ""))
+            if name in renamed:
+                r.set("Target", "../media/" + renamed[name])
+        pkg.files[part] = dump(root)
+    ct = xml(pkg.files["[Content_Types].xml"])
+    if renamed and not any(d.get("Extension").lower() == "jpeg" for d in ct.findall("{%s}Default" % NS["ct"])):
+        ct.insert(0, etree.Element("{%s}Default" % NS["ct"], Extension="jpeg", ContentType="image/jpeg"))
+        pkg.files["[Content_Types].xml"] = dump(ct)
+    return len(renamed)
+
+
 def merge(dst_path, src_path, out_path, names, only=False):
     dst, src = Package(dst_path), Package(src_path)
     styles = StyleMerger(dst, src)
@@ -385,6 +418,7 @@ def merge(dst_path, src_path, out_path, names, only=False):
     dst.put("[Content_Types].xml", dump(ct))
     if only:
         keep_only(dst, set(names))
+        print(f"{shrink_images(dst)} imagens convertidas para JPEG")
     dst.save(out_path)
     print(f"{len(copied)} abas copiadas -> {out_path}")
 

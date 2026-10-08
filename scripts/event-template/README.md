@@ -25,14 +25,14 @@ Ainda não mapeadas: Transformation, Exchange Extra KICK, Collection Tab, Old Re
 ## Solicitações manuais (arquivo separado)
 
 As 21 abas de solicitação (Activity request) não fazem parte do modelo: ficam no arquivo
-`solicitacoes-manuais-v1.xlsx` (manifesto `src/lib/eventTemplate/requestsManifest.json`), enviado uma vez
+`solicitacoes-manuais-v2.xlsx` (manifesto `src/lib/eventTemplate/requestsManifest.json`), enviado uma vez
 por um Super Admin em **Criação de Eventos**. Na exportação, o painel junta ao final do documento só as
 abas das solicitações usadas.
 
 O arquivo é gerado a partir do modelo, para carregar os mesmos estilos e textos com os mesmos índices:
 
-    python scripts/event-template/merge_sheets.py --only modelo.xlsx "Cronograma Projetos ATUALIZADO.xlsx" solicitacoes-manuais-v1.xlsx "BR-Adventure Dungeon s1-s402" ...
-    python scripts/event-template/build_manifest.py modelo.xlsx src/lib/eventTemplate/manifest.json solicitacoes-manuais-v1.xlsx src/lib/eventTemplate/requestsManifest.json
+    python scripts/event-template/merge_sheets.py --only modelo.xlsx "Cronograma Projetos ATUALIZADO.xlsx" solicitacoes-manuais-v2.xlsx "BR-Adventure Dungeon s1-s402" ...
+    python scripts/event-template/build_manifest.py modelo.xlsx src/lib/eventTemplate/manifest.json solicitacoes-manuais-v2.xlsx src/lib/eventTemplate/requestsManifest.json
 
 Se o modelo mudar, gere o arquivo de solicitações de novo a partir dele.
-Para testar: `EVENT_REQUESTS_PATH=solicitacoes-manuais-v1.xlsx` (padrão: `__fixtures__/requests.xlsx`).
+Para testar: `EVENT_REQUESTS_PATH=solicitacoes-manuais-v2.xlsx` (padrão: `__fixtures__/requests.xlsx`).

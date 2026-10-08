@@ -70,7 +70,11 @@ export async function uploadTemplate(file: File, m: TemplateFile): Promise<void>
   const data = await file.arrayBuffer();
   const hash = await sha256(data);
   if (hash !== m.sha256) {
-    throw new Error(`Este arquivo não é o mapeado (${m.fileName}). Para usar outro, é preciso gerar um novo manifesto.`);
+    throw new Error(
+      file.name === m.fileName
+        ? `O arquivo ${m.fileName} foi alterado depois de gerado (por exemplo, aberto e salvo no Excel). Envie a cópia original, sem abrir antes.`
+        : `Este arquivo não é o esperado (${m.fileName}). Para usar outro, é preciso gerar um novo manifesto.`,
+    );
   }
   const { error } = await supabase.storage.from(TEMPLATE_BUCKET).upload(templateObjectPath(m), new Blob([data], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
