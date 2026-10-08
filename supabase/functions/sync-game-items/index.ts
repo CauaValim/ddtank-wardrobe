@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { imageCandidates, isJpeg, repairImage } from "./images.ts";
+import { accessOf, allows } from "../_shared/permissions.ts";
 
 const SOURCE = "http://quest132-ddt.337.com/TemplateAllList.xml";
 const MAX_IMAGES = 200;
@@ -47,9 +48,7 @@ Deno.serve(async (req) => {
     if (!token) return json({ error: "Não autenticado" }, 401);
     const { data: u, error: uErr } = await admin.auth.getUser(token);
     if (uErr || !u.user) return json({ error: "Sessão inválida" }, 401);
-    const { data: allowed } = await admin.from("user_permissions").select("permission")
-      .eq("user_id", u.user.id).eq("permission", "items.game_sync").maybeSingle();
-    if (!allowed) return json({ error: "Sem permissão" }, 403);
+    if (!allows(await accessOf(admin, u.user.id), "items.game_sync")) return json({ error: "Sem permissão" }, 403);
 
     const raw = parseItems(await loadXml()).filter((a) => Number(a.TemplateID) > 0 && a.Name);
 

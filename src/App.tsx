@@ -52,7 +52,7 @@ function AppRoutes() {
           <Routes>
             <Route path="/" element={<Index auth={auth} realm="br" />} />
             <Route path="/turco" element={<Index auth={auth} realm="turco" />} />
-            {auth.can("users.manage") && (
+            {(auth.can("users.manage") || auth.can("roles.manage")) && (
               <Route path="/users" element={<UserManagement />} />
             )}
             {auth.can("events.access") && <Route path="/eventos" element={eventDocuments("old")} />}

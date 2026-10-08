@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { accessOf, allows } from "../_shared/permissions.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -16,10 +17,7 @@ Deno.serve(async (req) => {
     // Somente quem tem a permissão "Editar itens".
     const token = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
     const { data: caller } = token ? await supabase.auth.getUser(token) : { data: { user: null } };
-    const { data: allowed } = caller?.user
-      ? await supabase.from("user_permissions").select("permission").eq("user_id", caller.user.id).eq("permission", "items.manage").maybeSingle()
-      : { data: null };
-    if (!allowed) {
+    if (!caller?.user || !allows(await accessOf(supabase, caller.user.id), "items.manage")) {
       return new Response(JSON.stringify({ error: "Sem permissão" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     const { mappings } = await req.json() as { mappings: Array<{ id: number; url: string }> };

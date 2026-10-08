@@ -288,7 +288,7 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
                 <ClipboardCheck className="h-3.5 w-3.5" />
               </button>
             )}
-            {auth.can("users.manage") && (
+            {(auth.can("users.manage") || auth.can("roles.manage")) && (
               <button
                 onClick={() => navigate("/users")}
                 className="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-muted transition-all"

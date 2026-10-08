@@ -593,6 +593,36 @@ export type Database = {
         }
         Relationships: []
       }
+      panel_roles: {
+        Row: {
+          color: string
+          created_at: string
+          id: string
+          name: string
+          permissions: string[]
+          position: number
+          updated_at: string
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          id?: string
+          name: string
+          permissions?: string[]
+          position?: number
+          updated_at?: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          id?: string
+          name?: string
+          permissions?: string[]
+          position?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       schedule_categories: {
         Row: {
           color: string
@@ -730,23 +760,23 @@ export type Database = {
         }
         Relationships: []
       }
-      user_permissions: {
+      user_panel_roles: {
         Row: {
           created_at: string
           granted_by: string | null
-          permission: string
+          role_id: string
           user_id: string
         }
         Insert: {
           created_at?: string
           granted_by?: string | null
-          permission: string
+          role_id: string
           user_id: string
         }
         Update: {
           created_at?: string
           granted_by?: string | null
-          permission?: string
+          role_id?: string
           user_id?: string
         }
         Relationships: []

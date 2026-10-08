@@ -1,9 +1,19 @@
 /**
- * Funções do painel que podem ser liberadas por usuário.
- * As mesmas chaves são usadas nas regras do banco (private.has_permission) e na função
- * manage-users; ao criar uma nova, acrescente nos três lugares.
+ * Permissões que podem ser ligadas em cada cargo (como no Discord).
+ * As mesmas chaves são usadas nas regras do banco (private.has_permission) e nas edge functions
+ * (supabase/functions/_shared/permissions.ts); ao criar uma nova, acrescente nos três lugares.
  */
 export const PERMISSION_GROUPS = [
+  {
+    label: "Geral",
+    permissions: [
+      {
+        key: "administrator",
+        label: "Administrador",
+        description: "Libera todas as permissões e ignora a hierarquia de cargos. Dê com cuidado.",
+      },
+    ],
+  },
   {
     label: "Itens",
     permissions: [
@@ -37,8 +47,11 @@ export const PERMISSION_GROUPS = [
     ],
   },
   {
-    label: "Usuários",
-    permissions: [{ key: "users.manage", label: "Gerenciar usuários", description: "Criar e remover contas e definir o acesso de cada uma." }],
+    label: "Usuários e cargos",
+    permissions: [
+      { key: "users.manage", label: "Gerenciar usuários", description: "Criar e remover contas e dar ou tirar cargos abaixo do seu cargo mais alto." },
+      { key: "roles.manage", label: "Gerenciar cargos", description: "Criar, editar, ordenar e excluir cargos abaixo do seu cargo mais alto." },
+    ],
   },
 ] as const;
 
@@ -46,26 +59,16 @@ export type Permission = (typeof PERMISSION_GROUPS)[number]["permissions"][numbe
 
 export const ALL_PERMISSIONS: Permission[] = PERMISSION_GROUPS.flatMap((g) => g.permissions.map((p) => p.key));
 
-const ADMIN: Permission[] = ALL_PERMISSIONS.filter((p) => p !== "users.manage" && p !== "events.templates");
+export const isPermission = (value: string): value is Permission => (ALL_PERMISSIONS as string[]).includes(value);
 
-/** Modelos para preencher o acesso de um usuário rapidamente (os antigos cargos). */
-export const PERMISSION_PRESETS: { label: string; permissions: Permission[] }[] = [
-  { label: "Acesso total", permissions: ALL_PERMISSIONS },
-  { label: "ADM", permissions: ADMIN },
-  { label: "Analista", permissions: ["items.view_ids"] },
-  { label: "Mídia", permissions: ["codes.request"] },
-  { label: "Nenhum", permissions: [] },
-];
-
-/** Permissões equivalentes aos cargos antigos (usadas enquanto a tabela nova não existe). */
+/** Permissões equivalentes aos cargos antigos (usadas enquanto as tabelas novas não existem). */
 export function permissionsFromRole(role: string | null | undefined): Permission[] {
   switch (role) {
-    case "super_admin": return ALL_PERMISSIONS;
-    case "admin": return ADMIN;
+    case "super_admin": return ["administrator"];
+    case "admin":
+      return ALL_PERMISSIONS.filter((p) => !["administrator", "users.manage", "roles.manage", "events.templates"].includes(p));
     case "analista": return ["items.view_ids"];
     case "midia": return ["codes.request"];
     default: return [];
   }
 }
-
-export const isPermission = (value: string): value is Permission => (ALL_PERMISSIONS as string[]).includes(value);
