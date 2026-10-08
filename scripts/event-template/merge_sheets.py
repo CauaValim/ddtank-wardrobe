@@ -2,8 +2,11 @@
 Copia abas de outra planilha para o modelo oficial, mantendo formatação, mesclagens e imagens.
 
     python scripts/event-template/merge_sheets.py modelo.xlsx origem.xlsx saida.xlsx "Aba 1" "Aba 2" ...
+    python scripts/event-template/merge_sheets.py --only modelo.xlsx origem.xlsx saida.xlsx "Aba 1" ...
 
-Usado para trazer as abas de "Solicitação manual" (Activity request) para o modelo de eventos.
+Usado para gerar o arquivo de "Solicitações manuais" (Activity request). Com --only, a saída fica
+só com as abas pedidas, mas mantém os estilos e textos do modelo: assim os índices de estilo do
+modelo continuam valendo e o painel junta as abas ao documento sem converter nada.
 As duas planilhas usam temas de cor diferentes, então as cores de tema das abas copiadas
 (células, textos e caixas de texto) viram cores fixas, para ficarem iguais à origem.
 Requer lxml (pip install lxml).
@@ -220,7 +223,66 @@ class StyleMerger:
 # ------------------------------------------------------------------ cópia
 
 
-def merge(dst_path, src_path, out_path, names):
+def keep_only(pkg, names):
+    """Remove as outras abas (e o que só elas usam). Estilos e textos compartilhados ficam."""
+    wb = xml(pkg.files["xl/workbook.xml"])
+    wb_rels = pkg.rels("xl/workbook.xml")
+    ct = xml(pkg.files["[Content_Types].xml"])
+    rel_by_id = {r.get("Id"): r for r in wb_rels}
+    sheets_el = wb.find(M + "sheets")
+    removed = set()
+
+    def drop_part(part):
+        if part in pkg.files:
+            del pkg.files[part]
+            pkg.order.remove(part)
+            removed.add(part)
+        rp = pkg.rels_path(part)
+        if rp in pkg.files:
+            for r in xml(pkg.files[rp]):
+                if r.get("TargetMode") != "External" and not r.get("Target", "").startswith("../media/"):
+                    drop_part(posixpath.normpath(posixpath.join(posixpath.dirname(part), r.get("Target"))))
+            del pkg.files[rp]
+            pkg.order.remove(rp)
+
+    for s in list(sheets_el):
+        if s.get("name") in names:
+            continue
+        rel = rel_by_id[s.get(R_ID)]
+        drop_part(posixpath.normpath(posixpath.join("xl", rel.get("Target"))))
+        wb_rels.remove(rel)
+        sheets_el.remove(s)
+    # Nomes definidos usam índices de aba e vínculos externos: não servem mais.
+    for tag in ("definedNames", "externalReferences", "calcPr"):
+        for el in wb.findall(M + tag):
+            wb.remove(el)
+    for r in list(wb_rels):
+        t = r.get("Type").rsplit("/", 1)[-1]
+        if t in ("externalLink", "calcChain"):
+            drop_part(posixpath.normpath(posixpath.join("xl", r.get("Target"))))
+            wb_rels.remove(r)
+    bv = wb.find(M + "bookViews")
+    if bv is not None:
+        for v in bv:
+            v.set("activeTab", "0")
+            v.attrib.pop("firstSheet", None)
+    # Imagens que nenhum desenho usa mais.
+    used = set()
+    for part in pkg.files:
+        if part.startswith("xl/drawings/_rels/"):
+            for r in xml(pkg.files[part]):
+                used.add(posixpath.normpath(posixpath.join("xl/drawings", r.get("Target"))))
+    for part in [p for p in pkg.files if p.startswith("xl/media/") and p not in used]:
+        drop_part(part)
+    for o in list(ct.findall("{%s}Override" % NS["ct"])):
+        if o.get("PartName").lstrip("/") in removed:
+            ct.remove(o)
+    pkg.put("xl/workbook.xml", dump(wb))
+    pkg.put(pkg.rels_path("xl/workbook.xml"), dump(wb_rels))
+    pkg.put("[Content_Types].xml", dump(ct))
+
+
+def merge(dst_path, src_path, out_path, names, only=False):
     dst, src = Package(dst_path), Package(src_path)
     styles = StyleMerger(dst, src)
     src_sheets = src.sheets()
@@ -321,11 +383,17 @@ def merge(dst_path, src_path, out_path, names):
     dst.put("xl/workbook.xml", dump(wb))
     dst.put(dst.rels_path("xl/workbook.xml"), dump(wb_rels))
     dst.put("[Content_Types].xml", dump(ct))
+    if only:
+        keep_only(dst, set(names))
     dst.save(out_path)
     print(f"{len(copied)} abas copiadas -> {out_path}")
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 5:
+    args = sys.argv[1:]
+    only = args[:1] == ["--only"]
+    if only:
+        args = args[1:]
+    if len(args) < 4:
         sys.exit(__doc__)
-    merge(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4:])
+    merge(args[0], args[1], args[2], args[3:], only)

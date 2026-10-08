@@ -8,6 +8,8 @@ import type { BlockSpec, DecorationSpec, EventBlock, EventDocument, EventItem, E
 export interface ExportDeps {
   /** Returns the PNG of an item (or null when there is no image). */
   loadImage: (item: EventItem) => Promise<ImageData | null>;
+  /** Arquivo das solicitações manuais; só é pedido quando o documento tem alguma. */
+  loadRequests?: () => Promise<ArrayBuffer>;
 }
 
 export interface ExportResult {
@@ -232,6 +234,12 @@ async function fillSheet(ctx: FillContext, coverOnly: boolean) {
 export async function exportDocument(template: ArrayBuffer, manifest: TemplateManifest, doc: EventDocument, deps: ExportDeps): Promise<ExportResult> {
   const pkg = await XlsxPackage.load(template);
   const warnings: string[] = [];
+  // Solicitações manuais: as abas vêm de um arquivo separado e entram no final do documento.
+  const requestSheets = [...new Set(doc.sections.map((s) => layoutById(manifest, s.layoutId)).filter((l) => l.type === "request").map((l) => l.sheet))];
+  if (requestSheets.length > 0) {
+    if (!deps.loadRequests) throw new Error("O documento tem solicitações manuais, mas o arquivo das solicitações não foi carregado");
+    await pkg.importSheets(await XlsxPackage.load(await deps.loadRequests()), requestSheets);
+  }
   const cover = layoutById(manifest, manifest.coverLayout);
   const sections = orderSections(doc.sections); // solicitações manuais saem no final
   const coverIndex = sections.findIndex((s) => s.layoutId === cover.id);

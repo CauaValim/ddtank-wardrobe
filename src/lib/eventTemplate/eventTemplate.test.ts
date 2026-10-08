@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import manifestJson from "./manifest.json";
 import { exportDocument } from "./exporter";
 import { readDocument, readSection } from "./importer";
 import { applyDailyLength } from "./rules";
@@ -11,7 +10,7 @@ import { buildUsageIndex } from "./usage";
 import { XlsxPackage, descendants, parseRange } from "./ooxml";
 import { Drawing } from "./drawing";
 import type { BlockSpec, EventBlock, EventDocument, LayoutSpec, SetSpec, TemplateManifest } from "./types";
-import { getLayout, newItem, newSection } from "./model";
+import { getLayout, manifest, newItem, newSection, requestsManifest } from "./model";
 import { parseFormat, parseIdLine, parseItemLabel, renderFormat, richRuns } from "./format";
 
 /**
@@ -21,9 +20,9 @@ import { parseFormat, parseIdLine, parseItemLabel, renderFormat, richRuns } from
  * O modelo (18 MB) não fica no repositório. Para rodar:
  *   EVENT_TEMPLATE_PATH=/caminho/do/modelo.xlsx npm test
  */
-const manifest = manifestJson as TemplateManifest;
 const templatePath = process.env.EVENT_TEMPLATE_PATH ?? path.resolve(__dirname, "__fixtures__/template.xlsx");
-const hasTemplate = existsSync(templatePath);
+const requestsPath = process.env.EVENT_REQUESTS_PATH ?? path.resolve(__dirname, "__fixtures__/requests.xlsx");
+const hasTemplate = existsSync(templatePath) && existsSync(requestsPath);
 
 // 1×1 PNG
 const PNG = Uint8Array.from(Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64"));
@@ -89,6 +88,15 @@ describe("formatos", () => {
 
 describe.skipIf(!hasTemplate)("modelo oficial de eventos", () => {
   const template = hasTemplate ? bufferOf(templatePath) : new ArrayBuffer(0);
+  const requests = hasTemplate ? bufferOf(requestsPath) : new ArrayBuffer(0);
+  const deps = { loadImage: fakeImage, loadRequests: async () => requests };
+  // As abas de solicitação manual ficam no arquivo separado.
+  const sourceOf = async (layout: LayoutSpec) => XlsxPackage.load(layout.type === "request" ? requests : template);
+
+  it("o arquivo de solicitações é o descrito no manifesto e carrega os estilos do modelo", () => {
+    expect(createHash("sha256").update(Buffer.from(requests)).digest("hex")).toBe(requestsManifest.sha256);
+    expect(requestsManifest.baseSha256).toBe(manifest.sha256);
+  });
 
   it("é a versão descrita no manifesto", () => {
     expect(createHash("sha256").update(Buffer.from(template)).digest("hex")).toBe(manifest.sha256);
@@ -96,14 +104,14 @@ describe.skipIf(!hasTemplate)("modelo oficial de eventos", () => {
 
   for (const layout of manifest.layouts as LayoutSpec[]) {
     it(`ida e volta: ${layout.label}`, async () => {
-      const original = await XlsxPackage.load(template);
+      const original = await sourceOf(layout);
       const section = await readSection(original, layout);
       const doc = docWith(section);
       // Every block that has content in the template must be read.
       const counts = layout.sets.map((s) => (section.sets[s.key] ?? []).length);
       if (layout.sets.length) expect(counts.some((n) => n > 0)).toBe(true);
 
-      const result = await exportDocument(template, manifest, doc, { loadImage: fakeImage });
+      const result = await exportDocument(template, manifest, doc, deps);
       const out = await XlsxPackage.load(result.data);
       const sheets = await out.sheets();
       const isCover = layout.id === manifest.coverLayout;
@@ -169,7 +177,7 @@ describe.skipIf(!hasTemplate)("modelo oficial de eventos", () => {
     missions2.sets.missions = missions2.sets.missions.slice(0, 1);
     const doc: EventDocument = { ...docWith(missions), theme: "Panel Test Week 1", sections: [missions, ammo, recharge, missions2] };
 
-    const result = await exportDocument(template, manifest, doc, { loadImage: fakeImage });
+    const result = await exportDocument(template, manifest, doc, deps);
     const out = await XlsxPackage.load(result.data);
     expect((await out.sheets()).map((x) => x.name)).toEqual([
       "BR-Daily Entry - 14D s1-s401", "BR-Missions s1-s402", "BR - Ammunitions sale s1-s401", "BR - Recharge s1-s401", "BR-Missions s1-s401",
@@ -208,7 +216,7 @@ describe.skipIf(!hasTemplate)("modelo oficial de eventos", () => {
     const choice = { ...choiceBase, sets: { missions: [{ ...a, fields: { ...a.fields, titlePt: "Com escolha 1" }, groups: { ...a.groups, choice: c.groups.choice.slice(0, 2) } }, b, { ...c, fields: { ...c.fields, titlePt: "Sem escolha" }, groups: { items: c.groups.items } }] } };
     const doc: EventDocument = { ...docWith(missions), sections: [missions, choice] };
 
-    const result = await exportDocument(template, manifest, doc, { loadImage: fakeImage });
+    const result = await exportDocument(template, manifest, doc, deps);
     const out = await XlsxPackage.load(result.data);
     const names = (await out.sheets()).map((x) => x.name);
     // A aba de missões com escolha do modelo é dos servidores s1-s402.
@@ -233,8 +241,12 @@ describe.skipIf(!hasTemplate)("modelo oficial de eventos", () => {
   it("evento anterior: a planilha inteira é reconhecida aba por aba e guardada sem imagens", async () => {
     const doc = await readDocument(template, manifest);
     // Cada aba do modelo volta com o próprio layout, mesmo as que dividem o padrão de nome.
-    // "Capturar Nien" só tem itens de exemplo ("Item Name") no modelo, que a leitura descarta.
-    expect(doc.sections.map((s) => s.layoutId)).toEqual(manifest.layouts.map((l) => l.id).filter((id) => id !== "request-capture-nien"));
+    // O modelo também traz duas abas de solicitação (Caça aos Insetos e Desvende a Instância).
+    const main = manifest.layouts.filter((l) => l.type !== "request").map((l) => l.id);
+    expect(doc.sections.map((s) => s.layoutId)).toEqual([...main, "request-chaos-insects", "request-uncover-instance"]);
+    // "Capturar Nien" só tem itens de exemplo ("Item Name") no arquivo, que a leitura descarta.
+    const req = await readDocument(requests, manifest);
+    expect(req.sections.map((s) => s.layoutId)).toEqual(requestsManifest.layouts.map((l) => l.id).filter((id) => id !== "request-capture-nien"));
     const archived = archiveDocument(doc, "(BR) 16 years of DDTank Week - s1-s401 (ID) (2).xlsx");
     expect(archived.title).toBe("(BR) 16 years of DDTank Week - s1-s401 (ID) (2)");
     expect(archived.start_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
@@ -258,7 +270,7 @@ describe.skipIf(!hasTemplate)("modelo oficial de eventos", () => {
     const doc: EventDocument = { ...docWith(lottery), sections: [lottery, nien, devil, ammo] };
     expect(nien.sets.chests[0].fields.label).toBe("Baú do Monstro travesso Nv.1\n5Mil");
 
-    const result = await exportDocument(template, manifest, doc, { loadImage: fakeImage });
+    const result = await exportDocument(template, manifest, doc, deps);
     const out = await XlsxPackage.load(result.data);
     expect((await out.sheets()).map((x) => x.name)).toEqual([
       "BR-Daily Entry - 14D s1-s401", "BR - Ammunitions sale s1-s401", "BR-Lottery s1-s401", "BR-Capture Nien s402", "BR-The devil's treasure s1-s401",
@@ -287,7 +299,7 @@ describe.skipIf(!hasTemplate)("modelo oficial de eventos", () => {
     missions.sets.missions[0].groups.items[0] = { ...missions.sets.missions[0].groups.items[0], duration: "30 Days - non-renewable" };
     const doc: EventDocument = { ...docWith(daily), sections: [daily, missions] };
 
-    const result = await exportDocument(template, manifest, doc, { loadImage: fakeImage });
+    const result = await exportDocument(template, manifest, doc, deps);
     const out = await XlsxPackage.load(result.data);
     const cover = await out.worksheet("BR-Daily Entry - 14D s1-s401");
     expect(await cover.getText("N25")).toBe("Queue 7");

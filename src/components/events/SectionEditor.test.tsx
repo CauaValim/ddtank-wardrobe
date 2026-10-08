@@ -90,8 +90,13 @@ describe("editor de seção", () => {
     const ab = new ArrayBuffer(b.byteLength);
     new Uint8Array(ab).set(b);
     const pkg = await XlsxPackage.load(ab);
+    // Solicitações manuais: arquivo separado, ao lado do modelo.
+    const r = readFileSync(templatePath.replace(/template\.xlsx$/, "requests.xlsx"));
+    const rab = new ArrayBuffer(r.byteLength);
+    new Uint8Array(rab).set(r);
+    const requests = await XlsxPackage.load(rab);
     for (const layout of manifest.layouts) {
-      const section = await readSection(pkg, layout);
+      const section = await readSection(layout.type === "request" ? requests : pkg, layout);
       const { unmount, container } = render(<Harness initial={section} />);
       expect(container.querySelectorAll("input").length, layout.id).toBeGreaterThan(3);
       unmount();

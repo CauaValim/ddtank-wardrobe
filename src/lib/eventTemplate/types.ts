@@ -91,11 +91,22 @@ export interface LayoutSpec {
   signature?: string[];
 }
 
-export interface TemplateManifest {
+/** Arquivo .xlsx guardado no bucket e conferido pelo SHA-256 antes de usar. */
+export interface TemplateFile {
   version: string;
   sha256: string;
   fileName: string;
+}
+
+export interface TemplateManifest extends TemplateFile {
   coverLayout: string;
+  layouts: LayoutSpec[];
+}
+
+/** Arquivo separado com as abas de "Solicitação manual", juntadas ao final do documento. */
+export interface RequestsManifest extends TemplateFile {
+  /** SHA-256 do modelo cujos estilos e textos o arquivo carrega. */
+  baseSha256: string;
   layouts: LayoutSpec[];
 }
 

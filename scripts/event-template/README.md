@@ -20,15 +20,19 @@ Documentos salvos guardam `template_version`; seções cujo layout não existir 
 
 Entrada Diária (capa), Venda de Munição, Missões (3 layouts), Faça se Puder (2), Desafio da Tribo,
 Troca (6), Recarga, Consumo, Recarga Extra, Consumo Extra e os dois Rankings.
-Solicitações manuais (Activity request): 21 abas, entre elas Masmorra de Aventura, Capturar Nien
-(5 baús), Tesouro do Diabo (prêmio), Desvende a Instância (3 prêmios) e Mestre de Eliminação (3 períodos).
 Ainda não mapeadas: Transformation, Exchange Extra KICK, Collection Tab, Old Return e Code Tab.
 
-## Trazer abas de outra planilha
+## Solicitações manuais (arquivo separado)
 
-As solicitações manuais vieram da planilha "Cronograma Projetos ATUALIZADO.xlsx":
+As 21 abas de solicitação (Activity request) não fazem parte do modelo: ficam no arquivo
+`solicitacoes-manuais-v1.xlsx` (manifesto `src/lib/eventTemplate/requestsManifest.json`), enviado uma vez
+por um Super Admin em **Criação de Eventos**. Na exportação, o painel junta ao final do documento só as
+abas das solicitações usadas.
 
-    python scripts/event-template/merge_sheets.py modelo-v2.xlsx "Cronograma Projetos ATUALIZADO.xlsx" modelo-eventos-16-anos-v3.xlsx "BR-Adventure Dungeon s1-s402" ...
+O arquivo é gerado a partir do modelo, para carregar os mesmos estilos e textos com os mesmos índices:
 
-O script copia as abas com formatação, mesclagens e imagens (as cores do tema da origem viram cores fixas).
-Abas que já existem no modelo são mantidas. Depois, mapeie as abas novas em `build_manifest.py`.
+    python scripts/event-template/merge_sheets.py --only modelo.xlsx "Cronograma Projetos ATUALIZADO.xlsx" solicitacoes-manuais-v1.xlsx "BR-Adventure Dungeon s1-s402" ...
+    python scripts/event-template/build_manifest.py modelo.xlsx src/lib/eventTemplate/manifest.json solicitacoes-manuais-v1.xlsx src/lib/eventTemplate/requestsManifest.json
+
+Se o modelo mudar, gere o arquivo de solicitações de novo a partir dele.
+Para testar: `EVENT_REQUESTS_PATH=solicitacoes-manuais-v1.xlsx` (padrão: `__fixtures__/requests.xlsx`).

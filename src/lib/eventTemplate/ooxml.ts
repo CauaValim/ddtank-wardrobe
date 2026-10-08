@@ -349,6 +349,95 @@ export class XlsxPackage {
   }
 
   /**
+   * Brings sheets from another package (the "Solicitações manuais" file) into this one.
+   * That file carries this template's styles and shared strings with the same indices
+   * (plus its own at the end), so its styles.xml and sharedStrings.xml replace ours and
+   * the sheets are copied as they are, with their drawings and images.
+   * Must run before anything else changes this package.
+   */
+  async importSheets(src: XlsxPackage, names: string[]) {
+    if (names.length === 0) return;
+    for (const part of ["xl/styles.xml", "xl/sharedStrings.xml"]) {
+      this.setXml(part, this.parser.parseFromString(this.serializer.serializeToString(await src.xml(part)), "application/xml"));
+    }
+    this.sharedStringCount = null;
+    this.siCache = null;
+    this.fontCache.clear();
+    this.fontList = null;
+    this.derivedStyles.clear();
+    this.xfList = null;
+    this.themeFills.clear();
+
+    const ct = await this.xml("[Content_Types].xml");
+    const defaults = new Set(descendants(ct, "Default").map((d) => (d.getAttribute("Extension") ?? "").toLowerCase()));
+    const srcCt = await src.xml("[Content_Types].xml");
+    const ensureDefault = (ext: string) => {
+      if (defaults.has(ext)) return;
+      const type = descendants(srcCt, "Default").find((d) => (d.getAttribute("Extension") ?? "").toLowerCase() === ext)?.getAttribute("ContentType");
+      const el = ct.createElementNS(NS.ct, "Default");
+      el.setAttribute("Extension", ext);
+      el.setAttribute("ContentType", type ?? "application/octet-stream");
+      ct.documentElement.insertBefore(el, ct.documentElement.firstChild);
+      defaults.add(ext);
+      this.touch("[Content_Types].xml");
+    };
+    const copyXml = async (from: string, to: string) => {
+      this.setXml(to, this.parser.parseFromString(this.serializer.serializeToString(await src.xml(from)), "application/xml"));
+    };
+
+    const srcSheets = await src.sheets();
+    for (const name of names) {
+      const entry = srcSheets.find((x) => x.name === name);
+      if (!entry) throw new Error(`Aba "${name}" não existe no arquivo de solicitações`);
+      const sheetPath = this.uniquePath((n) => `xl/worksheets/sheet${n}.xml`);
+      await copyXml(entry.path, sheetPath);
+      await this.addOverride(sheetPath, CONTENT_TYPE.worksheet);
+      const sheetDoc = await this.xml(sheetPath);
+      for (const rel of await src.rels(entry.path)) {
+        const el = descendants(sheetDoc, "*").find((e) => (e.getAttributeNS(NS.rel, "id") ?? e.getAttribute("r:id")) === rel.id);
+        if (rel.type !== REL_TYPE.drawing || !rel.path) {
+          // Impressora, comentários etc. ficam de fora.
+          if (el) el.removeAttributeNS(NS.rel, "id");
+          continue;
+        }
+        const drawingPath = this.uniquePath((n) => `xl/drawings/drawing${n}.xml`);
+        await copyXml(rel.path, drawingPath);
+        await this.addOverride(drawingPath, CONTENT_TYPE.drawing);
+        for (const media of await src.rels(rel.path)) {
+          if (media.external || !media.path) continue;
+          const ext = media.path.slice(media.path.lastIndexOf(".") + 1).toLowerCase();
+          const mediaPath = this.uniquePath((n) => `xl/media/request${n}.${ext}`);
+          const file = src.zip.file(media.path);
+          if (!file) continue;
+          this.writeBinary(mediaPath, await file.async("uint8array"));
+          ensureDefault(ext);
+          const relsDoc = await this.relsDoc(drawingPath);
+          const r = relsDoc.createElementNS(NS.pkgRel, "Relationship");
+          r.setAttribute("Id", media.id);
+          r.setAttribute("Type", media.type);
+          r.setAttribute("Target", relativeTarget(drawingPath, mediaPath));
+          relsDoc.documentElement.appendChild(r);
+          this.touch(relsPathOf(drawingPath));
+        }
+        const newId = await this.addRel(sheetPath, REL_TYPE.drawing, drawingPath);
+        if (el) el.setAttributeNS(NS.rel, "r:id", newId);
+      }
+      this.touch(sheetPath);
+      const wb = await this.xml("xl/workbook.xml");
+      const sheets = await this.sheets();
+      // O modelo já tem algumas dessas abas (versão antiga): a do arquivo de solicitações vale.
+      sheets.filter((x) => x.name === name).forEach((x, i) => x.element.setAttribute("name", `__substituida_${i + 1}_${x.sheetId}`));
+      const rId = await this.addRel("xl/workbook.xml", REL_TYPE.worksheet, sheetPath);
+      const el = wb.createElementNS(NS.main, "sheet");
+      el.setAttribute("name", name);
+      el.setAttribute("sheetId", String(Math.max(...sheets.map((x) => Number(x.sheetId) || 0)) + 1));
+      el.setAttributeNS(NS.rel, "r:id", rId);
+      descendants(wb, "sheets")[0].appendChild(el);
+      this.touch("xl/workbook.xml");
+    }
+  }
+
+  /**
    * Keeps only the given sheets, in the given order, with their final names.
    * Also removes everything that would make Excel complain or leak data:
    * external links, calcChain, broken defined names and orphan parts.
