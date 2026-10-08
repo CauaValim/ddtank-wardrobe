@@ -25,7 +25,7 @@ import { HistoryPanel } from "@/components/events/HistoryPanel";
 import { PastEventsImport } from "@/components/events/PastEventsImport";
 import type { PresetApi } from "@/components/events/PresetControls";
 import { isoToUs } from "@/lib/eventTemplate/format";
-import { isRequestSection, manifest, newId, newSection, normalizeSections, orderSections } from "@/lib/eventTemplate/model";
+import { isRequestSection, manifest, newId, newSection, normalizeSections, orderSections, requestsManifest } from "@/lib/eventTemplate/model";
 import { exportDocument } from "@/lib/eventTemplate/exporter";
 import { readDocument } from "@/lib/eventTemplate/importer";
 import { resolveIdsByName } from "@/lib/eventTemplate/resolveNames";
@@ -66,6 +66,7 @@ async function runExport(doc: EventDocument, lookup: ItemLookup, rules?: Map<str
   const template = await loadTemplate(manifest);
   const result = await exportDocument(template, manifest, doc, {
     loadImage: (item: EventItem) => loadImageForWorkbook(item.imageUrl || (lookup.get(item.id.trim())?.imageUrl ?? "")),
+    loadRequests: () => loadTemplate(requestsManifest),
   });
   downloadBlob(result.data, result.fileName);
   if (result.warnings.length > 0) toast.warning(`Exportado com ${result.warnings.length} aviso(s): ${result.warnings.slice(0, 2).join("; ")}`);
@@ -222,6 +223,12 @@ function DocList({ group }: { group: ServerGroup }) {
         <GroupSwitch group={group} />
       </div>
       <TemplateBanner canUpload={role === "super_admin"} />
+      <TemplateBanner
+        canUpload={role === "super_admin"}
+        file={requestsManifest}
+        what="O arquivo das solicitações manuais"
+        effect="documentos com solicitações manuais não podem ser exportados"
+      />
 
       <Tabs defaultValue="docs">
         <TabsList className="flex-wrap">
@@ -373,6 +380,14 @@ function Editor({ id }: { id: string }) {
       </div>
 
       <TemplateBanner canUpload={role === "super_admin"} />
+      {doc.sections.some(isRequestSection) && (
+        <TemplateBanner
+          canUpload={role === "super_admin"}
+          file={requestsManifest}
+          what="O arquivo das solicitações manuais"
+          effect="este documento não pode ser exportado"
+        />
+      )}
 
       <Card className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
         <label className="block space-y-1 lg:col-span-2">

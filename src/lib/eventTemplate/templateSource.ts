@@ -1,15 +1,15 @@
 import { supabase } from "@/integrations/supabase/client";
 import legacyAsset from "@/assets/templates/ddtank-events-16-years.xlsx.asset.json";
-import type { TemplateManifest } from "./types";
+import type { TemplateFile } from "./types";
 
 /**
- * O modelo oficial fica no bucket privado "event-templates" do Supabase, em
- * "<versão>/<arquivo>". Só é aceito o arquivo cujo SHA-256 bate com o manifesto,
- * para que a exportação nunca use um modelo diferente do mapeado.
+ * O modelo oficial (e o arquivo separado das solicitações manuais) ficam no bucket privado
+ * "event-templates" do Supabase, em "<versão>/<arquivo>". Só é aceito o arquivo cujo SHA-256
+ * bate com o manifesto, para que a exportação nunca use um modelo diferente do mapeado.
  */
 export const TEMPLATE_BUCKET = "event-templates";
 
-export const templateObjectPath = (m: TemplateManifest) => `${m.version}/${m.fileName}`;
+export const templateObjectPath = (m: TemplateFile) => `${m.version}/${m.fileName}`;
 
 export async function sha256(data: ArrayBuffer): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", data);
@@ -18,7 +18,7 @@ export async function sha256(data: ArrayBuffer): Promise<string> {
 
 const cache = new Map<string, Promise<ArrayBuffer>>();
 
-async function fromStorage(m: TemplateManifest): Promise<ArrayBuffer | null> {
+async function fromStorage(m: TemplateFile): Promise<ArrayBuffer | null> {
   const { data, error } = await supabase.storage.from(TEMPLATE_BUCKET).download(templateObjectPath(m));
   if (error || !data) return null;
   return data.arrayBuffer();
@@ -37,15 +37,17 @@ async function fromLegacyAsset(): Promise<ArrayBuffer | null> {
   }
 }
 
-export function loadTemplate(m: TemplateManifest): Promise<ArrayBuffer> {
+export function loadTemplate(m: TemplateFile): Promise<ArrayBuffer> {
   const key = m.version;
   if (!cache.has(key)) {
     const p = (async () => {
-      for (const source of [fromStorage, fromLegacyAsset]) {
+      // A cópia antiga da Lovable é só do modelo oficial.
+      const sources = m.fileName === legacyAsset.original_filename ? [fromStorage, fromLegacyAsset] : [fromStorage];
+      for (const source of sources) {
         const data = await source(m);
         if (data && (await sha256(data)) === m.sha256) return data;
       }
-      throw new Error("O modelo oficial ainda não foi enviado para o painel. Peça a um Super Admin para enviá-lo em Criação de Eventos.");
+      throw new Error(`O arquivo ${m.fileName} ainda não foi enviado para o painel. Peça a um Super Admin para enviá-lo em Criação de Eventos.`);
     })();
     p.catch(() => cache.delete(key));
     cache.set(key, p);
@@ -55,7 +57,7 @@ export function loadTemplate(m: TemplateManifest): Promise<ArrayBuffer> {
 
 export type TemplateStatus = "ready" | "missing" | "checking";
 
-export async function templateAvailable(m: TemplateManifest): Promise<boolean> {
+export async function templateAvailable(m: TemplateFile): Promise<boolean> {
   try {
     await loadTemplate(m);
     return true;
@@ -64,11 +66,11 @@ export async function templateAvailable(m: TemplateManifest): Promise<boolean> {
   }
 }
 
-export async function uploadTemplate(file: File, m: TemplateManifest): Promise<void> {
+export async function uploadTemplate(file: File, m: TemplateFile): Promise<void> {
   const data = await file.arrayBuffer();
   const hash = await sha256(data);
   if (hash !== m.sha256) {
-    throw new Error(`Este arquivo não é o modelo mapeado (${m.fileName}). Para usar outro modelo, é preciso gerar um novo manifesto.`);
+    throw new Error(`Este arquivo não é o mapeado (${m.fileName}). Para usar outro, é preciso gerar um novo manifesto.`);
   }
   const { error } = await supabase.storage.from(TEMPLATE_BUCKET).upload(templateObjectPath(m), new Blob([data], {
     type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

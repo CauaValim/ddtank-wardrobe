@@ -1,9 +1,20 @@
 import manifestJson from "./manifest.json";
+import requestsJson from "./requestsManifest.json";
 import { parseItemLabel } from "./format";
 import { applyDailyLength, normalizeSection } from "./rules";
-import type { BlockSpec, EventBlock, EventItem, EventSection, LayoutSpec, SetSpec, TemplateManifest } from "./types";
+import type { BlockSpec, EventBlock, EventItem, EventSection, LayoutSpec, RequestsManifest, SetSpec, TemplateManifest } from "./types";
 
-export const manifest = manifestJson as TemplateManifest;
+/** Arquivo separado das solicitações manuais (não faz parte do modelo oficial). */
+export const requestsManifest = requestsJson as RequestsManifest;
+
+/**
+ * Modelo oficial (versão, arquivo, SHA-256) com os layouts dele e os das solicitações manuais.
+ * As abas das solicitações vêm do arquivo separado e são juntadas ao final na exportação.
+ */
+export const manifest: TemplateManifest = {
+  ...(manifestJson as TemplateManifest),
+  layouts: [...(manifestJson as TemplateManifest).layouts, ...requestsManifest.layouts],
+};
 
 export const newId = () => Math.random().toString(36).slice(2, 10);
 

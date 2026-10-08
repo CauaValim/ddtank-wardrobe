@@ -2,7 +2,10 @@
 Gera src/lib/eventTemplate/manifest.json a partir do modelo oficial de eventos.
 
 Uso:
-    python3 scripts/event-template/build_manifest.py <modelo.xlsx> <saida.json>
+    python3 scripts/event-template/build_manifest.py <modelo.xlsx> <saida.json> [<solicitacoes.xlsx> <solicitacoes.json>]
+
+O arquivo de solicitações manuais é separado do modelo: o painel só junta as abas dele
+ao final do documento quando há solicitações (veja merge_sheets.py --only).
 
 O manifesto descreve, para cada aba suportada, onde ficam os campos editáveis,
 as vagas de itens (nome, imagem, ID) e quais linhas ocultar quando uma vaga ou
@@ -15,10 +18,14 @@ import openpyxl
 from openpyxl.utils import get_column_letter as L, column_index_from_string as CI
 
 SRC, OUT = sys.argv[1], sys.argv[2]
+REQ, REQ_OUT = (sys.argv[3], sys.argv[4]) if len(sys.argv) > 4 else (None, None)
 wb = openpyxl.load_workbook(SRC)
-VERSION = "16-anos-v3"
+rwb = openpyxl.load_workbook(REQ) if REQ else None
+VERSION = "16-anos-v2"
 # Nome do arquivo que o Super Admin envia no painel (o envio confere o SHA-256).
-FILE_NAME = "modelo-eventos-16-anos-v3.xlsx"
+FILE_NAME = "BR_16_years_of_DDTank_Week_-_s1-s401_ID_2.xlsx"
+REQ_VERSION = "solicitacoes-v1"
+REQ_FILE_NAME = "solicitacoes-manuais-v1.xlsx"
 
 
 def text(ws, ref):
@@ -108,8 +115,8 @@ def sheet_name_pattern(name):
 layouts = []
 
 
-def layout(idx, lid, type_, label, description, fields, sets, **extra):
-    ws = wb.worksheets[idx]
+def layout(idx, lid, type_, label, description, fields, sets, book=None, into=None, **extra):
+    ws = (book or wb).worksheets[idx]
     d = {
         "id": lid, "type": type_, "label": label, "description": description,
         "sheet": ws.title, "sheetNamePattern": sheet_name_pattern(ws.title),
@@ -119,7 +126,7 @@ def layout(idx, lid, type_, label, description, fields, sets, **extra):
         "signature": sorted(str(m) for m in ws.merged_cells.ranges if m.min_row <= 30)[:40],
     }
     d.update(extra)
-    layouts.append(d)
+    (layouts if into is None else into).append(d)
 
 
 # ---------------------------------------------------------------- Entrada diária (capa)
@@ -463,8 +470,13 @@ ranking_layout(21, "ranking-recharge", "ranking_recharge", "Ranking de Recarga",
 STAMP_RE = re.compile(r"\s*s1\s*-\s*s?\d+\s*$")
 
 
+request_layouts = []
+
+
 def request_layout(sheet, lid, label, description, sets=(), extra_fields=()):
-    ws = wb[sheet]
+    if rwb is None:
+        return
+    ws = rwb[sheet]
     cells = [c for row in ws.iter_rows(max_row=25) for c in row if isinstance(c.value, str)]
     title_cell = next(c.coordinate for c in cells if c.row == 2)
     date_cells = [c.coordinate for c in cells if c.value.startswith("DATE ")]
@@ -481,7 +493,7 @@ def request_layout(sheet, lid, label, description, sets=(), extra_fields=()):
         if STAMP_RE.match(c.value):
             fields.append(field("serversStamp", "Servidores (selo)", c.coordinate, "derived", "{servers}"))
     fields += list(extra_fields)
-    layout(wb.sheetnames.index(sheet), lid, "request", label, description, fields, list(sets))
+    layout(rwb.sheetnames.index(sheet), lid, "request", label, description, fields, list(sets), book=rwb, into=request_layouts)
 
 
 SIMPLE_REQUESTS = [
@@ -524,7 +536,7 @@ request_layout("BR-Uncover The Instance s1-s402", "request-uncover-instance", "D
 
 # Capturar Nien: 5 baús com até 5 itens cada e a linha de IDs.
 nien_blocks = [block(
-    [{**field("label", "Baú (nome e meta)", f"C{r}", "textarea"), "default": text(wb["BR-Capture Nien s1-s402"], f"C{r}")},
+    [{**field("label", "Baú (nome e meta)", f"C{r}", "textarea"), "default": text(rwb["BR-Capture Nien s1-s402"], f"C{r}") if rwb else ""},
      field("idLine", "ID / Quantidade", f"D{r + 2}", "derived", "{idLine:items}", "idLine")],
     [group("items", "Itens", [item_slot(f"{c}{r}") for c in "DFHJL"])],
     hide=[r - 1, r + 2],  # a imagem do baú fica na linha acima do nome
@@ -591,3 +603,13 @@ manifest = {"version": VERSION, "sha256": digest, "fileName": FILE_NAME,
 with open(OUT, "w", encoding="utf-8") as f:
     json.dump(manifest, f, ensure_ascii=False, separators=(",", ":"))
 print(f"{len(layouts)} layouts -> {OUT} ({digest[:12]})")
+
+if REQ:
+    request_layouts.sort(key=lambda lay: rwb.sheetnames.index(lay["sheet"]))
+    req_digest = hashlib.sha256(open(REQ, "rb").read()).hexdigest()
+    req_manifest = {"version": REQ_VERSION, "sha256": req_digest, "fileName": REQ_FILE_NAME,
+                    # O arquivo de solicitações carrega os estilos e textos deste modelo (mesmos índices).
+                    "baseSha256": digest, "layouts": request_layouts}
+    with open(REQ_OUT, "w", encoding="utf-8") as f:
+        json.dump(req_manifest, f, ensure_ascii=False, separators=(",", ":"))
+    print(f"{len(request_layouts)} solicitações -> {REQ_OUT} ({req_digest[:12]})")
