@@ -593,39 +593,140 @@ export type Database = {
         }
         Relationships: []
       }
-      schedule_weeks: {
+      schedule_categories: {
+        Row: {
+          color: string
+          created_at: string
+          id: string
+          name: string
+          position: number
+          section_id: string
+          updated_at: string
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          id?: string
+          name: string
+          position?: number
+          section_id: string
+          updated_at?: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          id?: string
+          name?: string
+          position?: number
+          section_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "schedule_categories_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "schedule_sections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      schedule_entries: {
+        Row: {
+          category_id: string
+          created_at: string
+          id: string
+          period_id: string
+          position: number
+          text: string
+        }
+        Insert: {
+          category_id: string
+          created_at?: string
+          id?: string
+          period_id: string
+          position?: number
+          text: string
+        }
+        Update: {
+          category_id?: string
+          created_at?: string
+          id?: string
+          period_id?: string
+          position?: number
+          text?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "schedule_entries_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "schedule_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "schedule_entries_period_id_fkey"
+            columns: ["period_id"]
+            isOneToOne: false
+            referencedRelation: "schedule_periods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      schedule_periods: {
         Row: {
           created_at: string
-          economica: Json
-          eventos: Json
+          end_date: string
           id: string
-          periodo: string
+          label: string
+          notes: string
           start_date: string
-          tema: string
+          theme: string
           updated_at: string
-          updated_by: string | null
         }
         Insert: {
           created_at?: string
-          economica?: Json
-          eventos?: Json
+          end_date: string
           id?: string
-          periodo?: string
+          label?: string
+          notes?: string
           start_date: string
-          tema?: string
+          theme?: string
           updated_at?: string
-          updated_by?: string | null
         }
         Update: {
           created_at?: string
-          economica?: Json
-          eventos?: Json
+          end_date?: string
           id?: string
-          periodo?: string
+          label?: string
+          notes?: string
           start_date?: string
-          tema?: string
+          theme?: string
           updated_at?: string
-          updated_by?: string | null
+        }
+        Relationships: []
+      }
+      schedule_sections: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          position: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          position?: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          position?: number
+          updated_at?: string
         }
         Relationships: []
       }
