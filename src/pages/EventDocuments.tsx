@@ -74,8 +74,6 @@ async function runExport(doc: EventDocument, lookup: ItemLookup, rules?: Map<str
   return issues;
 }
 
-const isAdminRole = (role: string | null | undefined) => role === "admin" || role === "super_admin";
-
 export default function EventDocuments({ group }: { group?: ServerGroup }) {
   const { id } = useParams();
   return id ? <Editor id={id} /> : <DocList group={group ?? "old"} />;
@@ -96,8 +94,7 @@ function GroupSwitch({ group }: { group: ServerGroup }) {
 
 function DocList({ group }: { group: ServerGroup }) {
   const navigate = useNavigate();
-  const { role } = useAuth();
-  const isAdmin = isAdminRole(role);
+  const { can } = useAuth();
   const [docs, setDocs] = useState<ListRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
@@ -222,9 +219,9 @@ function DocList({ group }: { group: ServerGroup }) {
         <span className="flex-1" />
         <GroupSwitch group={group} />
       </div>
-      <TemplateBanner canUpload={role === "super_admin"} />
+      <TemplateBanner canUpload={can("events.templates")} />
       <TemplateBanner
-        canUpload={role === "super_admin"}
+        canUpload={can("events.templates")}
         file={requestsManifest}
         what="O arquivo das solicitações manuais"
         effect="documentos com solicitações manuais não podem ser exportados"
@@ -237,7 +234,7 @@ function DocList({ group }: { group: ServerGroup }) {
           <TabsTrigger value="presets">Pré-definições</TabsTrigger>
           <TabsTrigger value="requests">Solicitações manuais</TabsTrigger>
           <TabsTrigger value="items">Categorias de itens</TabsTrigger>
-          {isAdmin && <TabsTrigger value="history" className="gap-1"><History className="h-3.5 w-3.5" /> Histórico</TabsTrigger>}
+          {can("events.history") && <TabsTrigger value="history" className="gap-1"><History className="h-3.5 w-3.5" /> Histórico</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="docs" className="space-y-3">
@@ -257,7 +254,7 @@ function DocList({ group }: { group: ServerGroup }) {
         </TabsContent>
 
         <TabsContent value="presets">
-          <PresetsPanel group={group} canEdit={isAdmin} />
+          <PresetsPanel group={group} canEdit={can("events.presets")} />
         </TabsContent>
 
         <TabsContent value="requests">
@@ -265,10 +262,10 @@ function DocList({ group }: { group: ServerGroup }) {
         </TabsContent>
 
         <TabsContent value="items">
-          <ItemRulesPanel group={group} canEdit={isAdmin} />
+          <ItemRulesPanel group={group} canEdit={can("events.item_rules")} />
         </TabsContent>
 
-        {isAdmin && (
+        {can("events.history") && (
           <TabsContent value="history">
             <HistoryPanel group={group} onOpen={(docId) => navigate(`/eventos/${docId}`)} />
           </TabsContent>
@@ -280,13 +277,13 @@ function DocList({ group }: { group: ServerGroup }) {
 
 function Editor({ id }: { id: string }) {
   const navigate = useNavigate();
-  const { role } = useAuth();
+  const { can } = useAuth();
   const [doc, setDoc] = useState<EventDocument | null>(null);
   const group = doc ? asServerGroup(doc.server_group) : null;
   const { idStatus, getImage, ensure } = useEventItemLookup(doc);
   const { getUsage } = useItemUsage(group, doc?.id ?? null);
   const { presets, save: savePreset } = useEventPresets(group);
-  const presetApi = useMemo<PresetApi>(() => ({ list: presets, canSave: isAdminRole(role), save: savePreset }), [presets, role, savePreset]);
+  const presetApi = useMemo<PresetApi>(() => ({ list: presets, canSave: can("events.presets"), save: savePreset }), [presets, can, savePreset]);
   const { rules, byItem: rulesByItem } = useItemRules(group);
   const rulesApi = useMemo(() => ({ get: (id: string) => rulesByItem.get(id), list: rules }), [rules, rulesByItem]);
   const [dirty, setDirty] = useState(false);
@@ -379,10 +376,10 @@ function Editor({ id }: { id: string }) {
         <Button className="gap-1" onClick={save} disabled={saving || !dirty}><Save className="h-4 w-4" /> {saving ? "Salvando..." : "Salvar"}</Button>
       </div>
 
-      <TemplateBanner canUpload={role === "super_admin"} />
+      <TemplateBanner canUpload={can("events.templates")} />
       {doc.sections.some(isRequestSection) && (
         <TemplateBanner
-          canUpload={role === "super_admin"}
+          canUpload={can("events.templates")}
           file={requestsManifest}
           what="O arquivo das solicitações manuais"
           effect="este documento não pode ser exportado"

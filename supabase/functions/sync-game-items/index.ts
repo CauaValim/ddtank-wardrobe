@@ -42,13 +42,14 @@ Deno.serve(async (req) => {
     const url = Deno.env.get("SUPABASE_URL")!;
     const admin = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
-    // Auth: somente admin / super_admin
+    // Auth: permissão "Sincronizar com o jogo"
     const token = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
     if (!token) return json({ error: "Não autenticado" }, 401);
     const { data: u, error: uErr } = await admin.auth.getUser(token);
     if (uErr || !u.user) return json({ error: "Sessão inválida" }, 401);
-    const { data: roles } = await admin.from("user_roles").select("role").eq("user_id", u.user.id);
-    if (!roles?.some((r) => r.role === "admin" || r.role === "super_admin")) return json({ error: "Sem permissão" }, 403);
+    const { data: allowed } = await admin.from("user_permissions").select("permission")
+      .eq("user_id", u.user.id).eq("permission", "items.game_sync").maybeSingle();
+    if (!allowed) return json({ error: "Sem permissão" }, 403);
 
     const raw = parseItems(await loadXml()).filter((a) => Number(a.TemplateID) > 0 && a.Name);
 

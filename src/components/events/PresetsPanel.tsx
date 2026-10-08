@@ -44,7 +44,7 @@ export function PresetsPanel({ group, canEdit }: { group: ServerGroup; canEdit: 
       <div className="flex flex-wrap items-center gap-2">
         <p className="flex-1 text-sm text-muted-foreground">
           Missões prontas para aplicar em Missões, Faça se Puder e Desafio da Tribo ({SERVER_GROUPS[group].label.toLowerCase()}).
-          {canEdit ? "" : " Só ADM ou superior pode criar e editar."}
+          {canEdit ? "" : " Só quem tem a permissão “Editar pré-definições” pode criar e editar."}
         </p>
         {canEdit && !draft && (
           <Button className="gap-1" onClick={() => setDraft({ name: "", block: blockFrom() })}><Plus className="h-4 w-4" /> Nova pré-definição</Button>

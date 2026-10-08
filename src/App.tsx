@@ -47,17 +47,17 @@ function AppRoutes() {
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full">
-        <EventScheduleSidebar canEdit={auth.canEditSchedule} />
+        <EventScheduleSidebar canEdit={auth.can("schedule.edit")} />
         <div className="flex-1 flex flex-col min-w-0">
           <Routes>
             <Route path="/" element={<Index auth={auth} realm="br" />} />
             <Route path="/turco" element={<Index auth={auth} realm="turco" />} />
-            {auth.role === "super_admin" && (
+            {auth.can("users.manage") && (
               <Route path="/users" element={<UserManagement />} />
             )}
-            {auth.canImport && <Route path="/eventos" element={eventDocuments("old")} />}
-            {auth.canImport && <Route path="/eventos/novos" element={eventDocuments("new")} />}
-            {auth.canImport && <Route path="/eventos/:id" element={eventDocuments("old")} />}
+            {auth.can("events.access") && <Route path="/eventos" element={eventDocuments("old")} />}
+            {auth.can("events.access") && <Route path="/eventos/novos" element={eventDocuments("new")} />}
+            {auth.can("events.access") && <Route path="/eventos/:id" element={eventDocuments("old")} />}
             <Route path="/trust" element={<Trust />} />
             <Route path="/login" element={<Navigate to="/" replace />} />
             <Route path="*" element={<NotFound />} />

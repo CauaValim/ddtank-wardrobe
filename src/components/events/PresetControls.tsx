@@ -13,7 +13,7 @@ export interface PresetApi {
   save: (name: string, data: PresetData) => Promise<boolean>;
 }
 
-/** Aplicar uma pré-definição na missão, ou salvar a missão como pré-definição (ADM ou superior). */
+/** Aplicar uma pré-definição na missão, ou salvar a missão como pré-definição (permissão "Editar pré-definições"). */
 export function PresetControls({ api, spec, block, onChange }: { api: PresetApi; spec: BlockSpec; block: EventBlock; onChange: (b: EventBlock) => void }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");

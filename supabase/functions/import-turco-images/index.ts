@@ -9,11 +9,20 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const { mappings } = await req.json() as { mappings: Array<{ id: number; url: string }> };
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
+    // Somente quem tem a permissão "Editar itens".
+    const token = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
+    const { data: caller } = token ? await supabase.auth.getUser(token) : { data: { user: null } };
+    const { data: allowed } = caller?.user
+      ? await supabase.from("user_permissions").select("permission").eq("user_id", caller.user.id).eq("permission", "items.manage").maybeSingle()
+      : { data: null };
+    if (!allowed) {
+      return new Response(JSON.stringify({ error: "Sem permissão" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
+    const { mappings } = await req.json() as { mappings: Array<{ id: number; url: string }> };
 
     // Group ids by URL to dedupe downloads
     const byUrl = new Map<string, number[]>();

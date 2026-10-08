@@ -74,7 +74,7 @@ export function ItemRulesPanel({ group, canEdit }: { group: ServerGroup; canEdit
       <div className="flex flex-wrap items-center gap-2">
         <p className="flex-1 text-sm text-muted-foreground">
           Itens com as categorias em que podem ou não podem entrar ({SERVER_GROUPS[group].label.toLowerCase()}). Na criação do documento,
-          isso aparece ao lado do nome do item quando ele é procurado na seção.{canEdit ? "" : " Só ADM ou superior pode cadastrar."}
+          isso aparece ao lado do nome do item quando ele é procurado na seção.{canEdit ? "" : " Só quem tem a permissão “Editar categorias de itens” pode cadastrar."}
         </p>
         {canEdit && !draft && (
           <Button className="gap-1" onClick={() => setDraft({ item_id: "", item_name: "", allowed: [], forbidden: [], note: null })}>

@@ -189,7 +189,7 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
                 {realm === "turco" ? "Painel Staff DDTank Turco" : "Painel Staff DDTank 337"}
               </h1>
               <p className="text-xs text-muted-foreground">
-                {auth.role === "super_admin" ? "Super Admin" : auth.role === "admin" ? "ADM" : auth.role === "analista" ? "Analista" : "Moderador"}
+                {auth.user?.email}
               </p>
             </div>
             <div className="ml-2 flex items-center gap-1 rounded-md border border-border bg-secondary p-0.5">
@@ -213,7 +213,7 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
           </div>
 
           <div className="flex items-center gap-2">
-            {auth.canSelect && (
+            {auth.can("items.manage") && (
               <>
                 <button
                   onClick={() => {
@@ -240,9 +240,9 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
                 )}
               </>
             )}
-            {realm === "br" && (auth.role === "super_admin" || auth.role === "admin") && <GameSyncButton />}
-            {(auth.role === "super_admin" || auth.role === "admin") && <ExportItemImagesButton realm={realm} />}
-            {auth.canImport && (
+            {realm === "br" && auth.can("items.game_sync") && <GameSyncButton />}
+            {auth.can("items.export_images") && <ExportItemImagesButton realm={realm} />}
+            {auth.can("events.access") && (
               <button
                 onClick={() => navigate("/eventos")}
                 className="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-muted transition-all"
@@ -250,7 +250,7 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
                 <FileSpreadsheet className="h-3.5 w-3.5" /> Criação de Eventos
               </button>
             )}
-            {auth.canImport && (
+            {auth.can("events.access") && (
               <button
                 onClick={() => navigate("/eventos/novos")}
                 className="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-muted transition-all"
@@ -259,8 +259,8 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
                 <FileSpreadsheet className="h-3.5 w-3.5" /> Eventos – Servidores Novos
               </button>
             )}
-            {auth.canRequestCodes && auth.user && (
-              <CodeRequestsButton userId={auth.user.id} email={auth.user.email ?? ""} canManage={auth.canManageCodes} />
+            {(auth.can("codes.request") || auth.can("codes.manage")) && auth.user && (
+              <CodeRequestsButton userId={auth.user.id} email={auth.user.email ?? ""} canManage={auth.can("codes.manage")} />
             )}
             <button
               onClick={() => setGameDataOpen(true)}
@@ -270,7 +270,7 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
               <Database className="h-3.5 w-3.5" />
               Dados do Jogo
             </button>
-            {(auth.role === "super_admin" || auth.role === "admin") && (
+            {auth.can("tools.id_filler") && (
               <button
                 onClick={() => setIdFillerOpen(true)}
                 className="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-muted transition-all"
@@ -279,7 +279,7 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
                 <FileSpreadsheet className="h-3.5 w-3.5" />
               </button>
             )}
-            {(auth.role === "super_admin" || auth.role === "admin") && (
+            {auth.can("tools.validator") && (
               <button
                 onClick={() => setValidatorOpen(true)}
                 className="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-muted transition-all"
@@ -288,7 +288,7 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
                 <ClipboardCheck className="h-3.5 w-3.5" />
               </button>
             )}
-            {auth.role === "super_admin" && (
+            {auth.can("users.manage") && (
               <button
                 onClick={() => navigate("/users")}
                 className="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-muted transition-all"
@@ -389,7 +389,7 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
                   >
                     {label}
                   </button>
-                  {selectionMode && auth.canSelect && (
+                  {selectionMode && auth.can("items.manage") && (
                     <button
                       onClick={() => selectAllOfType(label)}
                       className="rounded-full p-1 text-muted-foreground hover:text-primary hover:bg-muted transition-all"
@@ -439,7 +439,7 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
                 item={item}
                 imageUrl={getItemImage(item.id)}
                 onClick={(clicked) => setSelectedItem(clicked)}
-                selectionMode={auth.canSelect && selectionMode}
+                selectionMode={auth.can("items.manage") && selectionMode}
                 isSelected={selectedIds.has(item.id)}
                 onToggleSelect={toggleSelect}
               />
@@ -469,7 +469,7 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
         imageUrl={selectedItem ? getItemImage(selectedItem.id) : undefined}
         open={!!selectedItem}
         onClose={() => setSelectedItem(null)}
-        canViewId={auth.canViewId}
+        canViewId={auth.can("items.view_ids")}
         realm={realm}
         lookup={lookupItem}
         onViewPackageContents={(item) => {

@@ -1,42 +1,26 @@
 import { useState, useEffect, useCallback } from "react";
-import { ArrowLeft, Plus, Shield, Trash2, UserCog, Loader2 } from "lucide-react";
+import { ArrowLeft, KeyRound, Loader2, Plus, Shield, Trash2, UserCog } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
+import { PermissionsEditor } from "@/components/PermissionsEditor";
+import { ALL_PERMISSIONS, PERMISSION_GROUPS, isPermission, type Permission } from "@/lib/permissions";
 
 interface ManagedUser {
   id: string;
   email: string;
   created_at: string;
-  role: string | null;
-  role_id: string | null;
+  last_sign_in_at: string | null;
+  permissions: string[];
 }
 
-const ROLE_LABELS: Record<string, string> = {
-  super_admin: "Super Admin",
-  admin: "ADM",
-  analista: "Analista",
-  moderador: "Moderador",
-  midia: "Mídia",
-  user: "Usuário",
-};
-
-const ROLE_COLORS: Record<string, string> = {
-  super_admin: "bg-destructive/20 text-destructive",
-  admin: "bg-primary/20 text-primary",
-  analista: "bg-accent/20 text-accent",
-  moderador: "bg-success/20 text-[hsl(var(--success))]",
-  midia: "bg-pink-500/15 text-pink-700 dark:text-pink-400",
-  user: "bg-muted text-muted-foreground",
-};
-
-async function callManageUsers(action: string, method: string, body?: any) {
+async function callManageUsers(action: string, method: string, body?: unknown) {
   const { data: { session } } = await supabase.auth.getSession();
   const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/manage-users?action=${action}`;
   const headers: Record<string, string> = {
@@ -52,30 +36,44 @@ async function callManageUsers(action: string, method: string, body?: any) {
 
   const r = await fetch(url, options);
   if (!r.ok) {
-    const err = await r.json();
+    const err = await r.json().catch(() => ({}));
     throw new Error(err.error || "Erro desconhecido");
   }
   return r.json();
 }
 
+const errorMessage = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+/** Áreas com pelo menos uma função liberada, para o resumo da tabela. */
+function summary(perms: Set<Permission>) {
+  if (perms.size === ALL_PERMISSIONS.length) return ["Acesso total"];
+  return PERMISSION_GROUPS.flatMap((g) => {
+    const on = g.permissions.filter((p) => perms.has(p.key)).length;
+    return on ? [`${g.label} (${on}/${g.permissions.length})`] : [];
+  });
+}
+
 export default function UserManagement() {
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [loading, setLoading] = useState(true);
+  const [me, setMe] = useState<string | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  const [editing, setEditing] = useState<ManagedUser | null>(null);
+  const [editPerms, setEditPerms] = useState<Set<Permission>>(new Set());
   const [deleteTarget, setDeleteTarget] = useState<ManagedUser | null>(null);
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
-  const [newRole, setNewRole] = useState("moderador");
+  const [newPerms, setNewPerms] = useState<Set<Permission>>(new Set());
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
   const navigate = useNavigate();
 
   const fetchUsers = useCallback(async () => {
     try {
-      const data = await callManageUsers("list", "GET");
-      setUsers(data);
-    } catch (e: any) {
-      toast({ title: "Erro", description: e.message, variant: "destructive" });
+      const data: ManagedUser[] = await callManageUsers("list", "GET");
+      setUsers([...data].sort((a, b) => (a.email ?? "").localeCompare(b.email ?? "")));
+    } catch (e) {
+      toast({ title: "Erro", description: errorMessage(e), variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -83,15 +81,28 @@ export default function UserManagement() {
 
   useEffect(() => {
     fetchUsers();
+    supabase.auth.getUser().then(({ data }) => setMe(data.user?.id ?? null));
   }, [fetchUsers]);
 
-  const handleSetRole = async (userId: string, role: string) => {
+  const toSet = (list: string[]) => new Set(list.filter(isPermission));
+
+  const openEdit = (u: ManagedUser) => {
+    setEditing(u);
+    setEditPerms(toSet(u.permissions));
+  };
+
+  const handleSavePermissions = async () => {
+    if (!editing) return;
+    setSaving(true);
     try {
-      await callManageUsers("set-role", "POST", { user_id: userId, role });
-      toast({ title: "Cargo atualizado" });
+      await callManageUsers("set-permissions", "POST", { user_id: editing.id, permissions: [...editPerms] });
+      toast({ title: "Acesso atualizado", description: editing.email });
+      setEditing(null);
       fetchUsers();
-    } catch (e: any) {
-      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    } catch (e) {
+      toast({ title: "Erro", description: errorMessage(e), variant: "destructive" });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -99,19 +110,15 @@ export default function UserManagement() {
     if (!newEmail || !newPassword) return;
     setSaving(true);
     try {
-      await callManageUsers("create-user", "POST", {
-        email: newEmail,
-        password: newPassword,
-        role: newRole,
-      });
+      await callManageUsers("create-user", "POST", { email: newEmail, password: newPassword, permissions: [...newPerms] });
       toast({ title: "Usuário criado com sucesso" });
       setCreateOpen(false);
       setNewEmail("");
       setNewPassword("");
-      setNewRole("moderador");
+      setNewPerms(new Set());
       fetchUsers();
-    } catch (e: any) {
-      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    } catch (e) {
+      toast({ title: "Erro", description: errorMessage(e), variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -125,8 +132,8 @@ export default function UserManagement() {
       toast({ title: "Usuário removido" });
       setDeleteTarget(null);
       fetchUsers();
-    } catch (e: any) {
-      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    } catch (e) {
+      toast({ title: "Erro", description: errorMessage(e), variant: "destructive" });
     } finally {
       setSaving(false);
     }
@@ -137,7 +144,7 @@ export default function UserManagement() {
       <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
         <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-4 sm:px-6">
           <div className="flex items-center gap-3">
-            <button onClick={() => navigate("/")} className="rounded-md p-1.5 hover:bg-muted transition-colors">
+            <button onClick={() => navigate("/")} className="rounded-md p-1.5 hover:bg-muted transition-colors" title="Voltar ao painel">
               <ArrowLeft className="h-5 w-5 text-muted-foreground" />
             </button>
             <div className="flex items-center gap-2">
@@ -155,6 +162,9 @@ export default function UserManagement() {
       </header>
 
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6 sm:px-6">
+        <p className="mb-4 text-sm text-muted-foreground">
+          Cada usuário tem acesso só às funções marcadas para ele. Use "Editar acesso" para escolher as funções uma a uma ou preencher com um modelo.
+        </p>
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -165,90 +175,97 @@ export default function UserManagement() {
             <p className="text-sm text-muted-foreground">Nenhum usuário encontrado</p>
           </div>
         ) : (
-          <div className="rounded-lg border border-border overflow-hidden">
+          <div className="rounded-lg border border-border overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow className="bg-secondary/50">
                   <TableHead>Email</TableHead>
-                  <TableHead>Cargo</TableHead>
+                  <TableHead>Acesso</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {users.map((u) => (
-                  <TableRow key={u.id}>
-                    <TableCell>
-                      <div>
-                        <p className="text-sm font-medium text-foreground">{u.email}</p>
-                        <p className="text-xs text-muted-foreground font-mono">{u.id.slice(0, 8)}…</p>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Select
-                        value={u.role ?? "user"}
-                        onValueChange={(val) => handleSetRole(u.id, val)}
-                      >
-                        <SelectTrigger className="w-[160px] h-8 text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Object.entries(ROLE_LABELS).map(([value, label]) => (
-                            <SelectItem key={value} value={value}>
-                              <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${ROLE_COLORS[value]}`}>
-                                {label}
-                              </span>
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                        onClick={() => setDeleteTarget(u)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                {users.map((u) => {
+                  const perms = toSet(u.permissions);
+                  const parts = summary(perms);
+                  return (
+                    <TableRow key={u.id}>
+                      <TableCell>
+                        <p className="text-sm font-medium text-foreground">{u.email}{u.id === me && <span className="ml-1 text-xs text-muted-foreground">(você)</span>}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {u.last_sign_in_at ? `Último acesso em ${new Date(u.last_sign_in_at).toLocaleDateString("pt-BR")}` : "Nunca entrou"}
+                        </p>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap gap-1">
+                          {parts.length === 0 ? (
+                            <span className="text-xs text-muted-foreground">Só consulta de itens</span>
+                          ) : (
+                            parts.map((p) => <Badge key={p} variant="secondary" className="text-[11px] font-normal">{p}</Badge>)
+                          )}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-right whitespace-nowrap">
+                        <Button variant="outline" size="sm" className="h-8 gap-1" onClick={() => openEdit(u)}>
+                          <KeyRound className="h-3.5 w-3.5" /> Editar acesso
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="ml-1 h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                          title="Remover usuário"
+                          disabled={u.id === me}
+                          onClick={() => setDeleteTarget(u)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           </div>
         )}
       </main>
 
-      {/* Create User Dialog */}
+      {/* Editar acesso */}
+      <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
+        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Acesso de {editing?.email}</DialogTitle>
+            <DialogDescription>Marque as funções do painel que este usuário pode usar.</DialogDescription>
+          </DialogHeader>
+          <PermissionsEditor value={editPerms} onChange={setEditPerms} locked={editing?.id === me ? ["users.manage"] : []} />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditing(null)}>Cancelar</Button>
+            <Button onClick={handleSavePermissions} disabled={saving}>
+              {saving && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Novo usuário */}
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Novo Usuário</DialogTitle>
-            <DialogDescription>Crie uma nova conta com cargo atribuído.</DialogDescription>
+            <DialogDescription>Crie a conta e escolha as funções que ela pode usar.</DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">Email</label>
-              <Input value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="email@exemplo.com" />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-foreground" htmlFor="nu-email">Email</label>
+                <Input id="nu-email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="email@exemplo.com" />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-sm font-medium text-foreground" htmlFor="nu-pass">Senha</label>
+                <Input id="nu-pass" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Mínimo 6 caracteres" />
+              </div>
             </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">Senha</label>
-              <Input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Mínimo 6 caracteres" />
-            </div>
-            <div className="space-y-1.5">
-              <label className="text-sm font-medium text-foreground">Cargo</label>
-              <Select value={newRole} onValueChange={setNewRole}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(ROLE_LABELS).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>{label}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <PermissionsEditor value={newPerms} onChange={setNewPerms} />
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button>
@@ -260,7 +277,7 @@ export default function UserManagement() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Confirmation */}
+      {/* Remover */}
       <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>

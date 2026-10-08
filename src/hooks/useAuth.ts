@@ -1,31 +1,26 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import type { User } from "@supabase/supabase-js";
-
-export type AppRole = "admin" | "analista" | "moderador" | "user" | "super_admin" | "midia";
+import { isPermission, permissionsFromRole, type Permission } from "@/lib/permissions";
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
-  const [role, setRole] = useState<AppRole | null>(null);
+  const [permissions, setPermissions] = useState<Set<Permission>>(new Set());
   const [loading, setLoading] = useState(true);
 
-  const fetchRole = useCallback(async (userId: string) => {
+  /** Permissões do usuário; enquanto a tabela nova não existe, usa o cargo antigo. */
+  const fetchPermissions = useCallback(async (userId: string) => {
     try {
-      const { data, error } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", userId)
-        .limit(1)
-        .single();
-      if (error) {
-        console.warn("Erro ao buscar role:", error.message);
-        setRole("user");
-      } else {
-        setRole((data?.role as AppRole) ?? "user");
+      const { data, error } = await supabase.from("user_permissions").select("permission").eq("user_id", userId);
+      if (!error) {
+        setPermissions(new Set((data ?? []).map((r) => r.permission).filter(isPermission)));
+        return;
       }
+      const { data: roleRow } = await supabase.from("user_roles").select("role").eq("user_id", userId).limit(1).maybeSingle();
+      setPermissions(new Set(permissionsFromRole(roleRow?.role)));
     } catch (err) {
-      console.warn("Erro inesperado ao buscar role:", err);
-      setRole("user");
+      console.warn("Erro ao buscar permissões:", err);
+      setPermissions(new Set());
     }
   }, []);
 
@@ -37,9 +32,9 @@ export function useAuth() {
         setUser(u);
         if (u) {
           // Use setTimeout to avoid potential deadlock with Supabase internal locks
-          setTimeout(() => fetchRole(u.id).finally(() => setLoading(false)), 0);
+          setTimeout(() => fetchPermissions(u.id).finally(() => setLoading(false)), 0);
         } else {
-          setRole(null);
+          setPermissions(new Set());
           setLoading(false);
         }
 
@@ -55,7 +50,7 @@ export function useAuth() {
     supabase.auth.getSession().then(({ data: { session }, error }) => {
       if (error || !session) {
         setUser(null);
-        setRole(null);
+        setPermissions(new Set());
         setLoading(false);
         return;
       }
@@ -63,7 +58,7 @@ export function useAuth() {
     });
 
     return () => subscription.unsubscribe();
-  }, [fetchRole]);
+  }, [fetchPermissions]);
 
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
@@ -74,17 +69,7 @@ export function useAuth() {
     await supabase.auth.signOut();
   };
 
-  // Permission helpers
-  const isSuperAdmin = role === "super_admin";
-  const isAdmin = role === "admin" || isSuperAdmin;
-  const canViewId = isAdmin || role === "analista";
-  const canSelect = isAdmin;
-  const canImport = isAdmin; // .xlsx / .json import
-  const canImportImages = isSuperAdmin; // .zip images
-  const canSyncDescriptions = isSuperAdmin;
-  const canEditSchedule = isAdmin;
-  const canRequestCodes = isAdmin || role === "midia";
-  const canManageCodes = isAdmin;
+  const can = useCallback((permission: Permission) => permissions.has(permission), [permissions]);
 
-  return { user, role, loading, signIn, signOut, canViewId, canSelect, canImport, canImportImages, canSyncDescriptions, canEditSchedule, canRequestCodes, canManageCodes };
+  return { user, loading, signIn, signOut, permissions, can };
 }

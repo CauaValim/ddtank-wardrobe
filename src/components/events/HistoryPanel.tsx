@@ -24,7 +24,7 @@ function stamp(iso: string): string {
   return `${pad(d.getMonth() + 1)}/${pad(d.getDate())}/${d.getFullYear()} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-/** Aba "Histórico" (ADM ou superior): quem criou cada documento, quando, e a última modificação. */
+/** Aba "Histórico" (permissão "Ver histórico"): quem criou cada documento, quando, e a última modificação. */
 export function HistoryPanel({ group, onOpen }: { group: ServerGroup; onOpen: (id: string) => void }) {
   const [rows, setRows] = useState<Row[] | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
