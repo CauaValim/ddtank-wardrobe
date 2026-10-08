@@ -35,6 +35,63 @@ export type Database = {
         }
         Relationships: []
       }
+      code_requests: {
+        Row: {
+          channel: string
+          created_at: string
+          handled_at: string | null
+          handled_by: string | null
+          id: string
+          needed_by: string | null
+          notes: string
+          purpose: string
+          quantity: number
+          requested_by: string
+          requester_email: string
+          response: string
+          reward: string
+          servers: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          channel?: string
+          created_at?: string
+          handled_at?: string | null
+          handled_by?: string | null
+          id?: string
+          needed_by?: string | null
+          notes?: string
+          purpose: string
+          quantity?: number
+          requested_by?: string
+          requester_email?: string
+          response?: string
+          reward?: string
+          servers?: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          channel?: string
+          created_at?: string
+          handled_at?: string | null
+          handled_by?: string | null
+          id?: string
+          needed_by?: string | null
+          notes?: string
+          purpose?: string
+          quantity?: number
+          requested_by?: string
+          requester_email?: string
+          response?: string
+          reward?: string
+          servers?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       event_documents: {
         Row: {
           created_at: string
@@ -533,6 +590,42 @@ export type Database = {
           quantity?: number
           realm?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      schedule_weeks: {
+        Row: {
+          created_at: string
+          economica: Json
+          eventos: Json
+          id: string
+          periodo: string
+          start_date: string
+          tema: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          economica?: Json
+          eventos?: Json
+          id?: string
+          periodo?: string
+          start_date: string
+          tema?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          economica?: Json
+          eventos?: Json
+          id?: string
+          periodo?: string
+          start_date?: string
+          tema?: string
+          updated_at?: string
+          updated_by?: string | null
         }
         Relationships: []
       }
