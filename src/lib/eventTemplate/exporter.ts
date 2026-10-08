@@ -71,7 +71,7 @@ async function writeField(ctx: FillContext, field: FieldSpec, values: Record<str
     ctx.ws.clear(field.cell);
     return;
   }
-  const text = renderFormat(field.format, { ...baseContext(ctx), value, groups });
+  const text = renderFormat(field.format, { ...baseContext(ctx), value, fields: values, groups });
   await ctx.ws.setRich(field.cell, richRuns(field.rich, text));
 }
 
@@ -240,13 +240,14 @@ export async function exportDocument(template: ArrayBuffer, manifest: TemplateMa
     if (!deps.loadRequests) throw new Error("O documento tem solicitações manuais, mas o arquivo das solicitações não foi carregado");
     await pkg.importSheets(await XlsxPackage.load(await deps.loadRequests()), requestSheets);
   }
-  const cover = layoutById(manifest, manifest.coverLayout);
+  // Modelos sem capa (ex.: códigos) não têm a primeira aba fixa.
+  const cover = manifest.coverLayout ? layoutById(manifest, manifest.coverLayout) : null;
   const sections = orderSections(doc.sections); // solicitações manuais saem no final
-  const coverIndex = sections.findIndex((s) => s.layoutId === cover.id);
+  const coverIndex = cover ? sections.findIndex((s) => s.layoutId === cover.id) : -1;
   const coverSection = coverIndex >= 0 ? sections.splice(coverIndex, 1)[0] : null;
   // Sections larger than one tab (missions without limit) become continuation tabs.
   const entries: { section: EventSection | null; layout: LayoutSpec }[] = [
-    { section: coverSection, layout: cover },
+    ...(cover ? [{ section: coverSection, layout: cover }] : []),
     ...sections.flatMap((s) => {
       const layout = layoutById(manifest, s.layoutId);
       // Textos padronizados (preço com ponto, limite da munição) mesmo em seções editadas depois de abertas.

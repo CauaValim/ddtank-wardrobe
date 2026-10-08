@@ -42,8 +42,8 @@ export const PERMISSION_GROUPS = [
   {
     label: "Códigos",
     permissions: [
-      { key: "codes.request", label: "Solicitar códigos", description: "Botão de solicitação de códigos (mídias)." },
-      { key: "codes.manage", label: "Responder solicitações de códigos", description: "Ver todas as solicitações, mudar o status e responder." },
+      { key: "codes.request", label: "Solicitar códigos", description: "Criar solicitações de códigos (KickSub, Lives, Torneios) e enviar para a equipe." },
+      { key: "codes.manage", label: "Responder solicitações de códigos", description: "Ver todas as solicitações, responder, exportar o .xlsx e enviar o modelo de códigos." },
     ],
   },
   {

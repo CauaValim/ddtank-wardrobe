@@ -35,6 +35,48 @@ export type Database = {
         }
         Relationships: []
       }
+      code_documents: {
+        Row: {
+          created_at: string
+          created_by: string
+          id: string
+          sections: Json
+          servers: string
+          staff_note: string
+          status: string
+          template_version: string | null
+          title: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          sections?: Json
+          servers?: string
+          staff_note?: string
+          status?: string
+          template_version?: string | null
+          title?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          id?: string
+          sections?: Json
+          servers?: string
+          staff_note?: string
+          status?: string
+          template_version?: string | null
+          title?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       code_requests: {
         Row: {
           channel: string
@@ -812,6 +854,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      code_document_authors: {
+        Args: { _ids: string[] }
+        Returns: { email: string; id: string }[]
+      }
       event_document_history: {
         Args: { _server_group: string }
         Returns: {

@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import { Search, Package, Gamepad2, MousePointerClick, CheckSquare, LogOut, Users, FileSpreadsheet, Sparkles, Shapes, ClipboardCheck } from "lucide-react";
+import { Search, Package, Gamepad2, MousePointerClick, CheckSquare, LogOut, Users, FileSpreadsheet, Sparkles, Shapes, ClipboardCheck, Ticket } from "lucide-react";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useNavigate } from "react-router-dom";
 import { useItemStore } from "@/hooks/useItemStore";
@@ -11,7 +11,6 @@ import { IdFillerModal } from "@/components/IdFillerModal";
 import { ItemValidatorModal } from "@/components/ItemValidatorModal";
 import { GameSyncButton } from "@/components/GameSyncButton";
 import { ExportItemImagesButton } from "@/components/ExportItemImagesButton";
-import { CodeRequestsButton } from "@/components/CodeRequestsButton";
 import { GameDataModal } from "@/components/GameDataModal";
 import { FugurasModal } from "@/components/FugurasModal";
 import { Database } from "lucide-react";
@@ -259,8 +258,14 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
                 <FileSpreadsheet className="h-3.5 w-3.5" /> Eventos – Servidores Novos
               </button>
             )}
-            {(auth.can("codes.request") || auth.can("codes.manage")) && auth.user && (
-              <CodeRequestsButton userId={auth.user.id} email={auth.user.email ?? ""} canManage={auth.can("codes.manage")} />
+            {(auth.can("codes.request") || auth.can("codes.manage")) && (
+              <button
+                onClick={() => navigate("/codigos")}
+                className="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-muted transition-all"
+                title="Solicitações de códigos (KickSub, Lives e Torneios)"
+              >
+                <Ticket className="h-3.5 w-3.5" /> Solicitação de Códigos
+              </button>
             )}
             <button
               onClick={() => setGameDataOpen(true)}

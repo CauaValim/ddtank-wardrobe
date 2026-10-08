@@ -89,6 +89,8 @@ export interface LayoutSpec {
   durationFill?: { timed: number; permanent: number };
   /** Células mescladas do topo da aba no modelo (reconhece o layout ao importar). */
   signature?: string[];
+  /** Nome de cada bloco no editor (ex.: "1º lugar", "Participação"). */
+  blockNames?: string[];
 }
 
 /** Arquivo .xlsx guardado no bucket e conferido pelo SHA-256 antes de usar. */
@@ -99,7 +101,8 @@ export interface TemplateFile {
 }
 
 export interface TemplateManifest extends TemplateFile {
-  coverLayout: string;
+  /** Primeira aba fixa do documento (Entrada Diária nos eventos); modelos sem capa não têm. */
+  coverLayout?: string;
   layouts: LayoutSpec[];
 }
 

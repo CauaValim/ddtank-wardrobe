@@ -114,6 +114,8 @@ export interface FormatContext {
   docTitle: string;
   docServers: string;
   sectionFields: Record<string, string>;
+  /** Campos do mesmo bloco (ou da seção), para {field.nome}. */
+  fields?: Record<string, string>;
   groups?: Record<string, EventItem[]>;
   item?: EventItem;
   labelStyle?: "twoLines" | "inline";
@@ -136,6 +138,7 @@ export function renderFormat(format: string, ctx: FormatContext): string {
       case "end.time": return splitDateTime(ctx.sectionFields.end).time;
       case "servers": return ctx.servers;
       case "serversSpaced": return spacedServers(ctx.servers);
+      case "serversUpper": return ctx.servers.toUpperCase();
       case "docTitle": return ctx.docTitle;
       case "docServers": return ctx.docServers;
       case "idLine": return group.map(idAmount).join(",");
@@ -147,7 +150,9 @@ export function renderFormat(format: string, ctx: FormatContext): string {
       case "qty": return String(item?.qty ?? 1);
       case "name": return item?.name ?? "";
       case "idAmount": return item ? idAmount(item) : "";
-      default: return item?.extra?.[name] ?? "";
+      default:
+        if (name.startsWith("field.")) return ctx.fields?.[name.slice(6)] ?? "";
+        return item?.extra?.[name] ?? "";
     }
   });
 }

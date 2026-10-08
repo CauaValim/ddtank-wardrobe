@@ -260,7 +260,7 @@ export function SetEditor({ set, blocks, ctx, onChange, nested }: {
           spec={editorBlockSpec(ctx.layout, set, i)}
           setKey={set.key}
           block={b}
-          title={set.blocks.length > 1 || unlimited ? `${set.blockLabel} ${i + 1}` : set.blockLabel}
+          title={ctx.layout.blockNames?.[i] ?? (set.blocks.length > 1 || unlimited ? `${set.blockLabel} ${i + 1}` : set.blockLabel)}
           ctx={ctx}
           onChange={(nb) => onChange(blocks.map((x, k) => (k === i ? nb : x)))}
           onRemove={

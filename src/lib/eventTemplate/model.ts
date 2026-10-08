@@ -1,5 +1,6 @@
 import manifestJson from "./manifest.json";
 import requestsJson from "./requestsManifest.json";
+import codesJson from "./codesManifest.json";
 import { parseItemLabel } from "./format";
 import { applyDailyLength, normalizeSection } from "./rules";
 import type { BlockSpec, EventBlock, EventItem, EventSection, LayoutSpec, RequestsManifest, SetSpec, TemplateManifest } from "./types";
@@ -18,8 +19,11 @@ export const manifest: TemplateManifest = {
 
 export const newId = () => Math.random().toString(36).slice(2, 10);
 
+/** Modelo das solicitações de códigos (KickSub, Lives e Torneios): separado dos eventos, sem capa. */
+export const codesManifest = codesJson as TemplateManifest;
+
 export function getLayout(id: string): LayoutSpec | undefined {
-  return manifest.layouts.find((l) => l.id === id);
+  return manifest.layouts.find((l) => l.id === id) ?? codesManifest.layouts.find((l) => l.id === id);
 }
 
 export const LAYOUT_GROUPS: { type: string; label: string }[] = [
@@ -53,7 +57,9 @@ export function emptySet(set: SetSpec): EventBlock[] {
 export function newSection(layout: LayoutSpec, servers: string): EventSection {
   const sets: Record<string, EventBlock[]> = {};
   for (const set of layout.sets) sets[set.key] = emptySet(set);
-  const section: EventSection = { id: newId(), layoutId: layout.id, servers, fields: {}, sets };
+  const fields: Record<string, string> = {};
+  for (const f of layout.fields) if (f.default) fields[f.key] = f.default;
+  const section: EventSection = { id: newId(), layoutId: layout.id, servers, fields, sets };
   return layout.type === "daily" ? applyDailyLength(layout, section, 14) : section;
 }
 
