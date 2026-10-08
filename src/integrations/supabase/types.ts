@@ -593,6 +593,36 @@ export type Database = {
         }
         Relationships: []
       }
+      panel_roles: {
+        Row: {
+          color: string
+          created_at: string
+          id: string
+          name: string
+          permissions: string[]
+          position: number
+          updated_at: string
+        }
+        Insert: {
+          color?: string
+          created_at?: string
+          id?: string
+          name: string
+          permissions?: string[]
+          position?: number
+          updated_at?: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          id?: string
+          name?: string
+          permissions?: string[]
+          position?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       schedule_categories: {
         Row: {
           color: string
@@ -729,6 +759,35 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      user_panel_roles: {
+        Row: {
+          created_at: string
+          granted_by: string | null
+          role_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          granted_by?: string | null
+          role_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          granted_by?: string | null
+          role_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_panel_roles_role_id_fkey"
+            columns: ["role_id"]
+            isOneToOne: false
+            referencedRelation: "panel_roles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {
