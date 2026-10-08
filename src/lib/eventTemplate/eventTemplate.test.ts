@@ -252,13 +252,16 @@ describe.skipIf(!hasTemplate)("modelo oficial de eventos", () => {
     nien.sets.chests[0].groups.items = [newItem({ id: "11020", name: "Pedra de Fortificação", qty: 5 }), newItem({ id: "11021", name: "Pedra Mágica", qty: 2 })];
     const devil = newSection(getLayout("request-devils-treasure")!, "s1-s401");
     devil.sets.prize[0].groups.items = [newItem({ id: "1120098", name: "Oferta de Nível Alto" })];
-    const doc: EventDocument = { ...docWith(lottery), sections: [lottery, nien, devil] };
+    const ammo = newSection(getLayout("ammo-7x6")!, "s1-s401");
+    ammo.sets.blocks[0].groups.items = [newItem({ id: "7071", name: "Faca", extra: { price: "120000", currency: "Coupons", condition: "" } })];
+    // Seção principal adicionada depois das solicitações: no arquivo, as solicitações continuam no final.
+    const doc: EventDocument = { ...docWith(lottery), sections: [lottery, nien, devil, ammo] };
     expect(nien.sets.chests[0].fields.label).toBe("Baú do Monstro travesso Nv.1\n5Mil");
 
     const result = await exportDocument(template, manifest, doc, { loadImage: fakeImage });
     const out = await XlsxPackage.load(result.data);
     expect((await out.sheets()).map((x) => x.name)).toEqual([
-      "BR-Daily Entry - 14D s1-s401", "BR-Lottery s1-s401", "BR-Capture Nien s402", "BR-The devil's treasure s1-s401",
+      "BR-Daily Entry - 14D s1-s401", "BR - Ammunitions sale s1-s401", "BR-Lottery s1-s401", "BR-Capture Nien s402", "BR-The devil's treasure s1-s401",
     ]);
     const l = await out.worksheet("BR-Lottery s1-s401");
     expect(await l.getText("C2")).toBe("Lottery - Activity request s1 - s401");
