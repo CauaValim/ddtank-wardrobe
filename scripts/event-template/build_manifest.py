@@ -16,7 +16,9 @@ from openpyxl.utils import get_column_letter as L, column_index_from_string as C
 
 SRC, OUT = sys.argv[1], sys.argv[2]
 wb = openpyxl.load_workbook(SRC)
-VERSION = "16-anos-v2"
+VERSION = "16-anos-v3"
+# Nome do arquivo que o Super Admin envia no painel (o envio confere o SHA-256).
+FILE_NAME = "modelo-eventos-16-anos-v3.xlsx"
 
 
 def text(ws, ref):
@@ -41,7 +43,7 @@ def fmt_from(ws, ref, kind):
     """Transforma o texto do modelo em um formato com marcadores."""
     t = text(ws, ref)
     if kind == "date":
-        return re.sub(r"\(\d{2}/\d{2}/\d{4}\) - \d{2}:\d{2}", "({date}) - {time}", t)
+        return re.sub(r"\((?:\d{2}|XX)/(?:\d{2}|XX)/\d{4}\) - \d{2}:\d{2}", "({date}) - {time}", t)
     if kind == "servers":
         def rep(m):
             return "{serversSpaced}" if " " in m.group(0) else "{servers}"
@@ -456,6 +458,82 @@ def ranking_layout(idx, lid, type_, label, word):
 ranking_layout(20, "ranking-consume", "ranking_consume", "Ranking de Consumo", "CONSUME")
 ranking_layout(21, "ranking-recharge", "ranking_recharge", "Ranking de Recarga", "RECHARGE")
 
+# ---------------------------------------------------------------- Solicitações manuais (Activity request)
+# Abas trazidas da planilha "Cronograma Projetos" com scripts/event-template/merge_sheets.py.
+STAMP_RE = re.compile(r"\s*s1\s*-\s*s?\d+\s*$")
+
+
+def request_layout(sheet, lid, label, description, sets=(), extra_fields=()):
+    ws = wb[sheet]
+    cells = [c for row in ws.iter_rows(max_row=25) for c in row if isinstance(c.value, str)]
+    title_cell = next(c.coordinate for c in cells if c.row == 2)
+    date_cells = [c.coordinate for c in cells if c.value.startswith("DATE ")]
+    fields = [title(ws, title_cell)]
+    for k in range(0, len(date_cells), 2):
+        n = k // 2
+        prefix = "" if n == 0 else f"p{n + 1}_"
+        pair = dates(ws, date_cells[k], date_cells[k + 1], prefix)
+        if n:
+            for f in pair:
+                f["label"] = f"{f['label']} ({n + 1}ª data)"
+        fields += pair
+    for c in cells:
+        if STAMP_RE.match(c.value):
+            fields.append(field("serversStamp", "Servidores (selo)", c.coordinate, "derived", "{servers}"))
+    fields += list(extra_fields)
+    layout(wb.sheetnames.index(sheet), lid, "request", label, description, fields, list(sets))
+
+
+SIMPLE_REQUESTS = [
+    ("BR-Adventure Dungeon s1-s402", "request-adventure-dungeon", "Masmorra de Aventura (Adventure Dungeon)"),
+    ("BR-Pop Full s1-s402", "request-dream-challenge", "Desafio dos Sonhos (Dream Challenge)"),
+    ("BR-Good of Fortune s1-s402", "request-god-of-fortune", "Deus da Fortuna (Good of Fortune)"),
+    ("BR-S.Shooting balloon s1-s402", "request-shooting-balloon", "Super Balão de Tiro (Super Shooting Balloon)"),
+    ("BR-DD Destiny s1-s402", "request-dd-destiny", "DD Destino (DD Destiny)"),
+    ("BR-Puzzle s1-s402", "request-puzzle", "Quebra-cabeça (Puzzle)"),
+    ("BR-Chaos Insects s1-s402", "request-chaos-insects", "Caça aos Insetos (Chaos Insects)"),
+    ("BR-Lottery s1-s402", "request-lottery", "Loteria (Lottery)"),
+    ("BR-Nebula Battle s1-s402", "request-nebula-battle", "Batalha Nebulosa (Nebula Battle)"),
+    ("BR-Minefield s1-s402", "request-minefield", "Campo Minado (Minefield)"),
+    ("BR-Romantic Trip s1-s402", "request-romantic-trip", "Viagem Romântica (Romantic Trip)"),
+    ("BR-Who's the Boss s1-s402", "request-whos-the-boss", "Quem é o Chefe? (Who's the Boss)"),
+    ("BR-Bouquet s1-s402", "request-bouquet", "Buquê (Bouquet)"),
+    ("BR-Perfect Couple s1-s402", "request-perfect-couple", "Casal Perfeito (Perfect Couple)"),
+    ("BR-Adq. Sacred Card s1-s402", "request-sacred-card", "Adq. Cartão Sagrado (Adq. Sacred Card)"),
+    ("BR-Squad s1-s402", "request-special-squad", "Esquadrão Especial (Special Squad)"),
+    ("BR-Treasure Maze s1-s402", "request-treasure-maze", "Labirinto do Tesouro (Treasure Maze)"),
+]
+for sheet, lid, label in SIMPLE_REQUESTS:
+    request_layout(sheet, lid, label, "Pedido de inclusão da atividade: datas e servidores.")
+
+request_layout("BR-First Elimination s1-s402", "request-master-elimination", "Mestre de Eliminação (Master of Elimination)",
+               "Pedido de inclusão com três períodos (datas e servidores).")
+
+# Tesouro do Diabo: um item de prêmio.
+request_layout("BR-The devil's treasure s1-s402", "request-devils-treasure", "Tesouro do Diabo (The Devil's Treasure)",
+               "Pedido de inclusão com o item de prêmio da atividade.",
+               [sset("prize", "Prêmio", [block([], [group("items", "Item", [
+                   item_slot("F21", "I21:J21", [{"cell": "K21", "format": "{id}", "rich": "plain"}])])])], 1, "Prêmio")])
+
+# Desvende a Instância: até 3 prêmios com ID*quantidade.
+request_layout("BR-Uncover The Instance s1-s402", "request-uncover-instance", "Desvende a Instância (Uncover the Instance)",
+               "Pedido de inclusão com até 3 prêmios (os 300 primeiros por dia).",
+               [sset("prizes", "Prêmios", [block([], [group("items", "Itens", [
+                   item_slot(f"D{r}", f"G{r}:H{r}", [{"cell": f"I{r}", "format": "{idAmount}", "rich": "idLine"}], hide=[r, r])
+                   for r in (30, 31, 32)])])], 1, "Lista")])
+
+# Capturar Nien: 5 baús com até 5 itens cada e a linha de IDs.
+nien_blocks = [block(
+    [{**field("label", "Baú (nome e meta)", f"C{r}", "textarea"), "default": text(wb["BR-Capture Nien s1-s402"], f"C{r}")},
+     field("idLine", "ID / Quantidade", f"D{r + 2}", "derived", "{idLine:items}", "idLine")],
+    [group("items", "Itens", [item_slot(f"{c}{r}") for c in "DFHJL"])],
+    hide=[r - 1, r + 2],  # a imagem do baú fica na linha acima do nome
+) for r in (16, 20, 24, 28, 32)]
+request_layout("BR-Capture Nien s1-s402", "request-capture-nien", "Capturar Nien (Capture Nien)",
+               "Pedido de inclusão com até 5 baús de prêmio, 5 itens em cada.",
+               [sset("chests", "Baús", nien_blocks, 1, "Baú")])
+
+
 # ---------------------------------------------------------------- fundo por validade
 # No modelo, a célula do nome de itens com validade em dias costuma ter fundo colorido
 # e a de itens permanentes não. Registramos o fillId mais usado em cada caso, por aba.
@@ -506,8 +584,9 @@ for lay in layouts:
         if timed != perm:
             lay["durationFill"] = {"timed": timed, "permanent": perm}
 
+layouts.sort(key=lambda lay: wb.sheetnames.index(lay["sheet"]))  # mesma ordem das abas do modelo
 digest = hashlib.sha256(open(SRC, "rb").read()).hexdigest()
-manifest = {"version": VERSION, "sha256": digest, "fileName": "BR_16_years_of_DDTank_Week_-_s1-s401_ID_2.xlsx",
+manifest = {"version": VERSION, "sha256": digest, "fileName": FILE_NAME,
             "coverLayout": "daily-14d", "layouts": layouts}
 with open(OUT, "w", encoding="utf-8") as f:
     json.dump(manifest, f, ensure_ascii=False, separators=(",", ":"))

@@ -20,5 +20,15 @@ Documentos salvos guardam `template_version`; seções cujo layout não existir 
 
 Entrada Diária (capa), Venda de Munição, Missões (3 layouts), Faça se Puder (2), Desafio da Tribo,
 Troca (6), Recarga, Consumo, Recarga Extra, Consumo Extra e os dois Rankings.
-Ainda não mapeadas: Transformation, Exchange Extra KICK, Collection Tab, Old Return, Code Tab,
-Chaos Insects e Uncover the Instance.
+Solicitações manuais (Activity request): 21 abas, entre elas Masmorra de Aventura, Capturar Nien
+(5 baús), Tesouro do Diabo (prêmio), Desvende a Instância (3 prêmios) e Mestre de Eliminação (3 períodos).
+Ainda não mapeadas: Transformation, Exchange Extra KICK, Collection Tab, Old Return e Code Tab.
+
+## Trazer abas de outra planilha
+
+As solicitações manuais vieram da planilha "Cronograma Projetos ATUALIZADO.xlsx":
+
+    python scripts/event-template/merge_sheets.py modelo-v2.xlsx "Cronograma Projetos ATUALIZADO.xlsx" modelo-eventos-16-anos-v3.xlsx "BR-Adventure Dungeon s1-s402" ...
+
+O script copia as abas com formatação, mesclagens e imagens (as cores do tema da origem viram cores fixas).
+Abas que já existem no modelo são mantidas. Depois, mapeie as abas novas em `build_manifest.py`.

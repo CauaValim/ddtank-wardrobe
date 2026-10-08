@@ -162,6 +162,13 @@ export async function readSection(pkg: XlsxPackage, layout: LayoutSpec, sheetNam
  * layouts share the exact same structure (Recharge × Consume, the two Rankings), so the name
  * decides the type and the structure decides the layout inside it.
  */
+/** "BR-Lottery {servers}" -> reconhece "BR-Lottery s1-s401", "BR-Lottery s402 2"... */
+function namePattern(layout: LayoutSpec): RegExp {
+  const [before, after = ""] = layout.sheetNamePattern.split("{servers}");
+  const esc = (s: string) => s.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\s+/g, "\\s*");
+  return new RegExp(`^${esc(before)}\\s*s\\d[\\w\\s-]*${esc(after)}(\\s+\\d+)?$`, "i");
+}
+
 function typesFromName(name: string): string[] {
   const n = name.toLowerCase();
   if (/ranking/.test(n)) return /recharge|recarga/.test(n) ? ["ranking_recharge"] : /consum/.test(n) ? ["ranking_consume"] : [];
@@ -201,7 +208,7 @@ const MIN_MATCH = 0.75;
 export async function detectLayout(pkg: XlsxPackage, manifest: TemplateManifest, sheetName: string): Promise<LayoutSpec | null> {
   const exact = manifest.layouts.find((l) => l.sheet === sheetName);
   const types = typesFromName(sheetName);
-  const candidates = manifest.layouts.filter((l) => l === exact || types.includes(l.type));
+  const candidates = manifest.layouts.filter((l) => l === exact || types.includes(l.type) || (l.type === "request" && namePattern(l).test(sheetName)));
   if (candidates.length === 0) return null;
   const ws = await pkg.worksheet(sheetName);
   let best: LayoutSpec | null = null;
@@ -268,7 +275,7 @@ export async function readDocument(data: ArrayBuffer, manifest: TemplateManifest
       }
     }
     // A capa sem Entrada Diária (e abas vazias) não vira seção.
-    if (Object.values(section.sets).every((blocks) => blocks.length === 0)) continue;
+    if (layout.sets.length > 0 && Object.values(section.sets).every((blocks) => blocks.length === 0)) continue;
     sections.push(section);
   }
   // Sem capa: os servidores mais comuns entre as abas ("s402" em planilhas de servidores novos).

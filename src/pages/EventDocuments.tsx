@@ -19,6 +19,7 @@ import { LayoutPicker } from "@/components/events/LayoutPicker";
 import { TemplateBanner } from "@/components/events/TemplateBanner";
 import { DateField } from "@/components/events/DateInputs";
 import { PresetsPanel } from "@/components/events/PresetsPanel";
+import { ManualRequestsPanel } from "@/components/events/ManualRequestsPanel";
 import { ItemRulesPanel } from "@/components/events/ItemRulesPanel";
 import { HistoryPanel } from "@/components/events/HistoryPanel";
 import { PastEventsImport } from "@/components/events/PastEventsImport";
@@ -227,6 +228,7 @@ function DocList({ group }: { group: ServerGroup }) {
           <TabsTrigger value="docs">Documentos ({created.length})</TabsTrigger>
           <TabsTrigger value="past">Eventos anteriores ({past.length})</TabsTrigger>
           <TabsTrigger value="presets">Pré-definições</TabsTrigger>
+          <TabsTrigger value="requests">Solicitações manuais</TabsTrigger>
           <TabsTrigger value="items">Categorias de itens</TabsTrigger>
           {isAdmin && <TabsTrigger value="history" className="gap-1"><History className="h-3.5 w-3.5" /> Histórico</TabsTrigger>}
         </TabsList>
@@ -249,6 +251,10 @@ function DocList({ group }: { group: ServerGroup }) {
 
         <TabsContent value="presets">
           <PresetsPanel group={group} canEdit={isAdmin} />
+        </TabsContent>
+
+        <TabsContent value="requests">
+          <ManualRequestsPanel docs={created} onAdded={(docId) => navigate(`/eventos/${docId}`)} />
         </TabsContent>
 
         <TabsContent value="items">

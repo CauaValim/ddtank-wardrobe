@@ -42,6 +42,9 @@ const INTENTIONAL: Record<string, string[]> = {
   "missions-requirements": ["B4", "B5"],
   "doit-requirements": ["M21"],
   "exchange-two-coins": ["F23"],
+  // Selo de servidores escrito errado no modelo (s1-s398) e item de prêmio sem ID (XXX ao exportar).
+  "request-nebula-battle": ["U10"],
+  "request-devils-treasure": ["K21"],
 };
 
 function bufferOf(file: string): ArrayBuffer {
@@ -98,7 +101,7 @@ describe.skipIf(!hasTemplate)("modelo oficial de eventos", () => {
       const doc = docWith(section);
       // Every block that has content in the template must be read.
       const counts = layout.sets.map((s) => (section.sets[s.key] ?? []).length);
-      expect(counts.some((n) => n > 0)).toBe(true);
+      if (layout.sets.length) expect(counts.some((n) => n > 0)).toBe(true);
 
       const result = await exportDocument(template, manifest, doc, { loadImage: fakeImage });
       const out = await XlsxPackage.load(result.data);
@@ -123,6 +126,8 @@ describe.skipIf(!hasTemplate)("modelo oficial de eventos", () => {
       for (const cell of Array.from(new Set(cells)).filter((c) => !(INTENTIONAL[layout.id] ?? []).includes(c))) {
         const a = norm(await src.getText(cell));
         const b = norm(await dst.getText(cell));
+        // Abas de solicitação manual vêm do modelo sem dados: "(XX/XX/2026)", "*XX,*XX".
+        if (/XX/.test(a)) continue;
         if (a !== b && !(src.isNumeric(cell) && /^\d{2}\/\d{2}\/\d{4}$/.test(b))) diffs.push(`${cell}: "${a}" -> "${b}"`);
       }
       expect(diffs).toEqual([]);
@@ -228,7 +233,8 @@ describe.skipIf(!hasTemplate)("modelo oficial de eventos", () => {
   it("evento anterior: a planilha inteira é reconhecida aba por aba e guardada sem imagens", async () => {
     const doc = await readDocument(template, manifest);
     // Cada aba do modelo volta com o próprio layout, mesmo as que dividem o padrão de nome.
-    expect(doc.sections.map((s) => s.layoutId)).toEqual(manifest.layouts.map((l) => l.id));
+    // "Capturar Nien" só tem itens de exemplo ("Item Name") no modelo, que a leitura descarta.
+    expect(doc.sections.map((s) => s.layoutId)).toEqual(manifest.layouts.map((l) => l.id).filter((id) => id !== "request-capture-nien"));
     const archived = archiveDocument(doc, "(BR) 16 years of DDTank Week - s1-s401 (ID) (2).xlsx");
     expect(archived.title).toBe("(BR) 16 years of DDTank Week - s1-s401 (ID) (2)");
     expect(archived.start_date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
@@ -236,6 +242,36 @@ describe.skipIf(!hasTemplate)("modelo oficial de eventos", () => {
     const usage = buildUsageIndex([{ id: "x", title: archived.title, start_date: archived.start_date, sections: archived.sections }]);
     expect([...usage.values()].flat().some((u) => u.kind === "exchange")).toBe(true);
     expect([...usage.values()].flat().some((u) => u.kind === "ranking")).toBe(true);
+  }, 120_000);
+
+  it("cenário: solicitações manuais com datas, servidores e prêmios", async () => {
+    const lottery = newSection(getLayout("request-lottery")!, "s1-s401");
+    lottery.fields = { start: "2026-10-12T00:00", end: "2026-10-18T23:59" };
+    const nien = newSection(getLayout("request-capture-nien")!, "s402");
+    nien.fields = { start: "2026-10-12T00:00", end: "2026-10-18T23:59" };
+    nien.sets.chests[0].groups.items = [newItem({ id: "11020", name: "Pedra de Fortificação", qty: 5 }), newItem({ id: "11021", name: "Pedra Mágica", qty: 2 })];
+    const devil = newSection(getLayout("request-devils-treasure")!, "s1-s401");
+    devil.sets.prize[0].groups.items = [newItem({ id: "1120098", name: "Oferta de Nível Alto" })];
+    const doc: EventDocument = { ...docWith(lottery), sections: [lottery, nien, devil] };
+    expect(nien.sets.chests[0].fields.label).toBe("Baú do Monstro travesso Nv.1\n5Mil");
+
+    const result = await exportDocument(template, manifest, doc, { loadImage: fakeImage });
+    const out = await XlsxPackage.load(result.data);
+    expect((await out.sheets()).map((x) => x.name)).toEqual([
+      "BR-Daily Entry - 14D s1-s401", "BR-Lottery s1-s401", "BR-Capture Nien s402", "BR-The devil's treasure s1-s401",
+    ]);
+    const l = await out.worksheet("BR-Lottery s1-s401");
+    expect(await l.getText("C2")).toBe("Lottery - Activity request s1 - s401");
+    expect(await l.getText("F9")).toBe("DATE ENTRY:  (10/12/2026) - 00:00");
+    expect(await l.getText("F10")).toBe("DATE END: (10/18/2026) - 23:59");
+    expect(await l.getText("U10")).toBe("s1-s401");
+    const n = await out.worksheet("BR-Capture Nien s402");
+    expect(await n.getText("C16")).toBe("Baú do Monstro travesso Nv.1\n5Mil");
+    expect(await n.getText("D18")).toBe("11020*5,11021*2");
+    expect(n.isRowHidden(20)).toBe(true); // baú 2 sem uso
+    const d = await out.worksheet("BR-The devil's treasure s1-s401");
+    expect(await d.getText("K21")).toBe("1120098");
+    expect(await d.getText("F21")).toContain("Oferta de Nível Alto");
   }, 120_000);
 
   it("cenário: Entrada Diária de 7 dias e fundo laranja nos itens renováveis", async () => {

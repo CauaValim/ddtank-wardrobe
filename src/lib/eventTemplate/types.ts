@@ -15,6 +15,8 @@ export interface FieldSpec {
   format: string;
   rich: RichKind;
   options?: string[];
+  /** Texto inicial do campo em blocos novos (ex.: nome do baú no modelo). */
+  default?: string;
 }
 
 export interface CellSpec {

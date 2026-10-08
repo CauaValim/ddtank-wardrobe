@@ -24,10 +24,12 @@ export const LAYOUT_GROUPS: { type: string; label: string }[] = [
   { type: "consume_extra", label: "Consumo Extra" },
   { type: "ranking_recharge", label: "Ranking de Recarga" },
   { type: "ranking_consume", label: "Ranking de Consumo" },
+  { type: "request", label: "Solicitação manual" },
 ];
 
 export function emptyBlock(spec: BlockSpec): EventBlock {
   const block: EventBlock = { fields: {}, groups: {} };
+  for (const f of spec.fields) if (f.default) block.fields[f.key] = f.default;
   for (const g of spec.groups) block.groups[g.key] = [];
   if (spec.children) block.children = Array.from({ length: spec.children.minBlocks }, (_, i) => emptyBlock(spec.children!.blocks[i]));
   return block;
@@ -50,6 +52,7 @@ export function newItem(partial: Partial<EventItem> = {}): EventItem {
 
 /** Number of item slots a layout offers (used in the layout picker). */
 export function capacitySummary(layout: LayoutSpec): string {
+  if (layout.sets.length === 0) return "datas e servidores";
   return layout.sets
     .map((set) => {
       const first = set.blocks[0];
