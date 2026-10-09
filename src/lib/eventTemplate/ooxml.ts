@@ -828,6 +828,17 @@ export class Worksheet {
     this.pkg.touch(this.path);
   }
 
+  setNumber(ref: string, value: number) {
+    this.assertWritable(ref);
+    const cell = this.findCell(ref, true) as Element;
+    for (const child of Array.from(cell.children)) cell.removeChild(child);
+    cell.removeAttribute("t");
+    const v = this.doc.createElementNS(NS.main, "v");
+    v.textContent = String(value);
+    cell.appendChild(v);
+    this.pkg.touch(this.path);
+  }
+
   async setRich(ref: string, runs: RichRun[]) {
     this.assertWritable(ref);
     const text = runs.map((r) => r.text).join("");
@@ -836,8 +847,14 @@ export class Worksheet {
       return;
     }
     const cell = this.findCell(ref, true) as Element;
-    const font = await this.pkg.fontForStyle(Number(cell.getAttribute("s") ?? "0"));
     const plain = runs.every((r) => r.bold === undefined && !r.color);
+    // Só dígitos (IDs): grava como número, como no modelo. Como texto, o Excel marca a célula
+    // com o aviso "número armazenado como texto".
+    if (plain && /^(0|[1-9]\d{0,14})$/.test(text)) {
+      this.setNumber(ref, Number(text));
+      return;
+    }
+    const font = await this.pkg.fontForStyle(Number(cell.getAttribute("s") ?? "0"));
     const index = await this.pkg.addSharedString((doc) => {
       const si = doc.createElementNS(NS.main, "si");
       const addT = (parent: Element, value: string) => {

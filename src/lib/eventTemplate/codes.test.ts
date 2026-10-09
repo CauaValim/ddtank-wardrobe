@@ -49,6 +49,7 @@ describe.skipIf(!hasTemplate)("modelo de solicitação de códigos", () => {
     expect(await k.getText("D9")).toBe('QUANTITY OF "Kick Subs - November" CODES: [500].');
     expect(await k.getText("F12")).toBe("Kick Subs - Novembro");
     expect(await k.getText("I15")).toBe("123180");
+    expect(k.isNumeric("I15")).toBe(true); // ID como número: sem o aviso "número armazenado como texto"
     expect(await k.getText("J15")).toBe("*1");
     expect(await k.getText("D17")).toBe(""); // vagas sem item ficam vazias
     expect(await k.getText("L29")).toContain("Kick"); // justificativa do modelo
