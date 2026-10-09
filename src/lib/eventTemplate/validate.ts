@@ -1,5 +1,6 @@
 import type { BlockSpec, EventBlock, EventDocument, LayoutSpec, SetSpec, TemplateManifest } from "./types";
 import { editorBlockSpec, sectionIssues, setCapacity } from "./rules";
+import { coverWithPrizes } from "./model";
 
 export interface ValidationIssue {
   level: "error" | "warning";
@@ -57,7 +58,7 @@ function checkSet(issues: ValidationIssue[], where: string, set: SetSpec, blocks
 
 export function validateEventDocument(doc: EventDocument, manifest: TemplateManifest, opts: ValidationOptions): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
-  if (!doc.theme?.trim()) issues.push({ level: "warning", where: "Capa", message: "Preencha o tema (aparece na capa como \"EVENT FOR THE SERVERS\")" });
+  if (coverWithPrizes(doc) && !doc.theme?.trim()) issues.push({ level: "warning", where: "Capa", message: "Preencha o tema (aparece na capa como \"EVENT FOR THE SERVERS\")" });
   if (doc.sections.length === 0) issues.push({ level: "error", where: "Documento", message: "Adicione ao menos uma seção" });
   doc.sections.forEach((section, i) => {
     const layout: LayoutSpec | undefined = manifest.layouts.find((l) => l.id === section.layoutId);

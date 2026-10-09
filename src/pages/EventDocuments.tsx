@@ -25,7 +25,7 @@ import { HistoryPanel } from "@/components/events/HistoryPanel";
 import { PastEventsImport } from "@/components/events/PastEventsImport";
 import type { PresetApi } from "@/components/events/PresetControls";
 import { isoToUs } from "@/lib/eventTemplate/format";
-import { isRequestSection, manifest, newId, newSection, normalizeSections, orderSections, requestsManifest } from "@/lib/eventTemplate/model";
+import { coverWithPrizes, isRequestSection, manifest, newId, newSection, normalizeSections, orderSections, requestsManifest } from "@/lib/eventTemplate/model";
 import { exportDocument } from "@/lib/eventTemplate/exporter";
 import { readDocument } from "@/lib/eventTemplate/importer";
 import { resolveIdsByName } from "@/lib/eventTemplate/resolveNames";
@@ -387,10 +387,16 @@ function Editor({ id }: { id: string }) {
       )}
 
       <Card className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4">
-        <label className="block space-y-1 lg:col-span-2">
-          <span className="text-xs text-muted-foreground">Evento na capa (em inglês, como em "EVENT FOR THE SERVERS")</span>
-          <Input value={doc.theme ?? ""} placeholder="16th Birthday Week 1" onChange={(e) => update({ theme: e.target.value })} />
-        </label>
+        {coverWithPrizes(doc) ? (
+          <label className="block space-y-1 lg:col-span-2">
+            <span className="text-xs text-muted-foreground">Evento na capa (em inglês, como em "EVENT FOR THE SERVERS")</span>
+            <Input value={doc.theme ?? ""} placeholder="16th Birthday Week 1" onChange={(e) => update({ theme: e.target.value })} />
+          </label>
+        ) : (
+          <p className="self-end text-xs text-muted-foreground lg:col-span-2">
+            A aba da Entrada Diária (com "EVENT FOR THE SERVERS") só entra no arquivo quando a Entrada Diária tem premiação.
+          </p>
+        )}
         <label className="block space-y-1">
           <span className="text-xs text-muted-foreground">Servidores do documento</span>
           <Input value={doc.servers} onChange={(e) => update({ servers: e.target.value })} />

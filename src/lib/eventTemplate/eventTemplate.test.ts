@@ -114,8 +114,8 @@ describe.skipIf(!hasTemplate)("modelo oficial de eventos", () => {
       const result = await exportDocument(template, manifest, doc, deps);
       const out = await XlsxPackage.load(result.data);
       const sheets = await out.sheets();
-      const isCover = layout.id === manifest.coverLayout;
-      expect(sheets.length).toBe(isCover ? 1 : 2);
+      // Sem Entrada Diária com prêmios, a aba da capa não entra: só a aba da seção.
+      expect(sheets.length).toBe(1);
       const exportedName = sheets[sheets.length - 1].name;
 
       // Package hygiene.
@@ -179,14 +179,16 @@ describe.skipIf(!hasTemplate)("modelo oficial de eventos", () => {
 
     const result = await exportDocument(template, manifest, doc, deps);
     const out = await XlsxPackage.load(result.data);
+    // Sem Entrada Diária com prêmios: a aba da capa ("EVENT FOR THE SERVERS") não entra.
     expect((await out.sheets()).map((x) => x.name)).toEqual([
-      "BR-Daily Entry - 14D s1-s401", "BR-Missions s1-s402", "BR - Ammunitions sale s1-s401", "BR - Recharge s1-s401", "BR-Missions s1-s401",
+      "BR-Missions s1-s402", "BR - Ammunitions sale s1-s401", "BR - Recharge s1-s401", "BR-Missions s1-s401",
     ]);
     expect(result.data.byteLength).toBeLessThan(2_000_000);
 
-    const cover = await out.worksheet("BR-Daily Entry - 14D s1-s401");
-    expect(await cover.getText("B17")).toBe("EVENT FOR THE SERVERS: Panel Test Week 1 - s1-s401");
-    expect(cover.isColHidden(16)).toBe(true); // área da Entrada Diária oculta
+    // Entrada Diária sem nenhum prêmio também não gera a aba.
+    const emptyDaily = newSection(getLayout("daily-14d")!, "s1-s401");
+    const noPrize = await exportDocument(template, manifest, { ...doc, sections: [emptyDaily, recharge] }, deps);
+    expect((await (await XlsxPackage.load(noPrize.data)).sheets()).map((x) => x.name)).toEqual(["BR - Recharge s1-s401"]);
 
     const m = await out.worksheet("BR-Missions s1-s402");
     expect(await m.getText("P2")).toBe("ACTIVE MISSIONS s1-s402");
@@ -225,7 +227,7 @@ describe.skipIf(!hasTemplate)("modelo oficial de eventos", () => {
     const out = await XlsxPackage.load(result.data);
     const names = (await out.sheets()).map((x) => x.name);
     // A aba de missões com escolha do modelo é dos servidores s1-s402.
-    expect(names).toEqual(["BR-Daily Entry - 14D s1-s401", "BR-Missions s1-s401", "BR-Missions s1-s401 2", "BR-Missions s1-s402", "BR-Missions s1-s402 2"]);
+    expect(names).toEqual(["BR-Missions s1-s401", "BR-Missions s1-s401 2", "BR-Missions s1-s402", "BR-Missions s1-s402 2"]);
 
     const page2 = await out.worksheet("BR-Missions s1-s401 2");
     expect(await page2.getText("V11")).toBe("Missão 9");
@@ -278,7 +280,7 @@ describe.skipIf(!hasTemplate)("modelo oficial de eventos", () => {
     const result = await exportDocument(template, manifest, doc, deps);
     const out = await XlsxPackage.load(result.data);
     expect((await out.sheets()).map((x) => x.name)).toEqual([
-      "BR-Daily Entry - 14D s1-s401", "BR - Ammunitions sale s1-s401", "BR-Lottery s1-s401", "BR-Capture Nien s402", "BR-The devil's treasure s1-s401",
+      "BR - Ammunitions sale s1-s401", "BR-Lottery s1-s401", "BR-Capture Nien s402", "BR-The devil's treasure s1-s401",
     ]);
     const l = await out.worksheet("BR-Lottery s1-s401");
     expect(await l.getText("C2")).toBe("Lottery - Activity request s1 - s401");

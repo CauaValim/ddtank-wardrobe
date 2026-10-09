@@ -2,7 +2,7 @@ import { Drawing, type ImageData } from "./drawing";
 import { FormatContext, itemLabel, renderFormat, richRuns } from "./format";
 import { Worksheet, XlsxPackage, parseRange } from "./ooxml";
 import { isRenewable, normalizeSection, paginateSection, tierTotals } from "./rules";
-import { orderSections } from "./model";
+import { hasPrizes, orderSections } from "./model";
 import type { BlockSpec, DecorationSpec, EventBlock, EventDocument, EventItem, EventSection, FieldSpec, LayoutSpec, SetSpec, SlotSpec, TemplateManifest } from "./types";
 
 export interface ExportDeps {
@@ -247,9 +247,12 @@ export async function exportDocument(template: ArrayBuffer, manifest: TemplateMa
   const sections = orderSections(doc.sections); // solicitações manuais saem no final
   const coverIndex = cover ? sections.findIndex((s) => s.layoutId === cover.id) : -1;
   const coverSection = coverIndex >= 0 ? sections.splice(coverIndex, 1)[0] : null;
+  // A aba da Entrada Diária (com "EVENT FOR THE SERVERS") só entra quando ela tem premiação.
+  const withCover = !!cover && hasPrizes(coverSection);
+  if (!withCover && sections.length === 0) throw new Error("O documento não tem nenhuma aba para exportar: adicione prêmios à Entrada Diária ou outra seção");
   // Sections larger than one tab (missions without limit) become continuation tabs.
   const entries: { section: EventSection | null; layout: LayoutSpec }[] = [
-    ...(cover ? [{ section: coverSection, layout: cover }] : []),
+    ...(withCover && cover ? [{ section: coverSection, layout: cover }] : []),
     ...sections.flatMap((s) => {
       const layout = layoutById(manifest, s.layoutId);
       // Textos padronizados (preço com ponto, limite da munição) mesmo em seções editadas depois de abertas.

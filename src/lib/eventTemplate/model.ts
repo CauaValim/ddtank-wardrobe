@@ -3,7 +3,7 @@ import requestsJson from "./requestsManifest.json";
 import codesJson from "./codesManifest.json";
 import { parseItemLabel } from "./format";
 import { applyDailyLength, normalizeSection } from "./rules";
-import type { BlockSpec, EventBlock, EventItem, EventSection, LayoutSpec, RequestsManifest, SetSpec, TemplateManifest } from "./types";
+import type { BlockSpec, EventBlock, EventDocument, EventItem, EventSection, LayoutSpec, RequestsManifest, SetSpec, TemplateManifest } from "./types";
 
 /** Arquivo separado das solicitações manuais (não faz parte do modelo oficial). */
 export const requestsManifest = requestsJson as RequestsManifest;
@@ -70,6 +70,17 @@ export const isRequestSection = (s: Pick<EventSection, "layoutId">) => getLayout
 export function orderSections<T extends Pick<EventSection, "layoutId">>(sections: T[]): T[] {
   return [...sections.filter((s) => !isRequestSection(s)), ...sections.filter(isRequestSection)];
 }
+
+/** A seção tem algum prêmio (item) em qualquer bloco? */
+export function hasPrizes(section: Pick<EventSection, "sets"> | null | undefined): boolean {
+  const any = (blocks: EventBlock[]): boolean =>
+    blocks.some((b) => Object.values(b.groups).some((items) => items.length > 0) || any(b.children ?? []));
+  return !!section && Object.values(section.sets).some(any);
+}
+
+/** Entrada Diária (capa) com premiação: só então a aba entra no documento exportado. */
+export const coverWithPrizes = (doc: Pick<EventDocument, "sections">) =>
+  doc.sections.some((s) => s.layoutId === manifest.coverLayout && hasPrizes(s));
 
 export function newItem(partial: Partial<EventItem> = {}): EventItem {
   return { id: "XXX", name: "", qty: 1, duration: "Permanent", bind: "Bound", ...partial };
