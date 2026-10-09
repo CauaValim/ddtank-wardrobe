@@ -1,7 +1,7 @@
 import { Drawing, type ImageData } from "./drawing";
 import { FormatContext, itemLabel, renderFormat, richRuns } from "./format";
 import { Worksheet, XlsxPackage, parseRange } from "./ooxml";
-import { isRenewable, normalizeSection, paginateSection } from "./rules";
+import { isRenewable, normalizeSection, paginateSection, tierTotals } from "./rules";
 import { orderSections } from "./model";
 import type { BlockSpec, DecorationSpec, EventBlock, EventDocument, EventItem, EventSection, FieldSpec, LayoutSpec, SetSpec, SlotSpec, TemplateManifest } from "./types";
 
@@ -220,6 +220,8 @@ async function fillSheet(ctx: FillContext, coverOnly: boolean) {
     if (!block || (block.groups[rule.group] ?? []).length === 0) ws.hideRows(rule.rows[0], rule.rows[1]);
   }
   for (const range of layout.clearRanges ?? []) ws.clearRange(range);
+  // Quadro "TOTAL" (Recarga / Consumo): calculado das faixas que podem ser repetidas.
+  if (section) for (const t of tierTotals(layout, section)) ws.setNumber(t.cell, t.value);
   if (coverOnly && layout.cover) ws.hideColumns(layout.cover.hideColsWithoutSection);
   if (ctx.drawing) {
     await ctx.drawing.removeHidden((r) => ws.isRowHidden(r), (c) => ws.isColHidden(c));

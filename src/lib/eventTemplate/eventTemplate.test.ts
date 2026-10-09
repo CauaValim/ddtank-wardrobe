@@ -204,6 +204,11 @@ describe.skipIf(!hasTemplate)("modelo oficial de eventos", () => {
     const r = await out.worksheet("BR - Recharge s1-s401");
     expect(await r.getText("B8")).toBe("RECHARGE OF 2.000 COUPONS");
     expect(await r.getText("N5")).toBe(""); // colunas auxiliares limpas
+    // Quadro TOTAL: quantidade × (400.000 ÷ piso) nas faixas que se repetem.
+    expect(await r.getText("L5")).toBe("400"); // 1.000 -> 400 × 1
+    expect(await r.getText("L8")).toBe("400"); // 2.000 -> 200 × 2
+    expect(r.isNumeric("L5")).toBe(true);
+    expect(await r.getText("L6")).toBe(""); // vaga sem item
     expect(r.isRowHidden(11)).toBe(true);
   }, 120_000);
 

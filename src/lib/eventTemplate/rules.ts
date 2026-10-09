@@ -112,14 +112,16 @@ export function applyDailyLength(layout: LayoutSpec, section: EventSection, days
 export interface TierLadder {
   values: string[];
   repeatable: string[];
+  /** Quadro "TOTAL" ao lado das imagens: coluna e linhas (uma por item das faixas que se repetem). */
+  totals?: { column: string; rows: [number, number] };
 }
 
 const RECHARGE = ["500", "1.000", "2.000", "5.000", "8.000", "15.000", "30.000", "50.000", "100.000", "150.000", "200.000", "300.000", "400.000"];
 const CONSUME = ["1.000", "5.000", "10.000", "30.000", "50.000", "100.000", "150.000", "200.000", "300.000", "400.000"];
 
 const LADDERS: Record<string, TierLadder> = {
-  "recharge-13": { values: RECHARGE, repeatable: ["500", "1.000", "2.000"] },
-  "consume-10": { values: CONSUME, repeatable: ["1.000"] },
+  "recharge-13": { values: RECHARGE, repeatable: ["500", "1.000", "2.000"], totals: { column: "L", rows: [5, 13] } },
+  "consume-10": { values: CONSUME, repeatable: ["1.000"], totals: { column: "L", rows: [5, 7] } },
   "recharge-extra-5": { values: ["10.000", "15.000", "20.000", "30.000", "50.000"], repeatable: [] },
   "consume-extra-5": { values: ["10.000", "20.000", "30.000", "40.000", "50.000"], repeatable: [] },
 };
@@ -139,6 +141,33 @@ export function normalizeTier(value: string): string {
 }
 
 export const tierNumber = (value: string) => Number(value.replace(/\D/g, "")) || 0;
+
+/**
+ * Quadro "TOTAL" da Recarga e do Consumo: para cada item de uma faixa que pode ser repetida,
+ * quantidade × (piso mais alto ÷ piso da faixa), como nas fórmulas do modelo
+ * (ex.: Recarga de 500 com o piso máximo de 400.000 -> 800 × quantidade).
+ */
+export function tierTotals(layout: LayoutSpec, section: EventSection): { cell: string; value: number }[] {
+  const ladder = tierLadder(layout);
+  const set = layout.sets.find((s) => s.key === "tiers");
+  if (!ladder?.totals || !set) return [];
+  const top = Math.max(...ladder.values.map(tierNumber));
+  const [first, last] = ladder.totals.rows;
+  const out: { cell: string; value: number }[] = [];
+  (section.sets.tiers ?? []).forEach((block, i) => {
+    const value = tierNumber(block.fields.value ?? "");
+    const repeatable = ladder.repeatable.includes(normalizeTier(block.fields.value ?? "")) || block.fields.condition === REPEATABLE;
+    const spec = set.blocks[i];
+    if (!value || !repeatable || !spec) return;
+    const per = Math.floor(top / value);
+    const slots = spec.groups.find((g) => g.key === "items")?.slots ?? [];
+    (block.groups.items ?? []).forEach((item, j) => {
+      const row = Number(/\d+$/.exec(slots[j]?.cells[0]?.cell ?? "")?.[0]);
+      if (row >= first && row <= last) out.push({ cell: `${ladder.totals!.column}${row}`, value: per * (item.qty || 1) });
+    });
+  });
+  return out;
+}
 
 export function tierCondition(ladder: TierLadder, value: string): string {
   return ladder.repeatable.includes(normalizeTier(value)) ? REPEATABLE : NOT_REPEATABLE;

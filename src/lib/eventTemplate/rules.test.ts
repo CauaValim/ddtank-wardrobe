@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { getLayout, newItem, newSection } from "./model";
 import {
   ammoLimitText, applyDailyLength, dailyLength, formatPrice, editorBlockSpec, exchangeLimitText, highestStandardTier, isRenewable, normalizeSection,
-  normalizeTier, paginateSection, parseAmmoLimit, parseExchangeLimit, sectionIssues, setCapacity, tierCondition, tierLadder, tiersUpTo,
+  normalizeTier, paginateSection, parseAmmoLimit, tierTotals, parseExchangeLimit, sectionIssues, setCapacity, tierCondition, tierLadder, tiersUpTo,
 } from "./rules";
 import type { EventBlock } from "./types";
 
@@ -150,5 +150,26 @@ describe("venda de munição", () => {
     ] } }];
     const items = normalizeSection(layout, s).sets.blocks[0].groups.items;
     expect(items.map((i) => [i.extra?.price, i.extra?.condition])).toEqual([["120.000", "No limit"], ["4.000", "Limit 1 items per server"]]);
+  });
+});
+
+describe("quadro TOTAL da Recarga e do Consumo", () => {
+  it("multiplica a quantidade por 400.000 ÷ piso nas faixas que se repetem", () => {
+    const layout = getLayout("recharge-13")!;
+    const s = newSection(layout, "s1-s401");
+    s.sets.tiers = tiersUpTo(layout, s, "5.000").sets.tiers;
+    s.sets.tiers[0].groups.items = [newItem({ qty: 2 }), newItem({ qty: 10 }), newItem({ qty: 1 })];
+    s.sets.tiers[1].groups.items = [newItem({ qty: 6 })];
+    s.sets.tiers[2].groups.items = [newItem({ qty: 2 })];
+    s.sets.tiers[3].groups.items = [newItem({ qty: 9 })]; // 5.000 não se repete
+    expect(tierTotals(layout, s)).toEqual([
+      { cell: "L5", value: 1600 }, { cell: "L6", value: 8000 }, { cell: "L7", value: 800 },
+      { cell: "L8", value: 2400 }, { cell: "L11", value: 400 },
+    ]);
+    const consume = getLayout("consume-10")!;
+    const c = newSection(consume, "s1-s401");
+    c.sets.tiers = tiersUpTo(consume, c, "1.000").sets.tiers;
+    c.sets.tiers[0].groups.items = [newItem({ qty: 5 })];
+    expect(tierTotals(consume, c)).toEqual([{ cell: "L5", value: 2000 }]);
   });
 });
