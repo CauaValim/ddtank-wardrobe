@@ -1,6 +1,8 @@
 import { NS, Range, SheetGeometry, Worksheet, XlsxPackage, childrenByName, descendants, firstChild, relsPathOf } from "./ooxml";
 
 const IMAGE_REL = `${NS.rel}/image`;
+/** Tamanho das imagens de itens: 1,4 cm (1 cm = 360.000 EMU). */
+export const ITEM_IMAGE_EMU = Math.round(1.4 * 360000);
 
 export interface ImageData {
   /** PNG bytes. */
@@ -192,9 +194,9 @@ export class Drawing {
   }
 
   /**
-   * Puts the images of the slots that share `range` into it.
-   * Existing pictures keep their frame (the new image is fitted inside it, keeping
-   * the aspect ratio); missing ones are laid out in a grid inside the range.
+   * Puts the images of the slots that share `range` into it: each one 1,4 cm (the longer side,
+   * keeping the aspect ratio) and exactly in the middle of the range (the exporter grows it to
+   * the merged cell). Slots that share a box are laid out in a grid; pictures there are replaced.
    */
   async fillBox(range: Range, images: (ImageData | null)[], label: string) {
     const existing = await this.inBox(range);
@@ -208,28 +210,13 @@ export class Drawing {
         if (unit) this.remove(unit);
         continue;
       }
-      let frame: { x1: number; y1: number; x2: number; y2: number };
-      if (unit) {
-        frame = unit.rect;
-      } else {
-        const cw = (box.x2 - box.x1) / cols;
-        const ch = (box.y2 - box.y1) / rows;
-        const cx = box.x1 + (i % cols) * cw;
-        const cy = box.y1 + Math.floor(i / cols) * ch;
-        const pad = Math.min(cw, ch) * 0.08;
-        frame = { x1: cx + pad, y1: cy + pad, x2: cx + cw - pad, y2: cy + ch - pad };
-        const maxSide = 64 * 9525; // template icons are ~52–64 px
-        const w = frame.x2 - frame.x1;
-        const h = frame.y2 - frame.y1;
-        if (w > maxSide) {
-          frame.x1 += (w - maxSide) / 2;
-          frame.x2 = frame.x1 + maxSide;
-        }
-        if (h > maxSide) {
-          frame.y1 += (h - maxSide) / 2;
-          frame.y2 = frame.y1 + maxSide;
-        }
-      }
+      const cw = (box.x2 - box.x1) / cols;
+      const ch = (box.y2 - box.y1) / rows;
+      const cx = box.x1 + (i % cols) * cw + cw / 2;
+      const cy = box.y1 + Math.floor(i / cols) * ch + ch / 2;
+      // 1,4 cm; menor só se a célula não comportar.
+      const side = Math.min(ITEM_IMAGE_EMU, cw, ch);
+      const frame = { x1: cx - side / 2, y1: cy - side / 2, x2: cx + side / 2, y2: cy + side / 2 };
       const relId = await this.addMedia(image);
       const anchor = this.buildAnchor(this.fit(image, frame), relId, label);
       if (unit) {

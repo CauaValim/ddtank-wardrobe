@@ -8,7 +8,7 @@ import { applyDailyLength } from "./rules";
 import { archiveDocument } from "./pastEvents";
 import { buildUsageIndex } from "./usage";
 import { XlsxPackage, descendants, parseRange } from "./ooxml";
-import { Drawing } from "./drawing";
+import { Drawing, ITEM_IMAGE_EMU } from "./drawing";
 import type { BlockSpec, EventBlock, EventDocument, LayoutSpec, SetSpec, TemplateManifest } from "./types";
 import { getLayout, manifest, newItem, newSection, requestsManifest } from "./model";
 import { parseFormat, parseIdLine, parseItemLabel, renderFormat, richRuns } from "./format";
@@ -198,6 +198,15 @@ describe.skipIf(!hasTemplate)("modelo oficial de eventos", () => {
 
     const a = await out.worksheet("BR - Ammunitions sale s1-s401");
     const drawing = await Drawing.open(a);
+    // Imagem do item: 1,4 cm e exatamente no meio da célula (mesclada) da imagem.
+    const slotBox = parseRange(getLayout("ammo-7x6")!.sets[0].blocks[0].groups[0].slots[0].image!);
+    const merged = a.mergeOf(`D${slotBox.r1}`) ?? slotBox;
+    const cell = a.geometry().rect(merged);
+    const [pic] = (await drawing!.inBox(merged)).filter((u) => u.media?.includes("event-item-"));
+    expect(pic.rect.x2 - pic.rect.x1).toBe(ITEM_IMAGE_EMU);
+    expect(pic.rect.y2 - pic.rect.y1).toBe(ITEM_IMAGE_EMU);
+    expect(Math.abs((pic.rect.x1 + pic.rect.x2) / 2 - (cell.x1 + cell.x2) / 2)).toBeLessThanOrEqual(1);
+    expect(Math.abs((pic.rect.y1 + pic.rect.y2) / 2 - (cell.y1 + cell.y2) / 2)).toBeLessThanOrEqual(1);
     const lcps = (await drawing!.inBox(parseRange("E8:E8"))).filter((u) => u.media?.endsWith("image29.png"));
     expect(lcps.length).toBe(1);
     expect(a.isRowHidden(19)).toBe(true);

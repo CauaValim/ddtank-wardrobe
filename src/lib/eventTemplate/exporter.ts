@@ -1,6 +1,6 @@
 import { Drawing, type ImageData } from "./drawing";
 import { FormatContext, itemLabel, renderFormat, richRuns } from "./format";
-import { Worksheet, XlsxPackage, parseRange } from "./ooxml";
+import { Range, Worksheet, XlsxPackage, formatRef, parseRange } from "./ooxml";
 import { isRenewable, normalizeSection, paginateSection, tierTotals } from "./rules";
 import { hasPrizes, orderSections } from "./model";
 import type { BlockSpec, DecorationSpec, EventBlock, EventDocument, EventItem, EventSection, FieldSpec, LayoutSpec, SetSpec, SlotSpec, TemplateManifest } from "./types";
@@ -87,6 +87,32 @@ async function imageFor(ctx: FillContext, item: EventItem): Promise<ImageData | 
   return image;
 }
 
+function imageRanges(layout: LayoutSpec): string[] {
+  const out: string[] = [];
+  const visit = (blocks: BlockSpec[]) => blocks.forEach((b) => {
+    b.groups.forEach((g) => g.slots.forEach((s) => s.image && out.push(s.image)));
+    if (b.children) visit(b.children.blocks);
+  });
+  layout.sets.forEach((s) => visit(s.blocks));
+  return out;
+}
+
+const overlaps = (a: Range, b: Range) => a.c1 <= b.c2 && b.c1 <= a.c2 && a.r1 <= b.r2 && b.r1 <= a.r2;
+
+/**
+ * Onde a imagem do item fica centralizada: a célula mesclada inteira, quando ela é só desse
+ * espaço de imagem; quando a mesclagem guarda vários itens (ex.: dois itens empilhados numa
+ * célula), cada um fica no meio da sua parte.
+ */
+function imageArea(ws: Worksheet, layout: LayoutSpec, range: string): Range {
+  const r = parseRange(range);
+  const merge = ws.mergeOf(formatRef({ col: r.c1, row: r.r1 }));
+  if (!merge) return r;
+  const shared = imageRanges(layout).some((other) => other !== range && overlaps(parseRange(other), merge));
+  if (shared) return r;
+  return { c1: Math.min(r.c1, merge.c1), r1: Math.min(r.r1, merge.r1), c2: Math.max(r.c2, merge.c2), r2: Math.max(r.r2, merge.r2) };
+}
+
 function slotBottom(slot: SlotSpec): number {
   let row = slot.hideRows?.[1] ?? 0;
   if (slot.image) row = Math.max(row, parseRange(slot.image).r2);
@@ -161,7 +187,7 @@ async function fillBlock(ctx: FillContext, spec: BlockSpec, data: EventBlock | u
     }
     if (ctx.drawing) {
       for (const [range, images] of boxes) {
-        await ctx.drawing.fillBox(parseRange(range), images, `${label} ${group.label}`);
+        await ctx.drawing.fillBox(imageArea(ctx.ws, ctx.layout, range), images, `${label} ${group.label}`);
       }
       const defaults = Object.fromEntries((ctx.layout.itemFields ?? []).map((f) => [f.key, f.default ?? ""]));
       for (const [i, slot] of group.slots.entries()) {
