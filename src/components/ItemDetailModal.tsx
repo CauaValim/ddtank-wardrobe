@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { getTypeName } from "@/lib/itemTypes";
 import type { GameItem } from "@/types/item";
 import { hasParsableContents, isOpenablePackage } from "@/lib/packageDescParser";
-import { accessoryExp, itemStats, renewalOffers } from "@/lib/itemDetail";
+import { accessoryExp, isSoldByQuantity, itemStats, renewalOffers } from "@/lib/itemDetail";
 import { useGameData } from "@/hooks/useGameData";
 import { MountStats, SuitInfo } from "@/components/ItemGameExtras";
 import { useItemGameExtras } from "@/hooks/useItemGameExtras";
@@ -30,6 +30,9 @@ function RenewalTab({ itemId, realm }: { itemId: string; realm: "br" | "turco" }
   if (isLoading) return <p className="text-xs text-muted-foreground">Carregando a loja do jogo...</p>;
   if (error) return <p className="text-xs text-destructive">Não foi possível ler a loja do jogo.</p>;
   const offers = renewalOffers(data?.ShopItemList, itemId);
+  if (offers.length === 0 && isSoldByQuantity(data?.ShopItemList, itemId)) {
+    return <p className="rounded-md bg-secondary px-2 py-4 text-center text-xs text-muted-foreground">Este item é permanente e não precisa de renovação.</p>;
+  }
   if (offers.length === 0) return <p className="text-xs text-muted-foreground">Este item não está à venda na loja do jogo.</p>;
   return (
     <div className="space-y-2">

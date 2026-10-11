@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { accessoryExp, currencyLabel, itemStats, renewalOffers, sectionsFor } from "./itemDetail";
+import { accessoryExp, currencyLabel, isSoldByQuantity, itemStats, renewalOffers, sectionsFor } from "./itemDetail";
 
 // Linhas reais do ShopItemList.xml (campos usados).
 const shop = [
@@ -14,9 +14,11 @@ describe("aba Renovação", () => {
       { currency: "Cupons / L. Cupons", bound: false, options: [{ label: "7 dias", price: 200 }, { label: "30 dias", price: 400 }, { label: "Permanente", price: 1000 }] },
     ]);
   });
-  it("compra por quantidade e moedas", () => {
-    expect(renewalOffers(shop, "11444")[0]).toEqual({ currency: "Moeda especial (código -8)", bound: false, options: [{ label: "x1", price: 300 }] });
-    expect(renewalOffers(shop, "5000")[0].currency).toBe("Moeda da Mansão");
+  it("itens vendidos por quantidade (fragmentos) são permanentes, sem renovação", () => {
+    expect(renewalOffers(shop, "11444")).toEqual([]);
+    expect(isSoldByQuantity(shop, "11444")).toBe(true);
+    expect(isSoldByQuantity(shop, "1104")).toBe(false);
+    expect(renewalOffers(shop, "5000")).toEqual([]);
     expect(renewalOffers(shop, "999")).toEqual([]);
     expect(currencyLabel(undefined)).toBe("Moeda desconhecida");
   });

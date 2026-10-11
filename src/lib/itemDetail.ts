@@ -21,21 +21,25 @@ export function currencyLabel(code: string | undefined, name?: string): string {
   return code ? `Moeda especial (código ${code})` : "Moeda desconhecida";
 }
 
-function optionLabel(buyType: string | undefined, unit: string | undefined): string {
+function optionLabel(unit: string | undefined): string {
   const n = Number(unit ?? 0);
-  if (buyType === "1") return `x${n || 1}`;
   return n === 0 ? "Permanente" : `${n} ${n === 1 ? "dia" : "dias"}`;
 }
 
-/** Preços de compra/renovação de um item na loja do jogo (uma oferta por moeda/loja). */
+/** Vendido por quantidade (BuyType 1): fragmentos e outros itens que sempre entram como permanentes. */
+export function isSoldByQuantity(rows: Record<string, string>[] | undefined, templateId: string): boolean {
+  return (rows ?? []).some((r) => r.TemplateID === templateId && r.BuyType === "1");
+}
+
+/** Preços de renovação de um item na loja do jogo (uma oferta por moeda/loja); só itens com prazo (BuyType 0). */
 export function renewalOffers(rows: Record<string, string>[] | undefined, templateId: string): RenewalOffer[] {
   const offers: RenewalOffer[] = [];
   for (const r of rows ?? []) {
-    if (r.TemplateID !== templateId) continue;
+    if (r.TemplateID !== templateId || r.BuyType === "1") continue;
     const options: RenewalOption[] = [];
     for (const k of ["A", "B", "C"]) {
       const price = Number(r[`${k}Value1`] ?? 0);
-      if (price > 0) options.push({ label: optionLabel(r.BuyType, r[`${k}Unit`]), price });
+      if (price > 0) options.push({ label: optionLabel(r[`${k}Unit`]), price });
     }
     if (options.length === 0) continue;
     const offer = { currency: currencyLabel(r.APrice1, r.APrice1Name), bound: r.IsBind === "1" || r.IsBind === "true", options };
