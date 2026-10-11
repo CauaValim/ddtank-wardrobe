@@ -1,6 +1,6 @@
 // Caminhos das imagens dos itens no servidor de recursos do jogo e correção dos PNG ofuscados.
 
-export const RES_HOSTS = ["http://ddt-a.akamaihd.net", "http://res234.ddt.tr.elexddt.com"];
+export const RES_HOSTS = ["http://res0.ddt.br.337.com", "http://ddt-a.akamaihd.net", "http://res234.ddt.tr.elexddt.com"];
 
 const SEXED: Record<number, string> = { 1: "head", 2: "glass", 3: "hair", 4: "eff", 5: "cloth", 6: "face", 13: "suits" };
 const UNSEXED: Record<number, string> = { 8: "armlet", 9: "ring", 14: "necklace", 15: "wing", 17: "offhand" };

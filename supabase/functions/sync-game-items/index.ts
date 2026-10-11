@@ -3,8 +3,9 @@ import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { imageCandidates, isJpeg, repairImage } from "./images.ts";
 import { accessOf, allows } from "../_shared/permissions.ts";
 import { BOX_SOURCE, packageRows, syncPackageContents } from "./packages.ts";
+import { GAME_BASE } from "../_shared/gameApi.ts";
 
-const SOURCE = "http://quest132-ddt.337.com/TemplateAllList.xml";
+const SOURCE = `${GAME_BASE}TemplateAllList.xml`;
 const MAX_IMAGES = 200;
 
 const json = (b: unknown, status = 200) =>
@@ -44,12 +45,17 @@ Deno.serve(async (req) => {
     const url = Deno.env.get("SUPABASE_URL")!;
     const admin = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
-    // Auth: permissão "Sincronizar com o jogo"
-    const token = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
-    if (!token) return json({ error: "Não autenticado" }, 401);
-    const { data: u, error: uErr } = await admin.auth.getUser(token);
-    if (uErr || !u.user) return json({ error: "Sessão inválida" }, 401);
-    if (!allows(await accessOf(admin, u.user.id), "items.game_sync")) return json({ error: "Sem permissão" }, 403);
+    // Auth: sincronização automática (pg_cron, com o segredo GAME_SYNC_CRON_SECRET no cabeçalho)
+    // ou usuário com a permissão "Sincronizar com o jogo".
+    const cronSecret = Deno.env.get("GAME_SYNC_CRON_SECRET");
+    const fromCron = !!cronSecret && req.headers.get("x-cron-secret") === cronSecret;
+    if (!fromCron) {
+      const token = (req.headers.get("Authorization") ?? "").replace("Bearer ", "");
+      if (!token) return json({ error: "Não autenticado" }, 401);
+      const { data: u, error: uErr } = await admin.auth.getUser(token);
+      if (uErr || !u.user) return json({ error: "Sessão inválida" }, 401);
+      if (!allows(await accessOf(admin, u.user.id), "items.game_sync")) return json({ error: "Sem permissão" }, 403);
+    }
 
     const startedAt = Date.now();
     const all = parseItems(await loadXml());

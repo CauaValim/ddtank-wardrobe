@@ -1,7 +1,8 @@
 // deno-lint-ignore-file no-explicit-any
 // Conteúdo dos pacotes do jogo (LoadBoxTemp.xml) -> tabela package_contents (realm "br").
+import { GAME_BASE } from "../_shared/gameApi.ts";
 
-export const BOX_SOURCE = "http://quest132-ddt.337.com/LoadBoxTemp.xml";
+export const BOX_SOURCE = `${GAME_BASE}LoadBoxTemp.xml`;
 
 export interface PackageRow {
   realm: string;

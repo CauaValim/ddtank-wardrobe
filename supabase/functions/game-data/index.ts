@@ -1,7 +1,8 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+import { GAME_BASE } from "../_shared/gameApi.ts";
 
-const BASE = "http://quest132-ddt.337.com/";
+const BASE = GAME_BASE;
 const ALLOWED = new Set([
   "ClothPropertyTemplateInfo",
   "ClothGroupTemplateInfo",
@@ -22,7 +23,7 @@ const ALLOWED = new Set([
 
 /** Campos da loja usados no painel (aba Renovação): o arquivo inteiro tem 37 campos por linha. */
 const SHOP_KEYS = ["TemplateID", "ShopID", "BuyType", "IsBind", "AUnit", "APrice1", "AValue1", "BUnit", "BPrice1", "BValue1", "CUnit", "CPrice1", "CValue1"];
-const TTL = 30 * 60 * 1000;
+const TTL = 10 * 60 * 1000;
 const cache = new Map<string, { at: number; rows: Record<string, string>[] }>();
 
 const json = (b: unknown, status = 200) =>
