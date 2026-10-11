@@ -604,6 +604,11 @@ export type Database = {
       }
       package_contents: {
         Row: {
+          content_name: string | null
+          is_bind: boolean | null
+          position: number
+          source: string
+          valid_days: number
           content_item_id: number
           created_at: string
           id: string
@@ -614,6 +619,11 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          content_name?: string | null
+          is_bind?: boolean | null
+          position?: number
+          source?: string
+          valid_days?: number
           content_item_id: number
           created_at?: string
           id?: string
@@ -624,6 +634,11 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          content_name?: string | null
+          is_bind?: boolean | null
+          position?: number
+          source?: string
+          valid_days?: number
           content_item_id?: number
           created_at?: string
           id?: string

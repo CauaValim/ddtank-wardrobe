@@ -2,6 +2,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { imageCandidates, isJpeg, repairImage } from "./images.ts";
 import { accessOf, allows } from "../_shared/permissions.ts";
+import { BOX_SOURCE, packageRows, syncPackageContents } from "./packages.ts";
 
 const SOURCE = "http://quest132-ddt.337.com/TemplateAllList.xml";
 const MAX_IMAGES = 200;
@@ -9,8 +10,8 @@ const MAX_IMAGES = 200;
 const json = (b: unknown, status = 200) =>
   new Response(JSON.stringify(b), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
-async function loadXml(): Promise<string> {
-  const resp = await fetch(SOURCE);
+async function loadXml(source = SOURCE): Promise<string> {
+  const resp = await fetch(source);
   if (!resp.ok) throw new Error(`Jogo respondeu HTTP ${resp.status}`);
   const buf = new Uint8Array(await resp.arrayBuffer());
   if (buf[0] === 0x3c) return new TextDecoder().decode(buf);
@@ -50,7 +51,11 @@ Deno.serve(async (req) => {
     if (uErr || !u.user) return json({ error: "Sessão inválida" }, 401);
     if (!allows(await accessOf(admin, u.user.id), "items.game_sync")) return json({ error: "Sem permissão" }, 403);
 
-    const raw = parseItems(await loadXml()).filter((a) => Number(a.TemplateID) > 0 && a.Name);
+    const startedAt = Date.now();
+    const all = parseItems(await loadXml());
+    const raw = all.filter((a) => Number(a.TemplateID) > 0 && a.Name);
+    // Nomes de todos os itens do jogo, inclusive moedas e pontos (IDs negativos), para os pacotes.
+    const names = new Map(all.filter((a) => a.TemplateID && a.Name).map((a) => [Number(a.TemplateID), a.Name]));
 
     // IDs existentes (append-only)
     const existing = new Set<number>();
@@ -101,7 +106,15 @@ Deno.serve(async (req) => {
       // Mais novos primeiro: itens que o jogo não serve (antigos) não travam os recém-sincronizados.
       .is("image_url", null).not("pic_path", "is", null).order("id", { ascending: false }).limit(MAX_IMAGES);
     let images = 0;
-    const started = Date.now();
+    // Conteúdo dos pacotes (LoadBoxTemp.xml). Uma falha aqui não impede o resto da sincronização.
+    let packages: { packages: number; updated: number; rows: number } | { error: string };
+    try {
+      packages = await syncPackageContents(admin, packageRows(parseItems(await loadXml(BOX_SOURCE)), names));
+    } catch (e) {
+      packages = { error: (e as Error).message };
+    }
+
+    const started = startedAt; // o tempo das imagens conta desde o início da função
     for (const r of missing ?? []) {
       if (Date.now() - started > 110_000) break;
       const pic = String(r.pic_path);
@@ -124,7 +137,7 @@ Deno.serve(async (req) => {
     }
     const { count: stillMissing } = await admin.from("items").select("id", { count: "exact", head: true }).is("image_url", null);
 
-    return json({ totalGame: raw.length, added: rows.length, newIds: rows.map((r) => r.id), images, stillMissing });
+    return json({ totalGame: raw.length, added: rows.length, newIds: rows.map((r) => r.id), images, stillMissing, packages });
   } catch (e) {
     return json({ error: (e as Error).message }, 500);
   }

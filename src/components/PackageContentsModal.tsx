@@ -16,6 +16,10 @@ interface PackageContentEntry {
   quantity: number;
   probability: string | null;
   imageUrl?: string;
+  /** Do jogo (LoadBoxTemp.xml): validade em dias (0 = permanente), vínculo e nome do item. */
+  valid_days?: number;
+  is_bind?: boolean | null;
+  content_name?: string | null;
 }
 
 interface PackageContentsModalProps {
@@ -50,9 +54,10 @@ export function PackageContentsModal({
     (async () => {
       const { data, error } = await supabase
         .from("package_contents")
-        .select("content_item_id, quantity, probability")
+        .select("content_item_id, quantity, probability, valid_days, is_bind, content_name")
         .eq("realm", realm)
         .eq("package_id", Number(packageItem.id))
+        .order("position", { ascending: true })
         .order("content_item_id", { ascending: true });
 
       if (cancelled) return;
@@ -204,8 +209,10 @@ export function PackageContentsModal({
                    : "") ||
                  (contentItem ? getItemImage(String(contentItem.id)) : "") ||
                  entry.imageUrl;
+              // Moedas e pontos do jogo (IDs negativos) não estão na lista de itens: usa o nome do jogo.
               const name =
                 contentItem?.name ??
+                entry.content_name ??
                 entry.name ??
                 `Item #${entry.content_item_id}`;
 
@@ -243,8 +250,13 @@ export function PackageContentsModal({
                         QTD: {entry.quantity}x
                       </span>
                       <span className="text-[9px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
-                        Ilimitado
+                        {entry.valid_days ? `${entry.valid_days} dias` : "Permanente"}
                       </span>
+                      {entry.is_bind != null && (
+                        <span className={`text-[9px] font-bold uppercase tracking-wider ${entry.is_bind ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"}`}>
+                          {entry.is_bind ? "Vinculado" : "Não vinculado"}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="shrink-0 text-right">
