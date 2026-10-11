@@ -17,7 +17,11 @@ const ALLOWED = new Set([
   "SuitTemplateInfoList",
   "SuitPartEquipInfoList",
   "QuestList",
+  "ShopItemList",
 ]);
+
+/** Campos da loja usados no painel (aba Renovação): o arquivo inteiro tem 37 campos por linha. */
+const SHOP_KEYS = ["TemplateID", "ShopID", "BuyType", "IsBind", "AUnit", "APrice1", "AValue1", "BUnit", "BPrice1", "BValue1", "CUnit", "CPrice1", "CValue1"];
 const TTL = 30 * 60 * 1000;
 const cache = new Map<string, { at: number; rows: Record<string, string>[] }>();
 
@@ -61,6 +65,27 @@ function parseQuests(xml: string) {
 }
 
 
+let namesCache: { at: number; names: Map<string, string> } | null = null;
+
+/** Nome de todos os itens do jogo (inclusive moedas, com ID negativo). */
+async function itemNames(): Promise<Map<string, string>> {
+  if (namesCache && Date.now() - namesCache.at < TTL) return namesCache.names;
+  const resp = await fetch(`${BASE}TemplateAllList.xml`, { headers: { "User-Agent": "Mozilla/5.0" } });
+  if (!resp.ok) throw new Error(`Jogo respondeu HTTP ${resp.status}`);
+  const buf = new Uint8Array(await resp.arrayBuffer());
+  const xml = buf[0] === 0x3c || buf[0] === 0xef
+    ? new TextDecoder().decode(buf)
+    : await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream("deflate"))).text();
+  const names = new Map<string, string>();
+  for (const m of xml.matchAll(/<Item\s([^<>]*?)\/>/g)) {
+    const id = /TemplateID="(-?\d+)"/.exec(m[1])?.[1];
+    const name = /Name="([^"]*)"/.exec(m[1])?.[1];
+    if (id && name) names.set(id, unescape(name));
+  }
+  namesCache = { at: Date.now(), names };
+  return names;
+}
+
 async function load(file: string) {
   const hit = cache.get(file);
   if (hit && Date.now() - hit.at < TTL) return hit.rows;
@@ -70,6 +95,22 @@ async function load(file: string) {
   let xml: string;
   if (buf[0] === 0x3c || buf[0] === 0xef) xml = new TextDecoder().decode(buf);
   else xml = await new Response(new Blob([buf]).stream().pipeThrough(new DecompressionStream("deflate"))).text();
+  if (file === "ShopItemList") {
+    const names = await itemNames();
+    const shop = [...xml.matchAll(/<Item\s([^<>]*?)\/>/g)].map((m) => {
+      const a = attrs(m[1]);
+      const row: Record<string, string> = {};
+      for (const k of SHOP_KEYS) if (a[k] != null) row[k] = a[k];
+      // Preço cobrado em outro item (ex.: Moeda da Mansão): manda o nome junto.
+      for (const p of ["APrice1", "BPrice1", "CPrice1"]) {
+        const id = Number(a[p]);
+        if (id && (id > 0 || id <= -100) && names.has(a[p])) row[`${p}Name`] = names.get(a[p])!;
+      }
+      return row;
+    });
+    cache.set(file, { at: Date.now(), rows: shop });
+    return shop;
+  }
   if (file === "QuestList") {
     const quests = parseQuests(xml);
     cache.set(file, { at: Date.now(), rows: quests });

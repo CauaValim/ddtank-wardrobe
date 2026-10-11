@@ -1,5 +1,8 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import { Search, Package, Gamepad2, MousePointerClick, CheckSquare, LogOut, Users, FileSpreadsheet, Sparkles, Shapes, ClipboardCheck, Ticket } from "lucide-react";
+import { Search, Package, Gamepad2, MousePointerClick, CheckSquare, LogOut, Users, FileSpreadsheet, Sparkles, Shapes, ClipboardCheck, Ticket, PackageOpen, Filter, X } from "lucide-react";
+import { toast } from "sonner";
+import { CategoryFilterDialog } from "@/components/CategoryFilterDialog";
+import { isOpenablePackage } from "@/lib/packageDescParser";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useNavigate } from "react-router-dom";
 import { useItemStore } from "@/hooks/useItemStore";
@@ -40,7 +43,9 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
   } = useItemStore(realm);
 
   const [selectedItem, setSelectedItem] = useState<GameItem | null>(null);
-  const [selectedType, setSelectedType] = useState<string | null>(null);
+  const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set());
+  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
+  const [onlyChests, setOnlyChests] = useState(false);
   const [idFillerOpen, setIdFillerOpen] = useState(false);
   const [validatorOpen, setValidatorOpen] = useState(false);
   const [packageItem, setPackageItem] = useState<GameItem | null>(null);
@@ -79,13 +84,14 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
   // Filter items by type
   const filteredItems = useMemo(() => {
     let result = items;
-    if (selectedType != null) {
-      const matchingGroup = typeGroups.find(([name]) => name === selectedType);
-      const typeNumbers = matchingGroup ? matchingGroup[1] : [];
-      result = result.filter((item) => typeNumbers.includes(Number(item.attributes.type)));
+    if (selectedTypes.size > 0) {
+      const typeNumbers = new Set(typeGroups.filter(([name]) => selectedTypes.has(name)).flatMap(([, types]) => types));
+      result = result.filter((item) => typeNumbers.has(Number(item.attributes.type)));
     }
+    // Baús: itens que o jogo marca para abrir (mesma regra do "Ver Conteúdo").
+    if (onlyChests) result = result.filter((item) => isOpenablePackage(item.attributes));
     return result;
-  }, [items, selectedType, typeGroups]);
+  }, [items, selectedTypes, typeGroups, onlyChests]);
 
   const lastSelectedIndex = useRef<number | null>(null);
 
@@ -96,7 +102,7 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
 
   useEffect(() => {
     setVisibleCount(PAGE);
-  }, [searchQuery, selectedType, showNovidades, realm]);
+  }, [searchQuery, selectedTypes, onlyChests, showNovidades, realm]);
 
   useEffect(() => {
     const el = sentinelRef.current;
@@ -348,6 +354,20 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
               )}
             </button>
             <button
+              onClick={() => {
+                const next = !onlyChests;
+                setOnlyChests(next);
+                if (next) toast.success(`${items.filter((i) => isOpenablePackage(i.attributes)).length} baús encontrados`);
+              }}
+              className={`flex items-center gap-1.5 rounded-lg border px-3 py-2.5 text-sm font-medium transition-all ${
+                onlyChests ? "border-primary bg-primary text-primary-foreground" : "border-border bg-secondary text-secondary-foreground hover:bg-muted"
+              }`}
+              title="Mostrar só os baús e pacotes que se abrem"
+            >
+              <PackageOpen className="h-4 w-4" />
+              Baús
+            </button>
+            <button
               onClick={() => setFugurasOpen(true)}
               className="flex items-center gap-1.5 rounded-lg border border-border bg-secondary px-3 py-2.5 text-sm font-medium text-secondary-foreground hover:bg-muted transition-all"
               title="Ilustrações de Montaria (Fuguras) do jogo"
@@ -365,47 +385,34 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
           )}
         </div>
 
-        {/* Type filter */}
+        {/* Filtros: categorias (em seções) e as escolhidas */}
         {typeGroups.length > 0 && (
-          <div className="space-y-1.5">
-            <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              Tipo
-            </span>
-            <div className="flex flex-wrap gap-1.5">
-              <button
-                onClick={() => setSelectedType(null)}
-                className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${
-                  selectedType === null
-                    ? "bg-accent text-accent-foreground"
-                    : "border border-border bg-secondary text-secondary-foreground hover:bg-muted"
-                }`}
-              >
-                Todos
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              onClick={() => setCategoryDialogOpen(true)}
+              className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-all ${
+                selectedTypes.size > 0 ? "border-primary bg-primary/10 text-primary" : "border-border bg-secondary text-secondary-foreground hover:bg-muted"
+              }`}
+            >
+              <Filter className="h-3.5 w-3.5" /> Filtrar Categorias{selectedTypes.size > 0 ? ` (${selectedTypes.size})` : ""}
+            </button>
+            {[...selectedTypes].map((label) => (
+              <span key={label} className="flex items-center gap-1 rounded-full bg-accent px-2.5 py-1 text-xs font-medium text-accent-foreground">
+                {label}
+                <button
+                  onClick={() => setSelectedTypes((prev) => { const next = new Set(prev); next.delete(label); return next; })}
+                  className="rounded-full hover:text-destructive"
+                  title={`Tirar "${label}" do filtro`}
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </span>
+            ))}
+            {selectedTypes.size > 0 && (
+              <button onClick={() => setSelectedTypes(new Set())} className="text-xs text-muted-foreground hover:text-foreground hover:underline">
+                limpar
               </button>
-              {typeGroups.map(([label]) => (
-                <div key={label} className="flex items-center gap-0.5">
-                  <button
-                    onClick={() => setSelectedType(selectedType === label ? null : label)}
-                    className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${
-                      selectedType === label
-                        ? "bg-accent text-accent-foreground"
-                        : "border border-border bg-secondary text-secondary-foreground hover:bg-muted"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                  {selectionMode && auth.can("items.manage") && (
-                    <button
-                      onClick={() => selectAllOfType(label)}
-                      className="rounded-full p-1 text-muted-foreground hover:text-primary hover:bg-muted transition-all"
-                      title={`Selecionar todos "${label}"`}
-                    >
-                      <CheckSquare className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
+            )}
           </div>
         )}
       </div>
@@ -469,6 +476,14 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
       {/* Detail Modal */}
       <GameDataModal open={gameDataOpen} onClose={() => setGameDataOpen(false)} lookup={lookupItem} />
       <FugurasModal open={fugurasOpen} onClose={() => setFugurasOpen(false)} lookup={lookupItem} />
+      <CategoryFilterDialog
+        open={categoryDialogOpen}
+        onOpenChange={setCategoryDialogOpen}
+        categories={typeGroups.map(([name]) => name)}
+        selected={selectedTypes}
+        onApply={setSelectedTypes}
+        onSelectAllOf={selectionMode && auth.can("items.manage") ? selectAllOfType : undefined}
+      />
       <ItemDetailModal
         item={selectedItem}
         imageUrl={selectedItem ? getItemImage(selectedItem.id) : undefined}

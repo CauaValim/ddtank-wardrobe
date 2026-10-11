@@ -1,11 +1,15 @@
 import { useEffect, useState } from "react";
-import { Package, Copy, Check, PackageOpen } from "lucide-react";
+import { Package, Copy, Check, PackageOpen, FileText, Swords, RefreshCw, Layers } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { getTypeName } from "@/lib/itemTypes";
 import type { GameItem } from "@/types/item";
 import { hasParsableContents, isOpenablePackage } from "@/lib/packageDescParser";
-import { ItemGameExtras } from "@/components/ItemGameExtras";
+import { itemStats, renewalOffers } from "@/lib/itemDetail";
+import { useGameData } from "@/hooks/useGameData";
+import { MountStats, SuitInfo } from "@/components/ItemGameExtras";
+import { useItemGameExtras } from "@/hooks/useItemGameExtras";
 import type { ItemLookup } from "@/components/GameDataModal";
 
 interface ItemDetailModalProps {
@@ -17,6 +21,36 @@ interface ItemDetailModalProps {
   realm?: "br" | "turco";
   onViewPackageContents?: (item: GameItem) => void;
   lookup?: ItemLookup;
+}
+
+/** Aba Renovação: preços da loja do jogo (só baixa a lista quando a aba é aberta). */
+function RenewalTab({ itemId, realm }: { itemId: string; realm: "br" | "turco" }) {
+  const { data, isLoading, error } = useGameData(["ShopItemList"], realm === "br");
+  if (realm !== "br") return <p className="text-xs text-muted-foreground">A loja do jogo só está disponível para o servidor BR.</p>;
+  if (isLoading) return <p className="text-xs text-muted-foreground">Carregando a loja do jogo...</p>;
+  if (error) return <p className="text-xs text-destructive">Não foi possível ler a loja do jogo.</p>;
+  const offers = renewalOffers(data?.ShopItemList, itemId);
+  if (offers.length === 0) return <p className="text-xs text-muted-foreground">Este item não está à venda na loja do jogo.</p>;
+  return (
+    <div className="space-y-2">
+      {offers.map((o, i) => (
+        <div key={i} className="space-y-1.5 rounded-md bg-secondary p-2">
+          <p className="text-[10px] text-muted-foreground">
+            Forma de pagamento: <span className="font-semibold text-card-foreground">{o.currency}</span>
+            {o.bound && <span className="ml-1 font-semibold text-red-600 dark:text-red-400">· vinculado</span>}
+          </p>
+          <div className="grid grid-cols-3 gap-1.5">
+            {o.options.map((opt) => (
+              <div key={opt.label} className="rounded border border-border bg-card px-1 py-1.5 text-center">
+                <p className="text-sm font-bold text-card-foreground tabular-nums">{opt.price.toLocaleString("pt-BR")}</p>
+                <p className={`text-[10px] uppercase ${opt.label === "Permanente" ? "font-semibold text-purple-600 dark:text-purple-400" : "text-muted-foreground"}`}>{opt.label}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export function ItemDetailModal({
@@ -31,8 +65,14 @@ export function ItemDetailModal({
 }: ItemDetailModalProps) {
   const [copied, setCopied] = useState(false);
   const [hasContents, setHasContents] = useState(false);
+  const [tab, setTab] = useState("info");
 
   const itemId = item?.id;
+  const extras = useItemGameExtras(itemId ?? "");
+
+  useEffect(() => {
+    setTab("info");
+  }, [itemId]);
 
   useEffect(() => {
     if (!itemId || !open) {
@@ -47,11 +87,7 @@ export function ItemDetailModal({
         .eq("realm", realm)
         .eq("package_id", Number(itemId));
       if (cancelled) return;
-      if (!error && count && count > 0) {
-        setHasContents(true);
-      } else {
-        setHasContents(false);
-      }
+      setHasContents(!error && !!count && count > 0);
     })();
     return () => {
       cancelled = true;
@@ -69,12 +105,13 @@ export function ItemDetailModal({
   const typeName = getTypeName(item.attributes.type != null ? Number(item.attributes.type) : null);
   // Conteúdo do jogo (tabela) ou, só em baús, a lista lida da descrição.
   const showContentsButton = hasContents || (isOpenablePackage(item.attributes) && hasParsableContents(item.attributes.desc));
+  const stats = itemStats(item);
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-h-[85vh] max-w-xs overflow-y-auto border-border bg-card p-4">
+      <DialogContent className="max-h-[85vh] max-w-sm overflow-y-auto border-border bg-card p-4">
         <DialogTitle className="sr-only">{item.name}</DialogTitle>
-        <div className="flex flex-col items-center gap-3">
+        <div className="flex flex-col items-center gap-2">
           <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-lg bg-secondary">
             {imageUrl ? (
               <img src={imageUrl} alt={item.name} className="h-full w-full object-contain" />
@@ -82,11 +119,26 @@ export function ItemDetailModal({
               <Package className="h-8 w-8 text-muted-foreground/40" />
             )}
           </div>
-
-          <div className="text-center">
-            <h2 className="text-sm font-bold text-card-foreground">{item.name}</h2>
+          <div className="flex flex-wrap items-center justify-center gap-1.5">
             {canViewId && (
-              <div className="mt-1 flex items-center justify-center gap-2">
+              <span className="rounded border border-border bg-secondary px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">#{item.id}</span>
+            )}
+            <span className="rounded border border-border bg-secondary px-1.5 py-0.5 text-[10px] font-semibold uppercase text-muted-foreground">{typeName}</span>
+          </div>
+          <h2 className="text-center text-sm font-bold text-card-foreground">{item.name}</h2>
+        </div>
+
+        <Tabs value={tab} onValueChange={setTab} className="mt-2">
+          <TabsList className="grid h-auto w-full grid-cols-4">
+            <TabsTrigger value="info" className="gap-1 px-1 text-[11px]"><FileText className="h-3 w-3" /> Info</TabsTrigger>
+            <TabsTrigger value="stats" className="gap-1 px-1 text-[11px]"><Swords className="h-3 w-3" /> Atributos</TabsTrigger>
+            <TabsTrigger value="renewal" className="gap-1 px-1 text-[11px]"><RefreshCw className="h-3 w-3" /> Renovação</TabsTrigger>
+            <TabsTrigger value="suit" className="gap-1 px-1 text-[11px]"><Layers className="h-3 w-3" /> Conjunto</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="info" className="space-y-2">
+            {canViewId && (
+              <div className="flex items-center justify-center gap-2">
                 <span className="text-xs text-muted-foreground">ID: {item.id}</span>
                 <button
                   onClick={copyId}
@@ -100,45 +152,47 @@ export function ItemDetailModal({
             {showContentsButton && onViewPackageContents && (
               <button
                 onClick={() => onViewPackageContents(item)}
-                className="mt-2 flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors"
+                className="mx-auto flex items-center gap-1.5 rounded-md bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-700 transition-colors"
               >
                 <PackageOpen className="h-3.5 w-3.5" />
                 Ver Conteúdo
               </button>
             )}
-          </div>
-
-          {item.attributes.desc && (
             <div className="w-full rounded-md bg-secondary px-2 py-1.5">
               <span className="text-[10px] text-muted-foreground">Descrição</span>
-              <p className="text-xs text-card-foreground whitespace-pre-wrap">{item.attributes.desc}</p>
+              <p className="text-xs text-card-foreground whitespace-pre-wrap">{item.attributes.desc?.trim() || "Descrição não disponível no jogo."}</p>
             </div>
-          )}
+          </TabsContent>
 
-          <ItemGameExtras
-            itemId={String(item.id)}
-            suitId={item.attributes.suit_id}
-            lookup={lookup}
-            fallback={(
-              <div className="w-full grid grid-cols-2 gap-1.5">
-                {[
-                  { label: "Ataque", value: item.attributes.attack },
-                  { label: "Defesa", value: item.attributes.defence },
-                  { label: "Agilidade", value: item.attributes.agility },
-                  { label: "Sorte", value: item.attributes.luck },
-                  { label: "EXP", value: item.attributes.attribute2 },
-                ]
-                  .filter((s) => s.value != null)
-                  .map((s) => (
-                    <div key={s.label} className="rounded-md bg-secondary px-2 py-1">
-                      <span className="text-[10px] text-muted-foreground">{s.label}</span>
-                      <p className="text-xs font-medium text-card-foreground">{s.value}</p>
-                    </div>
-                  ))}
+          <TabsContent value="stats">
+            {extras.mount ? (
+              <MountStats mount={extras.mount} />
+            ) : (
+              <div className="grid grid-cols-2 gap-1.5">
+                {stats.map((s) => (
+                  <div key={s.label} className="rounded-md bg-secondary px-2 py-1">
+                    <span className="text-[10px] text-muted-foreground">{s.label}</span>
+                    <p className="text-xs font-medium text-card-foreground">{s.value}</p>
+                  </div>
+                ))}
               </div>
             )}
-          />
-        </div>
+          </TabsContent>
+
+          <TabsContent value="renewal">
+            {tab === "renewal" && <RenewalTab itemId={item.id} realm={realm} />}
+          </TabsContent>
+
+          <TabsContent value="suit">
+            {extras.loading ? (
+              <p className="text-xs text-muted-foreground">Carregando conjuntos do jogo...</p>
+            ) : extras.suit ? (
+              <SuitInfo suit={extras.suit} lookup={lookup} />
+            ) : (
+              <p className="rounded-md bg-secondary px-2 py-4 text-center text-xs text-muted-foreground">Este item não pertence a nenhum conjunto.</p>
+            )}
+          </TabsContent>
+        </Tabs>
       </DialogContent>
     </Dialog>
   );
