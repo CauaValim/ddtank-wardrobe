@@ -13,6 +13,7 @@ import {
   type ValidationStatus,
   type DbItem,
 } from "@/lib/itemValidator";
+import { extractTemplatePairs } from "@/lib/itemValidatorTemplate";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -28,12 +29,14 @@ type Status = "idle" | "loading" | "done" | "error";
 const STATUS_CLASSES: Record<ValidationStatus, string> = {
   valid: "bg-primary/15 text-primary",
   no_image: "bg-accent/20 text-accent-foreground",
+  non_standard: "bg-accent/20 text-accent-foreground",
   name_mismatch: "bg-destructive/15 text-destructive",
+  missing_id: "bg-destructive/15 text-destructive",
   id_not_found: "bg-destructive/15 text-destructive",
   invalid_row: "bg-muted text-muted-foreground",
 };
 
-const ORDER: ValidationStatus[] = ["valid", "no_image", "name_mismatch", "id_not_found", "invalid_row"];
+const ORDER: ValidationStatus[] = ["valid", "no_image", "non_standard", "name_mismatch", "missing_id", "id_not_found", "invalid_row"];
 
 export function ItemValidatorModal({ open, onClose, realm = "br" }: Props) {
   const tableName = (realm === "turco" ? "items_turco" : "items") as "items";
@@ -73,7 +76,7 @@ export function ItemValidatorModal({ open, onClose, realm = "br" }: Props) {
         while (true) {
           const { data, error } = await supabase
             .from(tableName)
-            .select("id, name, image_url")
+            .select("id, name, image_url, type, pic_path")
             .order("id", { ascending: true })
             .range(from, from + pageSize - 1);
           if (error) throw error;
@@ -84,11 +87,25 @@ export function ItemValidatorModal({ open, onClose, realm = "br" }: Props) {
         }
 
         const index = buildItemIndex(all);
-        const wb = XLSX.read(await file.arrayBuffer(), { type: "array" });
+        const buffer = await file.arrayBuffer();
+        const wb = XLSX.read(buffer, { type: "array" });
 
         const parsedRows: Record<string, unknown>[] = [];
-        for (const sheetName of wb.SheetNames) {
+        // Abas do modelo oficial: lidas pelo leitor da Criação de Eventos, item por item.
+        let otherSheets = wb.SheetNames;
+        try {
+          const template = await extractTemplatePairs(buffer);
+          for (const pair of template.pairs) {
+            parsedRows.push({ Planilha: pair.sheet, Célula: pair.cell, ID: pair.id, Nome: cleanDisplayName(pair.name) });
+          }
+          otherSheets = template.otherSheets;
+        } catch (err) {
+          console.warn("Leitura pelo modelo falhou; usando a leitura aproximada", err);
+        }
+        // Demais abas: leitura aproximada pelas posições dos nomes e IDs.
+        for (const sheetName of otherSheets) {
           const ws = wb.Sheets[sheetName];
+          if (!ws) continue;
           const grid = XLSX.utils.sheet_to_json<(string | null)[]>(ws, {
             header: 1,
             defval: null,
@@ -153,7 +170,7 @@ export function ItemValidatorModal({ open, onClose, realm = "br" }: Props) {
 
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground">
-            Envie uma planilha .xlsx com as colunas <strong>ID</strong> e <strong>Nome</strong>. O painel confere se o ID, o nome e a imagem batem com a base.
+            Envie um documento de eventos (.xlsx do modelo oficial) ou uma planilha com as colunas <strong>ID</strong> e <strong>Nome</strong>. O painel confere se o ID, o nome e a imagem batem com a base e se o ID segue o padrão (armas na +0, Exp.Pedra Mágica em 1120218).
           </p>
 
           <div className="flex flex-wrap items-center gap-2">

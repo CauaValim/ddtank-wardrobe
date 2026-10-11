@@ -100,3 +100,37 @@ describe("validateRows", () => {
     expect(summarize(rows).no_image).toBe(1);
   });
 });
+
+describe("padrão de IDs e itens sem ID", () => {
+  const items = [
+    { id: 7240, name: "Lendaria• Fúria Ardente", image_url: "w0", type: 7, pic_path: "13401" },
+    { id: 72401, name: "Lendaria• Fúria Ardente", image_url: "w1", type: 7, pic_path: "13401" },
+    { id: 1120218, name: "Exp.Pedra Mágica", image_url: "e", type: 11, pic_path: "expmagicstone" },
+    { id: 101007, name: "Exp pedra mágica Iniciante", image_url: "e2", type: 61, pic_path: "expmagicstone" },
+    { id: 12240, name: "Pedra fundida", image_url: "p", type: 11, pic_path: "x" },
+  ];
+  const idx = buildItemIndex(items);
+  const status = (ID: string, Nome: string) => validateRows([{ ID, Nome }], idx)[0];
+
+  it("arma fora da +0 e Exp.Pedra Mágica fora de 1120218", () => {
+    expect(status("72401", "Lendaria• Fúria Ardente [Permanent]")).toMatchObject({ status: "non_standard", suggestedId: "7240" });
+    expect(status("101007", "Exp pedra mágica Iniciante")).toMatchObject({ status: "non_standard", suggestedId: "1120218" });
+    // 1120218 com o nome de outra Exp.Pedra Mágica está certo.
+    expect(status("1120218", "Exp pedra mágica Iniciante").status).toBe("valid");
+  });
+
+  it("sem ID (vazio ou XXX) sugere pelo nome, inclusive nome parecido", () => {
+    expect(status("XXX", "Pedra fundida")).toMatchObject({ status: "missing_id", suggestedId: "12240" });
+    expect(status("", "Pedra fundidas")).toMatchObject({ status: "missing_id", suggestedId: "12240" });
+    expect(status("12240", "Outro nome")).toMatchObject({ status: "name_mismatch", suggestedId: null });
+  });
+
+  it("lê células com XXX, quantidade com ponto e OR", () => {
+    const grid = [
+      [null, "ITEM", null, "ID and Amount"],
+      [null, "A [Bound]", null, "XXX*1.000 OR 12240*5"],
+      [null, "B [Bound]", null, null],
+    ];
+    expect(extractPairsFromGrid(grid, "S").map((p) => p.id)).toEqual(["XXX", "12240"]);
+  });
+});

@@ -1,7 +1,12 @@
+import { canonicalId } from "@/lib/canonicalItem";
+import { nameSimilarity } from "@/lib/packageDescParser";
+
 export type ValidationStatus =
   | "valid"
   | "no_image"
+  | "non_standard"
   | "name_mismatch"
+  | "missing_id"
   | "id_not_found"
   | "invalid_row";
 
@@ -9,6 +14,8 @@ export interface DbItem {
   id: number;
   name: string | null;
   image_url: string | null;
+  type?: number | null;
+  pic_path?: string | null;
 }
 
 export interface ValidationRow {
@@ -78,7 +85,9 @@ function isBracketedName(v: string): boolean {
   return /\[[^\]]*\]/.test(v) && /[A-Za-zÀ-ÿ]/.test(v);
 }
 
-const ID_AMOUNT_CELL = /^\d+\*\d+(?:\s*,\s*\d+\*\d+)*$/;
+// "12269*100", "XXX*1", "1124504*1.000", separados por vírgula ou "OR" (Faça se Puder).
+const ID_AMOUNT_TOKEN = String.raw`(?:\d+|XXX)\s*\*\s*\d[\d.]*`;
+const ID_AMOUNT_CELL = new RegExp(String.raw`^${ID_AMOUNT_TOKEN}(?:\s*(?:,|\bOR\b)\s*${ID_AMOUNT_TOKEN})*$`, "i");
 
 const VALUE_HEADER = /\bvalue\b|\bcost\b|valor|custo|pre[çc]o/i;
 
@@ -169,7 +178,7 @@ export function extractPairsFromGrid(grid: Grid, sheet: string): ExtractedPair[]
       const header = headerAbove(grid, r, c);
       // Cost/price columns hold the currency item, not the reward — skip them.
       if (header && VALUE_HEADER.test(header)) continue;
-      const ids = v.split(",").map((s) => s.trim().split("*")[0]);
+      const ids = v.split(/,|\bOR\b/i).map((s) => s.trim().split("*")[0].trim());
 
       const candidates: { name: string; row: number; col: number }[] = [];
       for (let rr = Math.max(0, r - 3); rr <= r; rr++) {
@@ -230,6 +239,37 @@ function pick(row: Record<string, unknown>, keys: string[]): string {
   return "";
 }
 
+/** ID padrão do item (arma no nível +0, bolinha de EXP em 1120218). */
+const standardId = (id: string, index: ItemIndex) => canonicalId(id, (x) => index.byId.get(x));
+
+/**
+ * Item da base sugerido para um nome: nome igual (sem colchetes, acentos e maiúsculas) e, sem
+ * nenhum igual, o mais parecido com pelo menos 90%. Entre vários, o ID padrão com imagem.
+ */
+export function suggestByName(rawName: string, index: ItemIndex): DbItem | null {
+  const key = normalizeName(rawName);
+  if (!key) return null;
+  let matches = index.byName.get(key) ?? [];
+  if (matches.length === 0) {
+    let best = 0;
+    for (const [k, items] of index.byName) {
+      if (Math.min(k.length, key.length) / Math.max(k.length, key.length) < 0.9) continue;
+      const sim = nameSimilarity(k, key);
+      if (sim < 0.9 || sim < best) continue;
+      if (sim > best) matches = [];
+      best = sim;
+      matches = [...matches, ...items];
+    }
+  }
+  if (matches.length === 0) return null;
+  const ids = [...new Set(matches.map((m) => standardId(String(m.id), index)))];
+  const rows = ids.map((id) => index.byId.get(id)).filter((r): r is DbItem => !!r);
+  rows.sort((a, b) => Number(!!b.image_url) - Number(!!a.image_url) || b.id - a.id);
+  return rows[0] ?? null;
+}
+
+const noDb = { dbName: null, suggestedId: null, imageUrl: null, hasImage: false };
+
 export function validateRows(
   rows: Record<string, unknown>[],
   index: ItemIndex
@@ -244,44 +284,64 @@ export function validateRows(
       original: row,
     };
 
-    if (!rawId || !rawName) {
+    if (!rawName) return { ...base, status: "invalid_row" as const, ...noDb };
+
+    const cleanId = rawId.replace(/[^\d]/g, "");
+    // Item sem ID na planilha (vazio ou XXX): sugere pelo nome.
+    if (!cleanId) {
+      const s = suggestByName(rawName, index);
       return {
         ...base,
-        status: "invalid_row" as const,
-        dbName: null,
-        suggestedId: null,
-        imageUrl: null,
-        hasImage: false,
+        status: "missing_id" as const,
+        dbName: s?.name ?? null,
+        suggestedId: s ? String(s.id) : null,
+        imageUrl: s?.image_url ?? null,
+        hasImage: !!s?.image_url,
       };
     }
 
-    const normalizedId = String(Number(rawId.replace(/[^\d-]/g, "")) || rawId);
-    const dbItem = index.byId.get(normalizedId) ?? index.byId.get(rawId);
+    const normalizedId = String(Number(cleanId));
+    const dbItem = index.byId.get(normalizedId);
 
     if (!dbItem) {
-      const matches = index.byName.get(normalizeName(rawName)) ?? [];
+      const s = suggestByName(rawName, index);
       return {
         ...base,
         status: "id_not_found" as const,
-        dbName: null,
-        suggestedId: matches.length > 0 ? String(matches[0].id) : null,
-        imageUrl: matches.length > 0 ? matches[0].image_url : null,
-        hasImage: matches.length > 0 ? !!matches[0].image_url : false,
+        dbName: s?.name ?? null,
+        suggestedId: s ? String(s.id) : null,
+        imageUrl: s?.image_url ?? null,
+        hasImage: !!s?.image_url,
       };
     }
 
     const hasImage = !!dbItem.image_url;
     const nameMatches = normalizeName(dbItem.name ?? "") === normalizeName(rawName);
 
-    if (!nameMatches) {
-      const matches = index.byName.get(normalizeName(rawName)) ?? [];
+    // Nome de outro item cujo ID padrão é este (ex.: "Exp pedra mágica Iniciante" em 1120218) conta como certo.
+    const s = nameMatches ? null : suggestByName(rawName, index);
+    if (!nameMatches && String(s?.id) !== normalizedId) {
       return {
         ...base,
         status: "name_mismatch" as const,
         dbName: dbItem.name,
-        suggestedId: matches.length > 0 ? String(matches[0].id) : null,
+        suggestedId: s && String(s.id) !== normalizedId ? String(s.id) : null,
         imageUrl: dbItem.image_url,
         hasImage,
+      };
+    }
+
+    // Nome certo, mas fora do padrão de ID (arma em +1..+10, outra Exp.Pedra Mágica).
+    const standard = standardId(normalizedId, index);
+    if (standard !== normalizedId) {
+      const s = index.byId.get(standard);
+      return {
+        ...base,
+        status: "non_standard" as const,
+        dbName: dbItem.name,
+        suggestedId: standard,
+        imageUrl: s?.image_url ?? dbItem.image_url,
+        hasImage: !!(s?.image_url ?? dbItem.image_url),
       };
     }
 
@@ -299,7 +359,9 @@ export function validateRows(
 export const STATUS_LABELS: Record<ValidationStatus, string> = {
   valid: "Válido",
   no_image: "Sem imagem",
+  non_standard: "ID fora do padrão",
   name_mismatch: "Nome divergente",
+  missing_id: "Sem ID",
   id_not_found: "ID não encontrado",
   invalid_row: "Linha inválida",
 };
@@ -308,7 +370,9 @@ export function summarize(rows: ValidationRow[]): Record<ValidationStatus, numbe
   const acc: Record<ValidationStatus, number> = {
     valid: 0,
     no_image: 0,
+    non_standard: 0,
     name_mismatch: 0,
+    missing_id: 0,
     id_not_found: 0,
     invalid_row: 0,
   };
