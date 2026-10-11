@@ -605,33 +605,48 @@ export type Database = {
       package_contents: {
         Row: {
           content_item_id: number
+          content_name: string | null
           created_at: string
           id: string
+          is_bind: boolean | null
           package_id: number
+          position: number
           probability: string | null
           quantity: number
           realm: string
+          source: string
           updated_at: string
+          valid_days: number
         }
         Insert: {
           content_item_id: number
+          content_name?: string | null
           created_at?: string
           id?: string
+          is_bind?: boolean | null
           package_id: number
+          position?: number
           probability?: string | null
           quantity?: number
           realm?: string
+          source?: string
           updated_at?: string
+          valid_days?: number
         }
         Update: {
           content_item_id?: number
+          content_name?: string | null
           created_at?: string
           id?: string
+          is_bind?: boolean | null
           package_id?: number
+          position?: number
           probability?: string | null
           quantity?: number
           realm?: string
+          source?: string
           updated_at?: string
+          valid_days?: number
         }
         Relationships: []
       }
