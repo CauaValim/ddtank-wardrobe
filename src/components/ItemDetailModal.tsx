@@ -71,7 +71,7 @@ export function ItemDetailModal({
   const [tab, setTab] = useState("info");
 
   const itemId = item?.id;
-  const extras = useItemGameExtras(itemId ?? "");
+  const extras = useItemGameExtras(item);
 
   useEffect(() => {
     setTab("info");
