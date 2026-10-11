@@ -1,9 +1,11 @@
 import * as XLSX from "@e965/xlsx";
 import {
-  resolveSegmentNamesForMissingIds,
+  resolveSegmentCandidatesForMissingIds,
   type SegmentNameCandidate,
 } from "@/lib/idFillerSegmentMapping";
+import { ItemResolver, type ImageHasher } from "@/lib/idFillerResolver";
 import { applyWorkbookChanges, type WorksheetCellChanges } from "@/lib/xlsxPreservation";
+import { imageNear, readSheetImages, type SheetImage } from "@/lib/xlsxImages";
 
 export interface IdFillerError {
   sheet: string;
@@ -16,12 +18,24 @@ export interface IdFillerResult {
   outputBuffer: ArrayBuffer;
   errors: IdFillerError[];
   filled: number;
+  /** Itens achados por nome parecido (≥ 90%) e pela imagem do documento. */
+  similar: number;
+  byImage: number;
 }
 
 function cleanItemName(raw: string): string {
   let name = raw.replace(/\n/g, " ");
   name = name.replace(/\s*\[.*?\]/g, "");
   return name.trim();
+}
+
+/** Contexto da busca de uma aba: itens do painel, imagens da aba e erros. */
+interface LookupCtx {
+  resolver: ItemResolver;
+  images?: SheetImage[];
+  errors: IdFillerError[];
+  sheet: string;
+  stats: { similar: number; byImage: number };
 }
 
 export function buildNameIndex(
@@ -49,30 +63,25 @@ function recordCellChange(
   changes.set(sheetName, sheetChanges);
 }
 
-function lookupId(
+/**
+ * ID do item pelo nome (igual ou ≥ 90% parecido) e, para desempatar, pela imagem ao lado
+ * da célula do nome. Devolve sempre o ID padrão (arma na +0, bolinha de EXP em 1120218).
+ */
+async function lookupId(
+  ctx: LookupCtx,
   name: string,
-  nameIndex: Map<string, number[]>,
-  errors: IdFillerError[],
-  sheet: string,
-  cell: string
-): number | null {
-  const cleaned = cleanItemName(name);
-  const key = cleaned.toLowerCase();
-  const ids = nameIndex.get(key);
-  if (!ids || ids.length === 0) {
-    errors.push({ sheet, cell, itemName: cleaned, reason: "Não encontrado no banco" });
+  cell: string,
+  namePos?: { r: number; c?: number }
+): Promise<number | null> {
+  const image = namePos?.c != null ? imageNear(ctx.images, namePos.r, namePos.c) : null;
+  const result = await ctx.resolver.resolve(name, image);
+  if ("error" in result) {
+    ctx.errors.push({ sheet: ctx.sheet, cell, itemName: cleanItemName(name), reason: result.error });
     return null;
   }
-  if (ids.length > 1) {
-    errors.push({
-      sheet,
-      cell,
-      itemName: cleaned,
-      reason: `Múltiplos IDs encontrados: ${ids.join(", ")}`,
-    });
-    return null;
-  }
-  return ids[0];
+  if (result.how === "similar") ctx.stats.similar++;
+  if (result.how === "image") ctx.stats.byImage++;
+  return result.id;
 }
 
 function cellRef(r: number, c: number): string {
@@ -141,7 +150,7 @@ function collectSegmentNameCandidates(
     const name = getCellValue(ws, row, nameCol);
     if (!name) continue;
 
-    candidates.push({ row, name });
+    candidates.push({ row, col: nameCol, name });
     if (candidates.length >= segmentCount) break;
   }
 
@@ -193,7 +202,7 @@ function collectLikelyNameCandidatesInColumn(
     const name = getCellValue(ws, row, nameCol);
     if (!name || !isLikelyItemName(name)) continue;
 
-    candidates.push({ row, name });
+    candidates.push({ row, col: nameCol, name });
     if (candidates.length >= segmentCount) break;
   }
 
@@ -217,7 +226,7 @@ function collectLikelyNameCandidatesInRows(
       if (!name || !isLikelyItemName(name)) continue;
       if (requireBracketed && !/\[.*\]/.test(name)) continue;
 
-      candidates.push({ row, name });
+      candidates.push({ row, col, name });
       if (candidates.length >= segmentCount) return candidates;
     }
   }
@@ -332,14 +341,14 @@ function findStandaloneNameCandidates(
   return bestCandidates;
 }
 
-function fillBareIdColumns(
+async function fillBareIdColumns(
   ws: XLSX.WorkSheet,
   sheetName: string,
-  nameIndex: Map<string, number[]>,
+  ctx: LookupCtx,
   errors: IdFillerError[],
   changes: WorksheetCellChanges,
   alreadyFilled: Set<string>
-): number {
+): Promise<number> {
   let filled = 0;
   const { minR, maxR, minC, maxC } = getRange(ws);
   for (let r = minR; r <= maxR; r++) {
@@ -362,7 +371,7 @@ function fillBareIdColumns(
         const name = getCellValue(ws, dr, nameCol);
         if (!name) continue;
         alreadyFilled.add(ref);
-        const id = lookupId(name, nameIndex, errors, sheetName, ref);
+        const id = await lookupId(ctx, name, ref, { r: dr, c: nameCol });
         if (id != null) {
           setCellValue(ws, dr, c, id, sheetName, changes);
           filled++;
@@ -373,21 +382,21 @@ function fillBareIdColumns(
   return filled;
 }
 
-function fillIdAmountColumns(
+async function fillIdAmountColumns(
   ws: XLSX.WorkSheet,
   sheetName: string,
-  nameIndex: Map<string, number[]>,
+  ctx: LookupCtx,
   errors: IdFillerError[],
   changes: WorksheetCellChanges,
   alreadyFilled: Set<string>
-): number {
+): Promise<number> {
   let filled = 0;
   const { minR, maxR, minC, maxC } = getRange(ws);
   for (let r = minR; r <= maxR; r++) {
     for (let c = minC; c <= maxC; c++) {
       const val = getCellValue(ws, r, c);
       if (!val) continue;
-      if (!/id\s*[\/&]\s*amount/i.test(val.trim()) && !/id\s+and\s+amount/i.test(val.trim())) continue;
+      if (!/id\s*[/&]\s*amount/i.test(val.trim()) && !/id\s+and\s+amount/i.test(val.trim())) continue;
       let nameCol: number | null = null;
       for (let nc = minC; nc <= maxC; nc++) {
         if (nc === c) continue;
@@ -403,7 +412,7 @@ function fillIdAmountColumns(
       for (let dr = r + 1; dr <= maxR; dr++) {
         const cellVal = getCellValue(ws, dr, c);
         if (!cellVal) continue;
-        if (/id\s*[\/&]\s*amount/i.test(cellVal.trim())) break;
+        if (/id\s*[/&]\s*amount/i.test(cellVal.trim())) break;
         // Check if cell contains any *amount pattern (with or without existing IDs)
         if (!/\*\d/.test(cellVal.trim())) continue;
         const ref = cellRef(dr, c);
@@ -423,14 +432,14 @@ function fillIdAmountColumns(
           segments.length,
           getMergedRangeEndRow(ws, dr, c) ?? undefined
         );
-        const resolvedNames = resolveSegmentNamesForMissingIds(segments, names, dr);
+        const resolvedNames = resolveSegmentCandidatesForMissingIds(segments, names, dr);
         const idAmounts: string[] = [];
         for (let i = 0; i < segments.length; i++) {
           const seg = segments[i];
           if (seg.startsWith("*")) {
             const name = resolvedNames[i];
             if (name) {
-              const id = lookupId(name, nameIndex, errors, sheetName, cellRef(dr, c));
+              const id = await lookupId(ctx, name.name, cellRef(dr, c), { r: name.row, c: name.col });
               if (id != null) idAmounts.push(seg.replace("*", `${id}*`));
               else idAmounts.push(seg);
             } else {
@@ -439,7 +448,7 @@ function fillIdAmountColumns(
           } else if (bareNumberNeedsId(seg)) {
             const name = resolvedNames[i];
             if (name) {
-              const id = lookupId(name, nameIndex, errors, sheetName, cellRef(dr, c));
+              const id = await lookupId(ctx, name.name, cellRef(dr, c), { r: name.row, c: name.col });
               if (id != null) idAmounts.push(`${id}*${seg}`);
               else idAmounts.push(seg);
             } else {
@@ -461,14 +470,14 @@ function fillIdAmountColumns(
   return filled;
 }
 
-function fillExchangeColumns(
+async function fillExchangeColumns(
   ws: XLSX.WorkSheet,
   sheetName: string,
-  nameIndex: Map<string, number[]>,
+  ctx: LookupCtx,
   errors: IdFillerError[],
   changes: WorksheetCellChanges,
   alreadyFilled: Set<string>
-): number {
+): Promise<number> {
   let filled = 0;
   const { minR, maxR, minC, maxC } = getRange(ws);
   let exchangeId: number | null = null;
@@ -504,7 +513,7 @@ function fillExchangeColumns(
   for (let r = minR; r <= maxR; r++) {
     for (let c = minC; c <= maxC; c++) {
       const val = getCellValue(ws, r, c);
-      if (!val || !/id\s*[\/&]\s*amount/i.test(val.trim())) continue;
+      if (!val || !/id\s*[/&]\s*amount/i.test(val.trim())) continue;
       let nameCol: number | null = null;
       for (let nc = minC; nc <= maxC; nc++) {
         if (nc === c) continue;
@@ -518,11 +527,11 @@ function fillExchangeColumns(
       for (let dr = r + 1; dr <= maxR; dr++) {
         const cellVal = getCellValue(ws, dr, c);
         if (!cellVal) continue;
-        if (/id\s*[\/&]\s*amount/i.test(cellVal.trim())) break;
+        if (/id\s*[/&]\s*amount/i.test(cellVal.trim())) break;
         if (/^\*\d+$/.test(cellVal.trim())) {
           const name = getCellValue(ws, dr, nameCol);
           if (!name) continue;
-          const id = lookupId(name, nameIndex, errors, sheetName, cellRef(dr, c));
+          const id = await lookupId(ctx, name, cellRef(dr, c), { r: dr, c: nameCol });
           if (id != null) {
             alreadyFilled.add(cellRef(dr, c));
             setCellValue(ws, dr, c, `${id}${cellVal.trim()}`, sheetName, changes);
@@ -535,14 +544,14 @@ function fillExchangeColumns(
   return filled;
 }
 
-function fillStandaloneAmounts(
+async function fillStandaloneAmounts(
   ws: XLSX.WorkSheet,
   sheetName: string,
-  nameIndex: Map<string, number[]>,
+  ctx: LookupCtx,
   errors: IdFillerError[],
   alreadyFilled: Set<string>,
   changes: WorksheetCellChanges
-): number {
+): Promise<number> {
   let filled = 0;
   const { minR, maxR, minC, maxC } = getRange(ws);
   for (let r = minR; r <= maxR; r++) {
@@ -570,7 +579,7 @@ function fillStandaloneAmounts(
           reason: "Quantidade não corresponde",
         });
       }
-      const resolvedNames = resolveSegmentNamesForMissingIds(parts, names, r);
+      const resolvedNames = resolveSegmentCandidatesForMissingIds(parts, names, r);
       const idAmounts: string[] = [];
       for (let i = 0; i < parts.length; i++) {
         const name = resolvedNames[i];
@@ -579,7 +588,7 @@ function fillStandaloneAmounts(
           continue;
         }
 
-        const id = lookupId(name, nameIndex, errors, sheetName, ref);
+        const id = await lookupId(ctx, name.name, ref, { r: name.row, c: name.col });
         if (id != null) idAmounts.push(parts[i].replace("*", `${id}*`));
         else idAmounts.push(parts[i]);
       }
@@ -594,9 +603,14 @@ function fillStandaloneAmounts(
   return filled;
 }
 
+/**
+ * Preenche os IDs do documento. `items` é a busca pelos itens do painel (ou o índice antigo
+ * nome → IDs); `hasher` liga a comparação pelas imagens do documento (só no navegador).
+ */
 export async function fillIds(
   originalBuffer: ArrayBuffer,
-  nameIndex: Map<string, number[]>
+  items: ItemResolver | Map<string, number[]>,
+  hasher?: ImageHasher
 ): Promise<IdFillerResult> {
   const wb = XLSX.read(new Uint8Array(originalBuffer), {
     type: "array",
@@ -604,25 +618,29 @@ export async function fillIds(
     cellNF: true,
     cellDates: true,
   });
+  const resolver = items instanceof ItemResolver ? items : ItemResolver.fromNameIndex(items, hasher);
+  const images = hasher ? await readSheetImages(originalBuffer).catch(() => new Map<string, SheetImage[]>()) : new Map<string, SheetImage[]>();
 
   const errors: IdFillerError[] = [];
   const changes: WorksheetCellChanges = new Map();
+  const stats = { similar: 0, byImage: 0 };
   let totalFilled = 0;
 
   for (const sheetName of wb.SheetNames) {
     const ws = wb.Sheets[sheetName];
     if (!ws || !ws["!ref"]) continue;
 
+    const ctx: LookupCtx = { resolver, images: images.get(sheetName), errors, sheet: sheetName, stats };
     const alreadyFilled = new Set<string>();
-    const f1 = fillBareIdColumns(ws, sheetName, nameIndex, errors, changes, alreadyFilled);
-    const f2 = fillIdAmountColumns(ws, sheetName, nameIndex, errors, changes, alreadyFilled);
-    const f3 = fillExchangeColumns(ws, sheetName, nameIndex, errors, changes, alreadyFilled);
-    const f4 = fillStandaloneAmounts(ws, sheetName, nameIndex, errors, alreadyFilled, changes);
+    const f1 = await fillBareIdColumns(ws, sheetName, ctx, errors, changes, alreadyFilled);
+    const f2 = await fillIdAmountColumns(ws, sheetName, ctx, errors, changes, alreadyFilled);
+    const f3 = await fillExchangeColumns(ws, sheetName, ctx, errors, changes, alreadyFilled);
+    const f4 = await fillStandaloneAmounts(ws, sheetName, ctx, errors, alreadyFilled, changes);
     totalFilled += f1 + f2 + f3 + f4;
   }
 
   const outputBuffer = await applyWorkbookChanges(originalBuffer, changes);
-  return { outputBuffer, errors, filled: totalFilled };
+  return { outputBuffer, errors, filled: totalFilled, ...stats };
 }
 
 export function createErrorReport(errors: IdFillerError[]): ArrayBuffer {

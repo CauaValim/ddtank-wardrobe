@@ -2,7 +2,9 @@ import { useState, useCallback, useRef } from "react";
 import { FileSpreadsheet, Download, AlertTriangle, CheckCircle2, Loader2 } from "lucide-react";
 import * as XLSX from "@e965/xlsx";
 import { supabase } from "@/integrations/supabase/client";
-import { buildNameIndex, fillIds, createErrorReport } from "@/lib/idFiller";
+import { fillIds, createErrorReport } from "@/lib/idFiller";
+import { ItemResolver, type FillerItemRow } from "@/lib/idFillerResolver";
+import { browserImageHash } from "@/lib/imageHash";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -44,13 +46,15 @@ export function IdFillerModal({ open, onClose, realm = "br" }: IdFillerModalProp
 
       try {
         setStatus("loading-db");
-        const allItems: { id: number; name: string | null }[] = [];
+        const allItems: FillerItemRow[] = [];
         let from = 0;
         const pageSize = 1000;
         while (true) {
+          // Ordenado por ID: sem ordem, a paginação pode repetir ou pular itens.
           const { data, error } = await supabase
             .from(tableName)
-            .select("id, name")
+            .select("id, name, type, pic_path, image_url")
+            .order("id")
             .range(from, from + pageSize - 1);
           if (error) throw error;
           if (!data || data.length === 0) break;
@@ -59,11 +63,10 @@ export function IdFillerModal({ open, onClose, realm = "br" }: IdFillerModalProp
           from += pageSize;
         }
 
-        const nameIndex = buildNameIndex(allItems);
-
         setStatus("processing");
         const ab = await file.arrayBuffer();
-        const result = await fillIds(ab, nameIndex);
+        // Nome (igual ou ≥ 90% parecido) e, para desempatar, a imagem do item no documento.
+        const result = await fillIds(ab, new ItemResolver(allItems, browserImageHash), browserImageHash);
 
         resultBufRef.current = result.outputBuffer;
         setFilledCount(result.filled);
@@ -76,19 +79,22 @@ export function IdFillerModal({ open, onClose, realm = "br" }: IdFillerModalProp
         setStatus("done");
         toast({
           title: "Processamento concluído",
-          description: `${result.filled} IDs preenchidos, ${result.errors.length} erros`,
+          description:
+            `${result.filled} IDs preenchidos, ${result.errors.length} erros` +
+            (result.similar ? `; ${result.similar} por nome parecido` : "") +
+            (result.byImage ? `; ${result.byImage} pela imagem` : ""),
         });
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.error(err);
         setStatus("error");
         toast({
           title: "Erro ao processar",
-          description: err.message || "Erro desconhecido",
+          description: (err instanceof Error && err.message) || "Erro desconhecido",
           variant: "destructive",
         });
       }
     },
-    [toast]
+    [toast, tableName]
   );
 
   const downloadBlob = useCallback((buf: ArrayBuffer, name: string) => {

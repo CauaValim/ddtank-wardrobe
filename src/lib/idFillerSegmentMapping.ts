@@ -1,14 +1,25 @@
 export interface SegmentNameCandidate {
   row: number;
+  /** Coluna da célula do nome (1-based), para achar a imagem do item ao lado. */
+  col?: number;
   name: string;
 }
 
 export function resolveSegmentNamesForMissingIds(
   segments: string[],
   candidates: SegmentNameCandidate[],
-  _startRow: number
+  startRow: number
 ): Array<string | null> {
-  const resolved = Array<string | null>(segments.length).fill(null);
+  return resolveSegmentCandidatesForMissingIds(segments, candidates, startRow).map((c) => c?.name ?? null);
+}
+
+/** Igual a resolveSegmentNamesForMissingIds, devolvendo também a célula do nome. */
+export function resolveSegmentCandidatesForMissingIds(
+  segments: string[],
+  candidates: SegmentNameCandidate[],
+  _startRow: number
+): Array<SegmentNameCandidate | null> {
+  const resolved = Array<SegmentNameCandidate | null>(segments.length).fill(null);
   let candidateIndex = 0;
 
   for (let index = 0; index < segments.length; index++) {
@@ -21,7 +32,7 @@ export function resolveSegmentNamesForMissingIds(
     //   often hides the leading "*" of the first amount in a separator run)
     const seg = segments[index];
     if (seg.startsWith("*") || /^\d+$/.test(seg)) {
-      resolved[index] = candidate.name;
+      resolved[index] = candidate;
     }
 
     candidateIndex++;

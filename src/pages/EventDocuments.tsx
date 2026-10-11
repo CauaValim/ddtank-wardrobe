@@ -29,6 +29,7 @@ import { coverWithPrizes, isRequestSection, manifest, newId, newSection, normali
 import { exportDocument } from "@/lib/eventTemplate/exporter";
 import { readDocument } from "@/lib/eventTemplate/importer";
 import { resolveIdsByName } from "@/lib/eventTemplate/resolveNames";
+import { canonicalizeDocument } from "@/lib/eventTemplate/canonicalDoc";
 import { loadTemplate } from "@/lib/eventTemplate/templateSource";
 import { downloadBlob, loadImageForWorkbook } from "@/lib/eventTemplate/browserImages";
 import { validateEventDocument, type ValidationIssue } from "@/lib/eventTemplate/validate";
@@ -63,14 +64,18 @@ async function runExport(doc: EventDocument, lookup: ItemLookup, rules?: Map<str
     toast.error(`Corrija ${errors.length} erro(s) antes de exportar`);
     return issues;
   }
+  // IDs padronizados: armas no nível +0 e a bolinha de EXP sempre 1120218.
+  const canonical = await canonicalizeDocument(doc);
+  const newIds = collectItemIds(canonical.doc).filter((id) => !lookup.has(id));
+  if (newIds.length) for (const [id, v] of await lookupItems(newIds)) lookup.set(id, v);
   const template = await loadTemplate(manifest);
-  const result = await exportDocument(template, manifest, doc, {
+  const result = await exportDocument(template, manifest, canonical.doc, {
     loadImage: (item: EventItem) => loadImageForWorkbook(item.imageUrl || (lookup.get(item.id.trim())?.imageUrl ?? "")),
     loadRequests: () => loadTemplate(requestsManifest),
   });
   downloadBlob(result.data, result.fileName);
   if (result.warnings.length > 0) toast.warning(`Exportado com ${result.warnings.length} aviso(s): ${result.warnings.slice(0, 2).join("; ")}`);
-  else toast.success("Documento exportado no modelo oficial");
+  else toast.success(`Documento exportado no modelo oficial${canonical.changed ? ` (${canonical.changed} ID(s) padronizados: armas na +0 e Exp.Pedra Mágica em 1120218)` : ""}`);
   return issues;
 }
 

@@ -155,24 +155,38 @@ function getOrCreateCell(
  */
 function isIdAmountPattern(text: string): boolean {
   // Match patterns like "12656*500", "*100,*200", "3,123180*10,*400"
-  return /\d+\*\d+|\*\d+/.test(text) && /^[\d*,\s\w]+$/.test(text);
+  return /\d+\*\d+|\*\d+/.test(text) && /^[\d*.,\s\w]+$/.test(text);
 }
 
 /**
  * Create a rich text run element: <r><rPr>...</rPr><t>text</t></r>
  */
+/** Fonte da célula (do estilo dela), usada nos trechos do texto rico. */
+export interface CellFont {
+  size: string;
+  name: string;
+  family: string | null;
+}
+
+const DEFAULT_FONT: CellFont = { size: "11", name: "Cambria", family: "1" };
+
 function createRun(
   doc: Document,
   text: string,
   colorRgb: string | null,
   colorTheme: string | null,
-  bold = false
+  bold = false,
+  font: CellFont = DEFAULT_FONT
 ): Element {
   const r = doc.createElementNS(SPREADSHEET_NS, "r");
   const rPr = doc.createElementNS(SPREADSHEET_NS, "rPr");
 
+  // Mesma ordem que o Excel grava: b, sz, color, rFont, family.
+  if (bold) rPr.appendChild(doc.createElementNS(SPREADSHEET_NS, "b"));
+
+  // Tamanho e fonte da própria célula (antes era sempre 11/Cambria, mesmo em células de 12).
   const sz = doc.createElementNS(SPREADSHEET_NS, "sz");
-  sz.setAttribute("val", "11");
+  sz.setAttribute("val", font.size);
   rPr.appendChild(sz);
 
   const color = doc.createElementNS(SPREADSHEET_NS, "color");
@@ -184,12 +198,13 @@ function createRun(
   rPr.appendChild(color);
 
   const rFont = doc.createElementNS(SPREADSHEET_NS, "rFont");
-  rFont.setAttribute("val", "Cambria");
+  rFont.setAttribute("val", font.name);
   rPr.appendChild(rFont);
 
-  if (bold) {
-    const b = doc.createElementNS(SPREADSHEET_NS, "b");
-    rPr.appendChild(b);
+  if (font.family) {
+    const family = doc.createElementNS(SPREADSHEET_NS, "family");
+    family.setAttribute("val", font.family);
+    rPr.appendChild(family);
   }
 
   r.appendChild(rPr);
@@ -208,7 +223,7 @@ function createRun(
  * Write a rich-text ID*amount value with colors and formatting:
  * ID (black/theme1 + bold), * (black/theme1), amount (red FF0000), separators (black/theme1)
  */
-function writeRichIdAmount(sheetDoc: Document, cell: Element, text: string) {
+function writeRichIdAmount(sheetDoc: Document, cell: Element, text: string, font?: CellFont) {
   cell.setAttribute("t", "inlineStr");
   const is = sheetDoc.createElementNS(SPREADSHEET_NS, "is");
 
@@ -221,42 +236,42 @@ function writeRichIdAmount(sheetDoc: Document, cell: Element, text: string) {
 
     // Check if this is a separator (comma or OR)
     if (/^,\s*$/.test(seg) || /^\s+OR\s+$/i.test(seg)) {
-      is.appendChild(createRun(sheetDoc, seg, null, "1", false));
+      is.appendChild(createRun(sheetDoc, seg, null, "1", false, font));
       continue;
     }
 
     // Parse ID*amount pattern (e.g., "12656*500")
-    const matchFull = seg.match(/^(\d+)(\*)(\d+)$/);
+    const matchFull = seg.match(/^(\d+|XXX)(\*)(\d[\d.]*)$/);
     if (matchFull) {
-      is.appendChild(createRun(sheetDoc, matchFull[1], null, "1", true));      // ID in black + bold
-      is.appendChild(createRun(sheetDoc, matchFull[2], null, "1", true));      // * in black + bold
-      is.appendChild(createRun(sheetDoc, matchFull[3], "FFFF0000", null, true)); // amount in red + bold
+      is.appendChild(createRun(sheetDoc, matchFull[1], null, "1", true, font));      // ID in black + bold
+      is.appendChild(createRun(sheetDoc, matchFull[2], null, "1", true, font));      // * in black + bold
+      is.appendChild(createRun(sheetDoc, matchFull[3], "FFFF0000", null, true, font)); // amount in red + bold
       continue;
     }
 
     // Parse *amount pattern without ID (e.g., "*100")
     const matchNoId = seg.match(/^(\*)(\d+)$/);
     if (matchNoId) {
-      is.appendChild(createRun(sheetDoc, matchNoId[1], null, "1", true));      // * in black + bold
-      is.appendChild(createRun(sheetDoc, matchNoId[2], "FFFF0000", null, true)); // amount in red + bold
+      is.appendChild(createRun(sheetDoc, matchNoId[1], null, "1", true, font));      // * in black + bold
+      is.appendChild(createRun(sheetDoc, matchNoId[2], "FFFF0000", null, true, font)); // amount in red + bold
       continue;
     }
 
     // Plain number (e.g., standalone ID like "3")
     const matchNum = seg.match(/^(\d+)$/);
     if (matchNum) {
-      is.appendChild(createRun(sheetDoc, matchNum[1], null, "1", true));       // number in black + bold
+      is.appendChild(createRun(sheetDoc, matchNum[1], null, "1", true, font));       // number in black + bold
       continue;
     }
 
     // Fallback: just black bold
-    is.appendChild(createRun(sheetDoc, seg, null, "1", true));
+    is.appendChild(createRun(sheetDoc, seg, null, "1", true, font));
   }
 
   cell.appendChild(is);
 }
 
-function writeCellValue(sheetDoc: Document, cell: Element, value: XlsxCellValue) {
+function writeCellValue(sheetDoc: Document, cell: Element, value: XlsxCellValue, font?: CellFont) {
   while (cell.firstChild) {
     cell.removeChild(cell.firstChild);
   }
@@ -273,7 +288,7 @@ function writeCellValue(sheetDoc: Document, cell: Element, value: XlsxCellValue)
 
   // Use rich text for ID*amount patterns
   if (isIdAmountPattern(text)) {
-    writeRichIdAmount(sheetDoc, cell, text);
+    writeRichIdAmount(sheetDoc, cell, text, font);
     return;
   }
 
@@ -288,6 +303,24 @@ function writeCellValue(sheetDoc: Document, cell: Element, value: XlsxCellValue)
   t.textContent = text;
   is.appendChild(t);
   cell.appendChild(is);
+}
+
+/** Fonte (tamanho, nome, família) de cada estilo de célula do styles.xml. */
+async function loadStyleFonts(zip: JSZip, parser: DOMParser): Promise<(styleId: string | null) => CellFont | undefined> {
+  const file = zip.file("xl/styles.xml");
+  if (!file) return () => undefined;
+  const doc = parser.parseFromString(await file.async("string"), "application/xml");
+  const fontsEl = getFirstByLocalName(doc, "fonts");
+  const xfsEl = getFirstByLocalName(doc, "cellXfs");
+  const fonts = fontsEl ? getChildElementsByLocalName(fontsEl, "font") : [];
+  const xfs = xfsEl ? getChildElementsByLocalName(xfsEl, "xf") : [];
+  const val = (font: Element, name: string) => getChildElementsByLocalName(font, name)[0]?.getAttribute("val") ?? null;
+  return (styleId) => {
+    const xf = xfs[Number(styleId ?? "0")];
+    const font = xf ? fonts[Number(xf.getAttribute("fontId") ?? "0")] : undefined;
+    if (!font) return undefined;
+    return { size: val(font, "sz") ?? "11", name: val(font, "name") ?? "Cambria", family: val(font, "family") };
+  };
 }
 
 function updateDimension(sheetDoc: Document, changedRefs: string[]) {
@@ -347,6 +380,7 @@ export async function applyWorkbookChanges(
   assertValidXml(workbookRelsDoc, "xl/_rels/workbook.xml.rels");
 
   const sheetPathByName = getSheetPathByName(workbookDoc, workbookRelsDoc);
+  const fontOfStyle = await loadStyleFonts(zip, parser);
 
   for (const [sheetName, sheetChanges] of changes) {
     const sheetPath = sheetPathByName.get(sheetName);
@@ -366,7 +400,7 @@ export async function applyWorkbookChanges(
       const rowNumber = XLSX.utils.decode_cell(cellRef).r + 1;
       const row = getOrCreateRow(sheetDoc, sheetData, rowNumber);
       const cell = getOrCreateCell(sheetDoc, sheetData, row, rowNumber, cellRef);
-      writeCellValue(sheetDoc, cell, value);
+      writeCellValue(sheetDoc, cell, value, fontOfStyle(cell.getAttribute("s")));
       changedRefs.push(cellRef);
     }
 
