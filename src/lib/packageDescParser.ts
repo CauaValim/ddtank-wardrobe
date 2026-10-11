@@ -17,6 +17,12 @@ const INTRO_MARKERS = [
   "contém:",
 ];
 
+/** Frase que anuncia o conteúdo antes dos dois-pontos ("Ao abrir, você receberá", "Abra para obter"). */
+const CONTENT_INTRO = /(?:receb|obt[eé]|obter|ganh|cont[eé]m|inclu|recompensa|abr[ai])[^:：]*$/i;
+
+const STAT_OR_PERIOD =
+  /^(?:[+＋]?\s*\d+\s*(?:de\s+)?)?(?:ataque|defesa|agilidade|[áa]gil|sorte|vida|hp|dano|armadura|guarda|precis[ãa]o|cr[íi]tico)\b|^\d+\s*(?:dias?|horas?|minutos?)$|^permanente?$|per[íi]odo de validade/i;
+
 const SEPARATORS = /[,，、;；\n]+/;
 const LEADING_MARKER_REGEX =
   /^\s*(?:inclui|incluso|inclusos|contem|contém|cont[ée]m|obter|obtem|obtém|obtenha|receber|recebe|ganhar|ganha|ganhará|recompensa|recompensas|pacote com|itens?)\s*[:：\-–]?\s+/i;
@@ -52,13 +58,30 @@ export function parsePackageDescription(desc?: string | null): ParsedContentEntr
 
   const lower = text.toLowerCase();
   let start = -1;
-  for (const marker of INTRO_MARKERS) {
-    const idx = lower.indexOf(marker);
-    if (idx !== -1 && (start === -1 || idx < start)) start = idx + marker.length;
+  // Itens sem quantidade só valem depois de uma introdução de conteúdo ("Inclui:", "você receberá:");
+  // em "fonte: evento" e parecidos, só entram trechos com quantidade explícita.
+  let allowBare = false;
+  // Introdução terminada em dois-pontos ("Ao abrir, você receberá:", "Abra para obter:"):
+  // a lista começa depois dela, desde que antes não haja quantidade ("*1", "x10").
+  const colon = text.search(/[:：]/);
+  if (colon !== -1 && !/[*×]\s*\d|\bx\s*\d/i.test(text.slice(0, colon))) {
+    start = colon + 1;
+    allowBare = CONTENT_INTRO.test(text.slice(0, colon));
+  }
+  if (start === -1) {
+    for (const marker of INTRO_MARKERS) {
+      const idx = lower.indexOf(marker);
+      if (idx !== -1 && (start === -1 || idx < start)) start = idx + marker.length;
+    }
+    allowBare = start !== -1;
   }
   if (start !== -1) text = text.slice(start);
 
-  text = stripNoise(text);
+  text = stripNoise(text)
+    // "… *600 e também obterá aleatoriamente: Item *1" -> "… *600, Item *1"
+    .replace(/\s+e\s+tamb[ée]m\b[^:：]*[:：]/gi, ",")
+    // outras frases no meio da lista que terminam em dois-pontos
+    .replace(/([,，;；])\s*[^,，;；:：*×]*[:：]/g, "$1");
   if (!text) return [];
 
   const entries: ParsedContentEntry[] = [];
@@ -77,7 +100,7 @@ export function parsePackageDescription(desc?: string | null): ParsedContentEntr
     } else if (match) {
       name = match[1];
       qty = Number(match[2] ?? match[3]);
-    } else if (start !== -1) {
+    } else if (allowBare) {
       // após um marcador (ex.: "Inclui:") itens sem quantidade valem 1
       name = part;
       qty = 1;
@@ -92,6 +115,8 @@ export function parsePackageDescription(desc?: string | null): ParsedContentEntr
     if (!name || name.length < 2 || !Number.isFinite(qty) || qty <= 0) continue;
     // ignora trechos que são apenas números ou frases longas demais
     if (/^\d+$/.test(name) || name.length > 60) continue;
+    // bônus de atributo de títulos ("Ataque +5", "20 defesa") e prazos ("15 Dias") não são itens
+    if (STAT_OR_PERIOD.test(name)) continue;
 
     entries.push({ name, quantity: qty });
   }
@@ -132,3 +157,6 @@ export function nameSimilarity(a: string, b: string): number {
   }
   return 1 - prev[n] / Math.max(m, n);
 }
+
+/** O jogo marca baús e pacotes que se abrem com Property1 = 6 (attribute1 no painel). */
+export const isOpenablePackage = (attributes: Record<string, string | undefined>) => attributes.attribute1 === "6";
