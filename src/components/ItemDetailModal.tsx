@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { getTypeName } from "@/lib/itemTypes";
 import type { GameItem } from "@/types/item";
 import { hasParsableContents, isOpenablePackage } from "@/lib/packageDescParser";
-import { itemStats, renewalOffers } from "@/lib/itemDetail";
+import { accessoryExp, itemStats, renewalOffers } from "@/lib/itemDetail";
 import { useGameData } from "@/hooks/useGameData";
 import { MountStats, SuitInfo } from "@/components/ItemGameExtras";
 import { useItemGameExtras } from "@/hooks/useItemGameExtras";
@@ -105,7 +105,9 @@ export function ItemDetailModal({
   const typeName = getTypeName(item.attributes.type != null ? Number(item.attributes.type) : null);
   // Conteúdo do jogo (tabela) ou, só em baús, a lista lida da descrição.
   const showContentsButton = hasContents || (isOpenablePackage(item.attributes) && hasParsableContents(item.attributes.desc));
+  const exp = accessoryExp(item);
   const stats = itemStats(item);
+  if (exp) stats.push({ label: `EXP (+${exp.level})`, value: exp.exp.toLocaleString("pt-BR") });
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -162,6 +164,12 @@ export function ItemDetailModal({
               <span className="text-[10px] text-muted-foreground">Descrição</span>
               <p className="text-xs text-card-foreground whitespace-pre-wrap">{item.attributes.desc?.trim() || "Descrição não disponível no jogo."}</p>
             </div>
+            {exp && (
+              <div className="w-full rounded-md border border-primary/30 bg-primary/10 px-2 py-1.5">
+                <span className="text-[10px] text-muted-foreground">EXP necessário para o nível +{exp.level}</span>
+                <p className="text-sm font-bold text-primary tabular-nums">{exp.exp.toLocaleString("pt-BR")}</p>
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="stats">

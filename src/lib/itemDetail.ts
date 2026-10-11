@@ -65,6 +65,17 @@ export function itemStats(item: GameItem): { label: string; value: string }[] {
   return stats.map((s) => ({ label: s.label, value: s.value ?? "0" }));
 }
 
+const LEVELED_ACCESSORY_TYPES = new Set([8, 9]);
+
+/** Pulseiras e anéis: Property1 é o nível (+N) e Property2 o EXP necessário para chegar nele. */
+export function accessoryExp(item: GameItem): { level: number; exp: number } | null {
+  const a = item.attributes;
+  if (!LEVELED_ACCESSORY_TYPES.has(Number(a.type))) return null;
+  const exp = Number(a.attribute2 ?? 0);
+  if (!(exp > 0)) return null;
+  return { level: Number(a.attribute1 ?? 0), exp };
+}
+
 // ------------------------------------------------------------------ filtro de categorias
 
 /** Seções do filtro de categorias (como no outro painel); o que não estiver aqui cai em "Outros". */

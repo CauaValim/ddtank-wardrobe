@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { currencyLabel, itemStats, renewalOffers, sectionsFor } from "./itemDetail";
+import { accessoryExp, currencyLabel, itemStats, renewalOffers, sectionsFor } from "./itemDetail";
 
 // Linhas reais do ShopItemList.xml (campos usados).
 const shop = [
@@ -28,6 +28,14 @@ describe("aba Atributos", () => {
     expect(itemStats(hat).map((s) => `${s.label}:${s.value}`)).toEqual(["Ataque:5", "Defesa:5", "Agilidade:5", "Sorte:5", "Armadura:60"]);
     const gun = { id: "7071", name: "Faca", attributes: { type: "7", attribute7: "300" } };
     expect(itemStats(gun).at(-1)).toEqual({ label: "Dano", value: "300" });
+  });
+});
+
+describe("EXP de anéis e pulseiras", () => {
+  it("nível e EXP necessário", () => {
+    const ring = { id: "95684", name: "Anel Flamejante de 16º Aniversário +10", attributes: { type: "9", attribute1: "10", attribute2: "194150000" } };
+    expect(accessoryExp(ring)).toEqual({ level: 10, exp: 194150000 });
+    expect(accessoryExp({ id: "1104", name: "Chapéu", attributes: { type: "1", attribute2: "5" } })).toBeNull();
   });
 });
 

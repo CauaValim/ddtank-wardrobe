@@ -43,5 +43,9 @@ describe("o que não é item", () => {
   it("só baús (attribute1 = 6) usam a descrição", () => {
     expect(isOpenablePackage({ attribute1: "6" })).toBe(true);
     expect(isOpenablePackage({ attribute1: "0" })).toBe(false);
+    // Pulseira/anel +6 (8602, 9602) não é baú.
+    expect(isOpenablePackage({ attribute1: "6", type: "8" })).toBe(false);
+    expect(isOpenablePackage({ attribute1: "6", type: "9" })).toBe(false);
+    expect(isOpenablePackage({ attribute1: "6", type: "11" })).toBe(true);
   });
 });

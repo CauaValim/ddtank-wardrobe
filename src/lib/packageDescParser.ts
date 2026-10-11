@@ -158,5 +158,9 @@ export function nameSimilarity(a: string, b: string): number {
   return 1 - prev[n] / Math.max(m, n);
 }
 
+// Em pulseiras (8), anéis (9) e medalhas (40) o Property1 é o nível do item (+6), não a marca de baú.
+const LEVELED_TYPES = new Set(["8", "9", "40"]);
+
 /** O jogo marca baús e pacotes que se abrem com Property1 = 6 (attribute1 no painel). */
-export const isOpenablePackage = (attributes: Record<string, string | undefined>) => attributes.attribute1 === "6";
+export const isOpenablePackage = (attributes: Record<string, string | undefined>) =>
+  attributes.attribute1 === "6" && !LEVELED_TYPES.has(String(attributes.type ?? ""));
