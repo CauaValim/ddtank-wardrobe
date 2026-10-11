@@ -222,6 +222,20 @@ export function richRuns(kind: RichKind, text: string): RichRun[] {
       if (last < text.length) runs.push({ text: text.slice(last), color: "black" });
       return runs;
     }
+    case "costLine": {
+      // Custo digitado na troca ("Value"): tudo em negrito, quantidades em vermelho, como no modelo.
+      // Aceita "ID * qtd", "IDxqtd" e "ID×qtd" e grava sempre como "ID*qtd".
+      const runs: RichRun[] = [];
+      let last = 0;
+      for (const m of text.matchAll(/(\d+|XXX)\s*[*×xX]\s*(\d[\d.]*)/g)) {
+        const before = text.slice(last, m.index);
+        runs.push({ text: `${before}${m[1]}*`, bold: true, color: "black" });
+        runs.push({ text: m[2], bold: true, color: "red" });
+        last = (m.index ?? 0) + m[0].length;
+      }
+      if (last < text.length) runs.push({ text: text.slice(last), bold: true, color: "black" });
+      return runs;
+    }
     case "value": {
       const m = /^(\*?)([\d.,]+)([\s\S]*)$/.exec(text);
       if (!m) return [{ text }];

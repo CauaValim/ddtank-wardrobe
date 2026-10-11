@@ -167,9 +167,13 @@ function DocList({ group }: { group: ServerGroup }) {
         toast.error("Nenhuma aba dessa planilha segue o modelo oficial");
         return;
       }
-      // Planilhas sem ID: o item é procurado na base pelo nome.
+      // Itens sem ID ou com ID que não existe no painel: procurados na base pelo nome.
       const named = await resolveIdsByName(doc.sections);
-      toast.success(`${doc.sections.length} aba(s) importada(s)${named.resolved ? `; ${named.resolved} item(ns) sem ID encontrados pelo nome` : ""}${named.missing ? `; ${named.missing} sem correspondência (ficam como XXX)` : ""}`);
+      toast.success(
+        `${doc.sections.length} aba(s) importada(s)` +
+          (named.resolved ? `; ${named.resolved} item(ns) encontrados pelo nome${named.approximate ? ` (${named.approximate} por nome parecido)` : ""}` : "") +
+          (named.missing ? `; ${named.missing} sem correspondência na base` : ""),
+      );
       await insert({ ...doc, sections: named.sections, title: file.name.replace(/\.xlsx$/i, "") });
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Falha ao ler a planilha");

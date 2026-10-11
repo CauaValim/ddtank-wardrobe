@@ -3,7 +3,7 @@
  * e do documento salvo em event_documents.sections.
  */
 
-export type RichKind = "plain" | "itemLabel" | "idLine" | "value" | "tierLabel" | "date" | "rankingTitle" | "labelValue";
+export type RichKind = "plain" | "itemLabel" | "idLine" | "costLine" | "value" | "tierLabel" | "date" | "rankingTitle" | "labelValue";
 
 export interface FieldSpec {
   key: string;

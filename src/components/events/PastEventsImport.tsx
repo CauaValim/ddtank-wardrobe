@@ -17,8 +17,8 @@ import type { Json } from "@/integrations/supabase/types";
 
 type Result = { file: string; ok: boolean; message: string };
 
-const nameSummary = ({ resolved, missing }: { resolved: number; missing: number }) =>
-  `${resolved ? `, ${resolved} item(ns) sem ID encontrados pelo nome` : ""}${missing ? `, ${missing} sem correspondência na base` : ""}`;
+const nameSummary = ({ resolved, approximate, missing }: { resolved: number; approximate: number; missing: number }) =>
+  `${resolved ? `, ${resolved} item(ns) encontrados pelo nome${approximate ? ` (${approximate} por nome parecido)` : ""}` : ""}${missing ? `, ${missing} sem correspondência na base` : ""}`;
 
 /**
  * Dois botões (servidores antigos / novos) que enviam várias planilhas de eventos anteriores

@@ -80,6 +80,12 @@ describe("formatos", () => {
     expect(parseFormat(fmt, "DATE ENTRY:  (09/28/2026) - 00:00")).toEqual({ date: "09/28/2026", time: "00:00" });
     expect(parseIdLine("1124504*300,XXX*1,12327*100")).toEqual([{ id: "1124504", qty: 300 }, { id: "XXX", qty: 1 }, { id: "12327", qty: 100 }]);
     expect(richRuns("idLine", "12*5 OR 13*2").map((r) => r.text).join("")).toBe("12*5 OR 13*2");
+    // "Value" da troca: tudo em negrito e quantidades em vermelho, mesmo digitado com espaço ou "x".
+    const cost = richRuns("costLine", "11664 * 8, 11510x8");
+    expect(cost.map((r) => r.text).join("")).toBe("11664*8, 11510*8");
+    expect(cost.every((r) => r.bold)).toBe(true);
+    expect(cost.filter((r) => r.color === "red").map((r) => r.text)).toEqual(["8", "8"]);
+    expect(richRuns("costLine", "XXX*2000").map((r) => [r.text, r.color])).toEqual([["XXX*", "black"], ["2000", "red"]]);
     expect(richRuns("itemLabel", "Ouros\n[Permanent] [Bound]").find((r) => r.text === "[Bound]")?.color).toBe("red");
     expect(parseItemLabel("Pedra Mág.Imagem 4 (lenda) [Atk, Agi, Sorte, Def] [Permanent] [Bound]")).toEqual({ name: "Pedra Mág.Imagem 4 (lenda) [Atk, Agi, Sorte, Def]", duration: "Permanent", bind: "Bound" });
     expect(parseItemLabel("A lâmina do exílio\n[30 Days - renewable [Bound]")).toEqual({ name: "A lâmina do exílio", duration: "30 Days - renewable", bind: "Bound" });
