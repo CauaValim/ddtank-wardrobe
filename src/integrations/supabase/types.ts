@@ -760,6 +760,62 @@ export type Database = {
           },
         ]
       }
+      schedule_pendencies: {
+        Row: {
+          attachments: Json
+          context: string
+          created_at: string
+          created_by: string | null
+          created_by_email: string | null
+          id: string
+          period_id: string | null
+          resolved_at: string | null
+          resolved_by_email: string | null
+          status: string
+          tab: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          attachments?: Json
+          context?: string
+          created_at?: string
+          created_by?: string | null
+          created_by_email?: string | null
+          id?: string
+          period_id?: string | null
+          resolved_at?: string | null
+          resolved_by_email?: string | null
+          status?: string
+          tab?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          attachments?: Json
+          context?: string
+          created_at?: string
+          created_by?: string | null
+          created_by_email?: string | null
+          id?: string
+          period_id?: string | null
+          resolved_at?: string | null
+          resolved_by_email?: string | null
+          status?: string
+          tab?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "schedule_pendencies_period_id_fkey"
+            columns: ["period_id"]
+            isOneToOne: false
+            referencedRelation: "schedule_periods"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       schedule_periods: {
         Row: {
           created_at: string
