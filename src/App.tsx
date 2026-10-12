@@ -48,7 +48,7 @@ function AppRoutes() {
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full">
-        <EventScheduleSidebar canEdit={auth.can("schedule.edit")} />
+        <EventScheduleSidebar canEdit={auth.can("schedule.edit")} userId={auth.user?.id ?? null} />
         <div className="flex-1 flex flex-col min-w-0">
           <Routes>
             <Route path="/" element={<Index auth={auth} realm="br" />} />

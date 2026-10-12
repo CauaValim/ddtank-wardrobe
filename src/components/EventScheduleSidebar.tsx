@@ -17,6 +17,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { isCurrentPeriod, periodTitle, useSchedule, type ScheduleCategory, type SchedulePeriod } from "@/hooks/useSchedule";
 import { ScheduleManager } from "@/components/schedule/ScheduleManager";
+import { PendenciesPanel } from "@/components/schedule/PendenciesPanel";
+import { usePendencies } from "@/hooks/usePendencies";
 
 const CHEVRON = "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform duration-200 [[data-state=open]>&]:rotate-180";
 
@@ -58,12 +60,15 @@ function CategoryEvents({ category, events }: { category: ScheduleCategory; even
   );
 }
 
-export function EventScheduleSidebar({ canEdit = false }: { canEdit?: boolean }) {
+export function EventScheduleSidebar({ canEdit = false, userId = null }: { canEdit?: boolean; userId?: string | null }) {
   const { state } = useSidebar();
   const collapsed = state === "collapsed";
   const schedule = useSchedule();
   const { sections, categories, periods, entriesByPeriod, available, loading } = schedule;
   const [managing, setManaging] = useState(false);
+  const [view, setView] = useState<"schedule" | "pendencies">("schedule");
+  const pendencies = usePendencies();
+  const openCount = pendencies.pendencies.filter((p) => p.status === "open").length;
 
   return (
     <Sidebar collapsible="icon" side="left" className="border-r border-border">
@@ -71,7 +76,7 @@ export function EventScheduleSidebar({ canEdit = false }: { canEdit?: boolean })
         <div className="flex items-center gap-2">
           <CalendarDays className="h-5 w-5 shrink-0 text-primary" />
           {!collapsed && <span className="text-sm font-semibold text-foreground truncate">Cronograma Projetos</span>}
-          {!collapsed && canEdit && available && (
+          {!collapsed && canEdit && available && view === "schedule" && (
             <button
               type="button"
               onClick={() => setManaging(true)}
@@ -82,10 +87,34 @@ export function EventScheduleSidebar({ canEdit = false }: { canEdit?: boolean })
             </button>
           )}
         </div>
+        {!collapsed && (
+          <div className="mt-2 grid grid-cols-2 gap-1 rounded-md bg-secondary p-0.5">
+            {(["schedule", "pendencies"] as const).map((v) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => setView(v)}
+                className={`flex items-center justify-center gap-1 rounded px-2 py-1 text-[11px] font-medium transition-colors ${
+                  view === v ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {v === "schedule" ? "Cronograma" : "Pendências"}
+                {v === "pendencies" && openCount > 0 && (
+                  <span className="rounded-full bg-amber-500 px-1.5 text-[10px] font-bold leading-4 text-white">{openCount}</span>
+                )}
+              </button>
+            ))}
+          </div>
+        )}
       </SidebarHeader>
       <SidebarContent>
         <ScrollArea className="h-[calc(100vh-57px)]">
-          <SidebarGroup>
+          {!collapsed && view === "pendencies" && (
+            <SidebarGroup>
+              <PendenciesPanel api={pendencies} schedule={schedule} userId={userId} canManage={canEdit} />
+            </SidebarGroup>
+          )}
+          <SidebarGroup className={!collapsed && view === "pendencies" ? "hidden" : undefined}>
             {!collapsed && !loading && (!available || sections.length === 0) && (
               <p className="px-2 py-3 text-xs text-muted-foreground">
                 {!available
