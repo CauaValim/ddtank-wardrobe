@@ -200,7 +200,7 @@ export function PendencyDialog({ api, periods, categoryNames, pendency, canEdit,
         <div className="space-y-3">
           <div className="space-y-1.5">
             <Label htmlFor="pendency-title">Título</Label>
-            <Input id="pendency-title" value={draft.title} disabled={!editable} onChange={(e) => set({ title: e.target.value })} placeholder="Ex.: Falta o ID do prêmio do 2º lugar" />
+            <Input id="pendency-title" value={draft.title} disabled={!editable} onChange={(e) => set({ title: e.target.value })} placeholder="Ex.: Faça se Puder do dia 15/10 não entrou" />
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
@@ -241,7 +241,7 @@ export function PendencyDialog({ api, periods, categoryNames, pendency, canEdit,
                   addFiles(files);
                 }
               }}
-              placeholder="Descreva a pendência. Prints colados aqui (Ctrl+V) viram anexos."
+              placeholder="Ex.: O Faça se Puder do dia 15/10 não entrou no jogo nos servidores s1-s401. Os prêmios do 2º dia também não apareceram. Prints colados aqui (Ctrl+V) viram anexos."
             />
           </div>
 
