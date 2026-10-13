@@ -30,6 +30,7 @@ import { exportDocument } from "@/lib/eventTemplate/exporter";
 import { readDocument } from "@/lib/eventTemplate/importer";
 import { resolveIdsByName } from "@/lib/eventTemplate/resolveNames";
 import { canonicalizeDocument } from "@/lib/eventTemplate/canonicalDoc";
+import { backupDiffers, deleteBackup, readBackup, writeBackup, type DocumentBackup } from "@/lib/eventTemplate/localBackup";
 import { loadTemplate } from "@/lib/eventTemplate/templateSource";
 import { downloadBlob, loadImageForWorkbook } from "@/lib/eventTemplate/browserImages";
 import { validateEventDocument, type ValidationIssue } from "@/lib/eventTemplate/validate";
@@ -44,6 +45,9 @@ type Row = Omit<EventDocument, "sections"> & { sections: Json };
 type ListRow = Omit<EventDocument, "sections">;
 
 const table = () => supabase.from("event_documents");
+/** Intervalo do backup automático no editor. */
+const AUTOSAVE_MS = 60_000;
+const hhmm = (d: Date) => d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 const LIST_COLUMNS = "id, title, theme, servers, start_date, end_date, status, template_version, updated_at, server_group, source, source_file";
 
 function fromRow(row: Row): { doc: EventDocument; converted: number; dropped: number } {
@@ -301,18 +305,35 @@ function Editor({ id }: { id: string }) {
   const [issues, setIssues] = useState<ValidationIssue[] | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
 
+  /** Cópia de segurança encontrada neste computador com alterações que o servidor não tem. */
+  const [recovery, setRecovery] = useState<DocumentBackup | null>(null);
+  /** Último salvamento automático: no servidor ou só a cópia local (sem internet). */
+  const [autoSaved, setAutoSaved] = useState<{ at: Date; where: "server" | "local" } | null>(null);
+  // Estado mais recente para o salvamento automático (o intervalo não deve reiniciar a cada tecla).
+  const docRef = useRef<EventDocument | null>(null);
+  const dirtyRef = useRef(false);
+  const editVersion = useRef(0);
+  const savingRef = useRef(false);
+  const baseUpdatedAt = useRef<string | null>(null);
+  docRef.current = doc;
+  dirtyRef.current = dirty;
+
   useEffect(() => {
-    table().select("*").eq("id", id).single().then(({ data, error }) => {
+    table().select("*").eq("id", id).single().then(async ({ data, error }) => {
       if (error) {
         toast.error(error.message);
         return;
       }
       const { doc: loaded, converted, dropped } = fromRow(data as Row);
+      baseUpdatedAt.current = loaded.updated_at ?? null;
       setDoc(loaded);
       if (converted > 0 || dropped > 0) {
         setDirty(true);
         toast.info(`Documento convertido para o novo editor (${converted} seção(ões))${dropped ? `; ${dropped} sem layout equivalente foram descartadas` : ""}. Revise e salve.`);
       }
+      const backup = await readBackup(id);
+      if (backupDiffers(backup, loaded)) setRecovery(backup);
+      else if (backup) deleteBackup(id);
     });
   }, [id]);
 
@@ -326,20 +347,78 @@ function Editor({ id }: { id: string }) {
   const update = (patch: Partial<EventDocument>) => {
     setDoc((d) => (d ? { ...d, ...patch } : d));
     setDirty(true);
+    editVersion.current += 1;
   };
 
-  const save = async () => {
-    if (!doc) return;
+  /** Grava no servidor; `auto` = salvamento automático (sem aviso de sucesso). */
+  const persist = useCallback(async (auto: boolean): Promise<boolean> => {
+    const current = docRef.current;
+    if (!current || savingRef.current) return false;
+    savingRef.current = true;
     setSaving(true);
-    const { error } = await table().update({
-      title: doc.title, theme: doc.theme, servers: doc.servers, start_date: doc.start_date || null, end_date: doc.end_date || null,
-      status: doc.status, sections: doc.sections as unknown as Json, template_version: manifest.version,
-    }).eq("id", doc.id);
+    const version = editVersion.current;
+    const { data, error } = await table().update({
+      title: current.title, theme: current.theme, servers: current.servers, start_date: current.start_date || null, end_date: current.end_date || null,
+      status: current.status, sections: current.sections as unknown as Json, template_version: manifest.version,
+    }).eq("id", current.id).select("updated_at").single();
+    savingRef.current = false;
     setSaving(false);
-    if (error) return toast.error(error.message);
-    setDirty(false);
-    invalidateItemUsage(asServerGroup(doc.server_group));
-    toast.success("Documento salvo");
+    if (error) {
+      if (!auto) toast.error(error.message);
+      return false;
+    }
+    baseUpdatedAt.current = (data as { updated_at?: string } | null)?.updated_at ?? baseUpdatedAt.current;
+    // Alterações feitas enquanto salvava continuam pendentes para o próximo salvamento.
+    if (editVersion.current === version) {
+      setDirty(false);
+      deleteBackup(current.id);
+    }
+    invalidateItemUsage(asServerGroup(current.server_group));
+    if (!auto) toast.success("Documento salvo");
+    return true;
+  }, []);
+
+  const save = () => persist(false);
+
+  /** Cópia local imediata (antes de fechar a aba, trocar de janela ou a cada minuto). */
+  const backupNow = useCallback(async () => {
+    const current = docRef.current;
+    if (!current || !dirtyRef.current) return false;
+    await writeBackup({ doc: current, savedAt: new Date().toISOString(), baseUpdatedAt: baseUpdatedAt.current });
+    return true;
+  }, []);
+
+  // Backup automático a cada 1 minuto: cópia neste computador e, com internet, salva no servidor.
+  useEffect(() => {
+    const tick = async () => {
+      if (!(await backupNow())) return;
+      const online = typeof navigator === "undefined" || navigator.onLine;
+      const ok = online && (await persist(true));
+      setAutoSaved({ at: new Date(), where: ok ? "server" : "local" });
+    };
+    const timer = window.setInterval(tick, AUTOSAVE_MS);
+    const onHide = () => { if (document.visibilityState === "hidden") backupNow(); };
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", backupNow);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", backupNow);
+    };
+  }, [backupNow, persist]);
+
+  const restoreBackup = () => {
+    if (!recovery || !doc) return;
+    setDoc({ ...recovery.doc, id: doc.id, updated_at: doc.updated_at, server_group: doc.server_group, source: doc.source, source_file: doc.source_file });
+    setDirty(true);
+    editVersion.current += 1;
+    setRecovery(null);
+    toast.success("Cópia de segurança restaurada. Confira e salve.");
+  };
+
+  const discardBackup = () => {
+    deleteBackup(id);
+    setRecovery(null);
   };
 
   if (!doc || !group) return <p className="p-6 text-sm text-muted-foreground">Carregando...</p>;
@@ -383,7 +462,29 @@ function Editor({ id }: { id: string }) {
           <Download className="h-4 w-4" /> {exporting ? "Gerando..." : "Exportar .xlsx"}
         </Button>
         <Button className="gap-1" onClick={save} disabled={saving || !dirty}><Save className="h-4 w-4" /> {saving ? "Salvando..." : "Salvar"}</Button>
+        <span className="w-full text-right text-[11px] text-muted-foreground" title="Backup automático a cada 1 minuto">
+          {dirty
+            ? autoSaved?.where === "local"
+              ? `Sem conexão: cópia guardada neste computador às ${hhmm(autoSaved.at)}. Salva no servidor quando a internet voltar.`
+              : "Alterações não salvas · backup automático a cada 1 minuto"
+            : autoSaved?.where === "server"
+              ? `Salvo automaticamente às ${hhmm(autoSaved.at)}`
+              : "Tudo salvo"}
+        </span>
       </div>
+
+      {recovery && (
+        <Card className="flex flex-wrap items-center gap-3 border-amber-500/50 bg-amber-500/10 p-3 text-sm">
+          <History className="h-4 w-4 shrink-0 text-amber-600" />
+          <span className="min-w-[240px] flex-1">
+            Há uma cópia de segurança deste documento feita neste computador em{" "}
+            <strong>{new Date(recovery.savedAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</strong>{" "}
+            com alterações que não chegaram a ser salvas (queda de internet ou energia).
+          </span>
+          <Button size="sm" onClick={restoreBackup}>Restaurar cópia</Button>
+          <Button size="sm" variant="ghost" onClick={discardBackup}>Descartar</Button>
+        </Card>
+      )}
 
       <TemplateBanner canUpload={can("events.templates")} />
       {doc.sections.some(isRequestSection) && (
