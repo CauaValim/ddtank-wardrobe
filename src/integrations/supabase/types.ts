@@ -134,6 +134,41 @@ export type Database = {
         }
         Relationships: []
       }
+      event_document_backups: {
+        Row: {
+          content: Json
+          created_at: string
+          created_by: string | null
+          created_by_email: string | null
+          document_id: string
+          id: string
+        }
+        Insert: {
+          content: Json
+          created_at?: string
+          created_by?: string | null
+          created_by_email?: string | null
+          document_id: string
+          id?: string
+        }
+        Update: {
+          content?: Json
+          created_at?: string
+          created_by?: string | null
+          created_by_email?: string | null
+          document_id?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_document_backups_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "event_documents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       event_documents: {
         Row: {
           created_at: string
