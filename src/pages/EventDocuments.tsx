@@ -30,7 +30,9 @@ import { exportDocument } from "@/lib/eventTemplate/exporter";
 import { readDocument } from "@/lib/eventTemplate/importer";
 import { resolveIdsByName } from "@/lib/eventTemplate/resolveNames";
 import { canonicalizeDocument } from "@/lib/eventTemplate/canonicalDoc";
-import { backupDiffers, deleteBackup, readBackup, writeBackup, type DocumentBackup } from "@/lib/eventTemplate/localBackup";
+import { backupDiffers, deleteBackup, documentContent, readBackup, writeBackup, type DocumentBackup } from "@/lib/eventTemplate/localBackup";
+import { saveSiteBackup, type SiteBackup } from "@/lib/eventTemplate/siteBackup";
+import { BackupsDialog } from "@/components/events/BackupsDialog";
 import { loadTemplate } from "@/lib/eventTemplate/templateSource";
 import { downloadBlob, loadImageForWorkbook } from "@/lib/eventTemplate/browserImages";
 import { validateEventDocument, type ValidationIssue } from "@/lib/eventTemplate/validate";
@@ -388,24 +390,59 @@ function Editor({ id }: { id: string }) {
     return true;
   }, []);
 
-  // Backup automático a cada 1 minuto: cópia neste computador e, com internet, salva no servidor.
+  /** Conteúdo da última versão guardada no site (não repete versões iguais). */
+  const lastSiteBackup = useRef<string | null>(null);
+
+  // Backup automático a cada 1 minuto: cópia neste computador e, com internet, uma versão no site
+  // (Cópias de segurança) e o salvamento do documento. Quando a internet volta, salva na hora.
   useEffect(() => {
+    let running = false;
     const tick = async () => {
-      if (!(await backupNow())) return;
-      const online = typeof navigator === "undefined" || navigator.onLine;
-      const ok = online && (await persist(true));
-      setAutoSaved({ at: new Date(), where: ok ? "server" : "local" });
+      if (running) return;
+      running = true;
+      try {
+        if (!(await backupNow())) return;
+        const current = docRef.current;
+        const online = typeof navigator === "undefined" || navigator.onLine;
+        if (online && current) {
+          const content = documentContent(current);
+          if (content !== lastSiteBackup.current) {
+            try {
+              await saveSiteBackup(current);
+              lastSiteBackup.current = content;
+            } catch {
+              // Sem a tabela ou sem conexão: fica a cópia local e o salvamento do documento.
+            }
+          }
+        }
+        const ok = online && (await persist(true));
+        setAutoSaved({ at: new Date(), where: ok ? "server" : "local" });
+      } finally {
+        running = false;
+      }
     };
     const timer = window.setInterval(tick, AUTOSAVE_MS);
     const onHide = () => { if (document.visibilityState === "hidden") backupNow(); };
     document.addEventListener("visibilitychange", onHide);
     window.addEventListener("pagehide", backupNow);
+    window.addEventListener("online", tick);
     return () => {
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onHide);
       window.removeEventListener("pagehide", backupNow);
+      window.removeEventListener("online", tick);
     };
   }, [backupNow, persist]);
+
+  const [backupsOpen, setBackupsOpen] = useState(false);
+  const restoreSiteBackup = (b: SiteBackup) => {
+    if (!doc || !confirm(`Restaurar a versão de ${new Date(b.created_at).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}? O que está no editor agora será substituído.`)) return;
+    setDoc({ ...doc, ...b.content, sections: normalizeSections(b.content.sections).sections });
+    setDirty(true);
+    editVersion.current += 1;
+    setBackupsOpen(false);
+    toast.success("Versão restaurada. Confira e salve.");
+  };
 
   const restoreBackup = () => {
     if (!recovery || !doc) return;
@@ -447,6 +484,7 @@ function Editor({ id }: { id: string }) {
           <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
           <SelectContent><SelectItem value="draft">Rascunho</SelectItem><SelectItem value="final">Finalizado</SelectItem></SelectContent>
         </Select>
+        <Button variant="outline" className="gap-1" onClick={() => setBackupsOpen(true)} title="Cópias de segurança guardadas no site"><History className="h-4 w-4" /> Versões</Button>
         <Button variant="outline" className="gap-1" onClick={validate}><ShieldCheck className="h-4 w-4" /> Validar</Button>
         <Button
           variant="outline"
@@ -472,6 +510,8 @@ function Editor({ id }: { id: string }) {
               : "Tudo salvo"}
         </span>
       </div>
+
+      <BackupsDialog documentId={doc.id} open={backupsOpen} onOpenChange={setBackupsOpen} onRestore={restoreSiteBackup} />
 
       {recovery && (
         <Card className="flex flex-wrap items-center gap-3 border-amber-500/50 bg-amber-500/10 p-3 text-sm">
