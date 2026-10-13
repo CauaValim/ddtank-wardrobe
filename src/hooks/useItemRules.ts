@@ -1,23 +1,31 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import type { ItemRule } from "@/lib/eventTemplate/itemRules";
 import type { ServerGroup } from "@/lib/eventTemplate/serverGroups";
+
+// Coluna nova (min_tiers): até a Lovable gerar os tipos dela, a gravação é sem tipos do banco.
+const rulesTable = () => (supabase as unknown as SupabaseClient).from("event_item_categories");
 
 /** Categorias permitidas/proibidas dos itens da base (antigos/novos): toda a equipe lê; ADM ou superior edita. */
 export function useItemRules(group: ServerGroup | null) {
   const [rules, setRules] = useState<ItemRule[]>([]);
   const [loading, setLoading] = useState(true);
+  /** false enquanto a coluna min_tiers (andar liberado) não existe no banco. */
+  const [hasTiers, setHasTiers] = useState(true);
 
   const reload = useCallback(async () => {
     if (!group) return;
-    const { data, error } = await supabase
-      .from("event_item_categories")
-      .select("id, item_id, item_name, allowed, forbidden, note")
-      .eq("server_group", group)
-      .order("item_name");
+    const query = (columns: string) =>
+      supabase.from("event_item_categories").select(columns).eq("server_group", group).order("item_name");
+    let { data, error } = await query("id, item_id, item_name, allowed, forbidden, note, min_tiers");
+    // Banco ainda sem a coluna dos andares: lê o cadastro sem ela.
+    const withTiers = !error;
+    if (error) ({ data, error } = await query("id, item_id, item_name, allowed, forbidden, note"));
     if (error) toast.error(`Categorias de itens: ${error.message}`);
-    setRules((data ?? []) as ItemRule[]);
+    setHasTiers(withTiers);
+    setRules(((data ?? []) as unknown as ItemRule[]).map((r) => ({ ...r, min_tiers: r.min_tiers ?? {} })));
     setLoading(false);
   }, [group]);
 
@@ -36,10 +44,16 @@ export function useItemRules(group: ServerGroup | null) {
       forbidden: rule.forbidden,
       note: rule.note?.trim() || null,
       server_group: group,
+      // Andar só vale em categoria permitida ou neutra.
+      ...(hasTiers ? { min_tiers: Object.fromEntries(Object.entries(rule.min_tiers ?? {}).filter(([t, v]) => v && !rule.forbidden.includes(t))) } : {}),
     };
+    if (!hasTiers && Object.values(rule.min_tiers ?? {}).some(Boolean)) {
+      toast.error("O andar liberado ainda não existe no banco de dados. Peça para aplicar a migração dos andares.");
+      return false;
+    }
     const { error } = rule.id
-      ? await supabase.from("event_item_categories").update(payload).eq("id", rule.id)
-      : await supabase.from("event_item_categories").insert(payload);
+      ? await rulesTable().update(payload).eq("id", rule.id)
+      : await rulesTable().insert(payload);
     if (error) {
       toast.error(error.code === "23505" ? "Esse item já está cadastrado: edite o cadastro existente" : `Não foi possível salvar: ${error.message}`);
       return false;
@@ -47,7 +61,7 @@ export function useItemRules(group: ServerGroup | null) {
     toast.success(rule.id ? "Cadastro atualizado" : "Item cadastrado");
     await reload();
     return true;
-  }, [group, reload]);
+  }, [group, reload, hasTiers]);
 
   const remove = useCallback(async (id: string) => {
     const { error } = await supabase.from("event_item_categories").delete().eq("id", id);
@@ -56,5 +70,5 @@ export function useItemRules(group: ServerGroup | null) {
     await reload();
   }, [reload]);
 
-  return { rules, byItem, loading, save, remove };
+  return { rules, byItem, loading, save, remove, hasTiers };
 }

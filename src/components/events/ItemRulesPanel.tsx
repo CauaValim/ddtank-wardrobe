@@ -7,12 +7,14 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ItemPicker } from "@/components/events/ItemPicker";
 import { useItemRules } from "@/hooks/useItemRules";
-import { CATEGORIES, categoryLabel, type ItemRule } from "@/lib/eventTemplate/itemRules";
+import { CATEGORIES, TIER_CATEGORIES, categoryLabel, minTier, type ItemRule } from "@/lib/eventTemplate/itemRules";
+import { ItemLookupFields } from "@/components/events/ItemLookupFields";
 import { SERVER_GROUPS, type ServerGroup } from "@/lib/eventTemplate/serverGroups";
 
 type Draft = Omit<ItemRule, "id"> & { id?: string };
 
 const ALL = "__all__";
+const ANY_TIER = "__any__";
 
 /** Uma categoria por linha: neutra, permitida ou proibida (clicar de novo volta a neutra). */
 function CategoryToggles({ draft, onChange }: { draft: Draft; onChange: (d: Draft) => void }) {
@@ -27,8 +29,10 @@ function CategoryToggles({ draft, onChange }: { draft: Draft; onChange: (d: Draf
       {CATEGORIES.map(({ type, label }) => {
         const allowed = draft.allowed.includes(type);
         const forbidden = draft.forbidden.includes(type);
+        const tiers = TIER_CATEGORIES[type];
+        const tier = draft.min_tiers?.[type] ?? "";
         return (
-          <div key={type} className="flex items-center gap-1 rounded-md border border-border px-2 py-1">
+          <div key={type} className="flex flex-wrap items-center gap-1 rounded-md border border-border px-2 py-1">
             <span className="flex-1 truncate text-sm">{label}</span>
             <Button
               type="button"
@@ -50,6 +54,21 @@ function CategoryToggles({ draft, onChange }: { draft: Draft; onChange: (d: Draf
             >
               <Ban className="h-3.5 w-3.5" /> Proibido
             </Button>
+            {tiers && !forbidden && (
+              <div className="flex w-full items-center gap-1.5 pb-0.5 pt-1">
+                <span className="text-xs text-muted-foreground">Liberado a partir do andar</span>
+                <Select
+                  value={tier || ANY_TIER}
+                  onValueChange={(v) => onChange({ ...draft, min_tiers: { ...(draft.min_tiers ?? {}), [type]: v === ANY_TIER ? "" : v } })}
+                >
+                  <SelectTrigger className="h-7 w-32 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={ANY_TIER}>Qualquer andar</SelectItem>
+                    {tiers.map((t, i) => <SelectItem key={t} value={t}>{i + 1}º · {t}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
           </div>
         );
       })}
@@ -77,7 +96,7 @@ export function ItemRulesPanel({ group, canEdit }: { group: ServerGroup; canEdit
           isso aparece ao lado do nome do item quando ele é procurado na seção.{canEdit ? "" : " Só quem tem a permissão “Editar categorias de itens” pode cadastrar."}
         </p>
         {canEdit && !draft && (
-          <Button className="gap-1" onClick={() => setDraft({ item_id: "", item_name: "", allowed: [], forbidden: [], note: null })}>
+          <Button className="gap-1" onClick={() => setDraft({ item_id: "", item_name: "", allowed: [], forbidden: [], note: null, min_tiers: {} })}>
             <Plus className="h-4 w-4" /> Cadastrar item
           </Button>
         )}
@@ -86,14 +105,11 @@ export function ItemRulesPanel({ group, canEdit }: { group: ServerGroup; canEdit
       {draft && (
         <Card className="space-y-3 p-4">
           <div className="flex flex-wrap items-end gap-2">
-            <label className="block w-32 space-y-1">
-              <span className="text-xs text-muted-foreground">ID</span>
-              <Input value={draft.item_id} inputMode="numeric" onChange={(e) => setDraft({ ...draft, item_id: e.target.value.trim() })} />
-            </label>
-            <label className="block min-w-[200px] flex-1 space-y-1">
-              <span className="text-xs text-muted-foreground">Nome do item</span>
-              <Input value={draft.item_name} onChange={(e) => setDraft({ ...draft, item_name: e.target.value })} />
-            </label>
+            <ItemLookupFields
+              id={draft.item_id}
+              name={draft.item_name}
+              onChange={(it) => setDraft((d) => (d ? { ...d, item_id: it.id, item_name: it.name } : d))}
+            />
             {!draft.id && <ItemPicker getImage={() => ""} onPick={(p) => setDraft({ ...draft, item_id: p.id === "XXX" ? draft.item_id : p.id, item_name: p.name })} />}
           </div>
           <CategoryToggles draft={draft} onChange={setDraft} />
@@ -104,8 +120,8 @@ export function ItemRulesPanel({ group, canEdit }: { group: ServerGroup; canEdit
           <div className="flex justify-end gap-2">
             <Button variant="ghost" onClick={() => setDraft(null)}>Cancelar</Button>
             <Button
-              disabled={!/^\d+$/.test(draft.item_id) || !draft.item_name.trim() || draft.allowed.length + draft.forbidden.length === 0}
-              title="Informe o ID, o nome e ao menos uma categoria"
+              disabled={!/^\d+$/.test(draft.item_id) || !draft.item_name.trim() || draft.allowed.length + draft.forbidden.length + Object.values(draft.min_tiers ?? {}).filter(Boolean).length === 0}
+              title="Informe o ID, o nome e ao menos uma categoria ou andar"
               onClick={async () => {
                 if (await save(draft)) setDraft(null);
               }}
@@ -136,7 +152,10 @@ export function ItemRulesPanel({ group, canEdit }: { group: ServerGroup; canEdit
           <div className="min-w-0 flex-1">
             <p className="truncate font-medium">{r.item_name} <span className="text-xs font-normal text-muted-foreground">ID {r.item_id}</span></p>
             <div className="mt-1 flex flex-wrap gap-1">
-              {r.allowed.map((t) => <Badge key={`a${t}`} className="bg-green-600 hover:bg-green-600">✓ {categoryLabel(t)}</Badge>)}
+              {r.allowed.map((t) => <Badge key={`a${t}`} className="bg-green-600 hover:bg-green-600">✓ {categoryLabel(t)}{minTier(r, t) ? ` (a partir de ${minTier(r, t)})` : ""}</Badge>)}
+              {Object.keys(r.min_tiers ?? {}).filter((t) => minTier(r, t) && !r.allowed.includes(t) && !r.forbidden.includes(t)).map((t) => (
+                <Badge key={`t${t}`} variant="outline">{categoryLabel(t)} a partir de {minTier(r, t)}</Badge>
+              ))}
               {r.forbidden.map((t) => <Badge key={`f${t}`} variant="destructive">✕ {categoryLabel(t)}</Badge>)}
             </div>
             {r.note && <p className="mt-1 text-xs text-muted-foreground">{r.note}</p>}
