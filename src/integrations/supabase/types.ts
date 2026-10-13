@@ -235,6 +235,7 @@ export type Database = {
           id: string
           item_id: string
           item_name: string
+          min_tiers: Json
           note: string | null
           server_group: string
           updated_at: string
@@ -247,6 +248,7 @@ export type Database = {
           id?: string
           item_id: string
           item_name?: string
+          min_tiers?: Json
           note?: string | null
           server_group?: string
           updated_at?: string
@@ -259,6 +261,7 @@ export type Database = {
           id?: string
           item_id?: string
           item_name?: string
+          min_tiers?: Json
           note?: string | null
           server_group?: string
           updated_at?: string
