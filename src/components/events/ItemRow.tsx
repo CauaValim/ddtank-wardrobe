@@ -1,5 +1,5 @@
 import { useRef } from "react";
-import { AlertTriangle, ImagePlus, Trash2, X } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronUp, ImagePlus, Trash2, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -26,11 +26,14 @@ interface Props {
   category?: string;
   onChange: (patch: Partial<EventItem>) => void;
   onRemove: () => void;
+  /** Muda o item de posição dentro do grupo (sem a função, o botão fica desligado). */
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
 }
 
 const NO_BIND = "__none__";
 
-export function ItemRow({ item, index, kind, itemFields, idStatus, getImage, usage, rule, category, onChange, onRemove }: Props) {
+export function ItemRow({ item, index, kind, itemFields, idStatus, getImage, usage, rule, category, onChange, onRemove, onMoveUp, onMoveDown }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const isPending = !item.id.trim() || /^x+$/i.test(item.id.trim());
   const image = item.imageUrl || (isPending ? "" : getImage(item.id));
@@ -113,6 +116,10 @@ export function ItemRow({ item, index, kind, itemFields, idStatus, getImage, usa
           )}
         </>
       )}
+      <div className="flex flex-col">
+        <Button type="button" size="icon" variant="ghost" className="h-5 w-7" title="Mover item para cima" disabled={!onMoveUp} onClick={onMoveUp}><ChevronUp className="h-3.5 w-3.5" /></Button>
+        <Button type="button" size="icon" variant="ghost" className="h-5 w-7" title="Mover item para baixo" disabled={!onMoveDown} onClick={onMoveDown}><ChevronDown className="h-3.5 w-3.5" /></Button>
+      </div>
       <Button type="button" size="icon" variant="ghost" title="Remover item" onClick={onRemove}><Trash2 className="h-4 w-4" /></Button>
       <datalist id="event-durations">{DURATIONS.map((d) => <option key={d} value={d} />)}</datalist>
     </div>

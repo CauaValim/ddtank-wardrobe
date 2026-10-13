@@ -274,6 +274,23 @@ export function isFixedSet(layout: LayoutSpec, setKey: string): boolean {
   return layout.type === "daily" && setKey === "queues";
 }
 
+/**
+ * Blocos que a equipe pode reordenar (Munição, Missões, Grupos da Troca, Rankings...). As faixas
+ * da Recarga/Consumo seguem a ordem dos valores e as filas da Entrada Diária são fixas.
+ */
+export function canReorderSet(layout: LayoutSpec, setKey: string): boolean {
+  return !isFixedSet(layout, setKey) && setKey !== "tiers";
+}
+
+/** Troca o elemento `i` de lugar com o vizinho (dir -1 = para cima, 1 = para baixo). */
+export function moveAt<T>(list: T[], i: number, dir: -1 | 1): T[] {
+  const j = i + dir;
+  if (i < 0 || j < 0 || i >= list.length || j >= list.length) return list;
+  const out = [...list];
+  [out[i], out[j]] = [out[j], out[i]];
+  return out;
+}
+
 export function sectionIssues(layout: LayoutSpec, section: EventSection, where: string): ValidationIssue[] {
   const issues: ValidationIssue[] = [];
   if (layout.type === "daily") {

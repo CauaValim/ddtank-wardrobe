@@ -13,9 +13,9 @@ import { DateTimeField } from "@/components/events/DateInputs";
 import { renderFormat } from "@/lib/eventTemplate/format";
 import { capacitySummary, emptyBlock, getLayout, newItem } from "@/lib/eventTemplate/model";
 import {
-  DAILY_LENGTHS, NO_LIMIT, applyDailyLength, dailyLength, editorBlockSpec, exchangeLimitText, groupLimit, highestStandardTier,
+  DAILY_LENGTHS, NO_LIMIT, applyDailyLength, canReorderSet, dailyLength, editorBlockSpec, exchangeLimitText, groupLimit, highestStandardTier,
   isAutoField, isExchangeCondition, isFixedSet, normalizeTier, pagination, parseExchangeLimit, setCapacity, tierCondition, tierLadder,
-  tiersUpTo, type DailyLength, type TierLadder,
+  moveAt, tiersUpTo, type DailyLength, type TierLadder,
 } from "@/lib/eventTemplate/rules";
 import type { BlockSpec, EventBlock, EventItem, EventSection, FieldSpec, LayoutSpec, SetSpec } from "@/lib/eventTemplate/types";
 import type { IdStatus } from "@/lib/eventTemplate/itemLookup";
@@ -148,8 +148,10 @@ function DerivedLines({ spec, block, ctx }: { spec: BlockSpec; block: EventBlock
   );
 }
 
-export function BlockEditor({ spec, setKey, block, title, ctx, onChange, onRemove }: {
+export function BlockEditor({ spec, setKey, block, title, ctx, onChange, onRemove, onMoveUp, onMoveDown }: {
   spec: BlockSpec; setKey: string; block: EventBlock; title: string; ctx: EditorContext; onChange: (b: EventBlock) => void; onRemove?: () => void;
+  /** Reordenar blocos (Munição, Missões, Grupos...): sem a função, o botão não aparece ou fica desligado. */
+  onMoveUp?: () => void; onMoveDown?: () => void;
 }) {
   const setGroup = (key: string, items: EventItem[]) => onChange({ ...block, groups: { ...block.groups, [key]: items } });
   const setField = (key: string, v: string) => onChange({ ...block, fields: { ...block.fields, [key]: v } });
@@ -170,6 +172,12 @@ export function BlockEditor({ spec, setKey, block, title, ctx, onChange, onRemov
         <span className="text-sm font-semibold">{title}</span>
         <span className="flex-1" />
         {ctx.presets && isMissionBlock(spec) && <PresetControls api={ctx.presets} spec={spec} block={block} onChange={onChange} />}
+        {(onMoveUp || onMoveDown) && (
+          <>
+            <Button size="icon" variant="ghost" className="h-7 w-7" title={`Mover ${title.toLowerCase()} para cima`} disabled={!onMoveUp} onClick={onMoveUp}><ChevronUp className="h-4 w-4" /></Button>
+            <Button size="icon" variant="ghost" className="h-7 w-7" title={`Mover ${title.toLowerCase()} para baixo`} disabled={!onMoveDown} onClick={onMoveDown}><ChevronDown className="h-4 w-4" /></Button>
+          </>
+        )}
         {onRemove && <Button size="icon" variant="ghost" className="h-7 w-7" title={`Remover ${title.toLowerCase()}`} onClick={onRemove}><Trash2 className="h-4 w-4" /></Button>}
       </div>
       {fields.length > 0 && (
@@ -219,6 +227,8 @@ export function BlockEditor({ spec, setKey, block, title, ctx, onChange, onRemov
                 category={ctx.layout.type}
                 onChange={(patch) => setGroup(g.key, items.map((x, k) => (k === i ? { ...x, ...patch } : x)))}
                 onRemove={() => setGroup(g.key, items.filter((_, k) => k !== i))}
+                onMoveUp={i > 0 ? () => setGroup(g.key, moveAt(items, i, -1)) : undefined}
+                onMoveDown={i < items.length - 1 ? () => setGroup(g.key, moveAt(items, i, 1)) : undefined}
               />
             ))}
           </div>
@@ -240,6 +250,10 @@ export function SetEditor({ set, blocks, ctx, onChange, nested }: {
   const fixed = isFixedSet(ctx.layout, set.key);
   const full = blocks.length >= capacity;
   const pages = unlimited ? Math.ceil(blocks.length / set.blocks.length) : 1;
+  const movable = canReorderSet(ctx.layout, set.key) && blocks.length > 1;
+  // Só troca de lugar com uma posição do mesmo formato (mesmos grupos e vagas), para nenhum item sumir.
+  const shape = (i: number) => editorBlockSpec(ctx.layout, set, i).groups.map((g) => `${g.key}:${g.slots.length}`).join("|");
+  const canSwap = (i: number, j: number) => movable && j >= 0 && j < blocks.length && shape(i) === shape(j);
   return (
     <div className={`space-y-2 ${nested ? "border-l-2 border-primary/30 pl-3" : ""}`}>
       {(set.blocks.length > 1 || nested || unlimited) && (
@@ -268,6 +282,8 @@ export function SetEditor({ set, blocks, ctx, onChange, nested }: {
               : unlimited ? () => onChange(blocks.filter((_, k) => k !== i))
               : i === blocks.length - 1 ? () => onChange(blocks.slice(0, -1)) : undefined
           }
+          onMoveUp={canSwap(i, i - 1) ? () => onChange(moveAt(blocks, i, -1)) : undefined}
+          onMoveDown={canSwap(i, i + 1) ? () => onChange(moveAt(blocks, i, 1)) : undefined}
         />
       ))}
       {!fixed && (set.blocks.length > 1 || unlimited) && (

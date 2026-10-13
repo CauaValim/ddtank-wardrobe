@@ -103,3 +103,33 @@ describe("editor de seção", () => {
     }
   }, 120_000);
 });
+
+describe("reordenar blocos e itens", () => {
+  const values = (c: HTMLElement) => Array.from(c.querySelectorAll("input")).map((i) => (i as HTMLInputElement).value).filter((v) => /^Item [AB]/.test(v));
+  const button = (c: HTMLElement, title: string) => c.querySelector(`button[title="${title}"]`) as HTMLButtonElement | null;
+
+  it("troca os blocos da Munição de lugar e os itens dentro do bloco", async () => {
+    const { newItem } = await import("@/lib/eventTemplate/model");
+    const ammo = newSection(getLayout("ammo-7x6")!, "s1-s401");
+    ammo.sets.blocks = [
+      { fields: {}, groups: { items: [newItem({ id: "1", name: "Item A1" }), newItem({ id: "2", name: "Item A2" })] } },
+      { fields: {}, groups: { items: [newItem({ id: "3", name: "Item B1" })] } },
+    ];
+    const { container, unmount } = render(<Harness initial={ammo} />);
+    expect(values(container)).toEqual(["Item A1", "Item A2", "Item B1"]);
+    expect(button(container, "Mover bloco 1 para cima")?.disabled).toBe(true);
+    act(() => button(container, "Mover bloco 1 para baixo")!.click());
+    expect(values(container)).toEqual(["Item B1", "Item A1", "Item A2"]);
+    const down = Array.from(container.querySelectorAll('button[title="Mover item para baixo"]')).find((b) => !(b as HTMLButtonElement).disabled) as HTMLButtonElement;
+    act(() => down.click());
+    expect(values(container)).toEqual(["Item B1", "Item A2", "Item A1"]);
+    unmount();
+  });
+
+  it("faixas da Recarga não se reordenam (seguem os valores)", () => {
+    const recharge = newSection(getLayout("recharge-13")!, "s1-s401");
+    const { container, unmount } = render(<Harness initial={recharge} />);
+    expect(container.querySelector('button[title^="Mover faixa"]')).toBeNull();
+    unmount();
+  });
+});
