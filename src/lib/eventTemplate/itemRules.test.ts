@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getLayout, newItem, newSection } from "./model";
-import { categoryLabel, ruleIssues, ruleStatus, type ItemRule } from "./itemRules";
+import { TIER_CATEGORIES, categoryLabel, ruleIssues, ruleStatus, tierAllowed, type ItemRule } from "./itemRules";
 import { recentText, usageSummary } from "./usage";
 import type { EventDocument } from "./types";
 
@@ -31,4 +31,29 @@ it("texto de entradas recentes", () => {
   expect(recentText(3)).toBe("Entrou 3 vezes nos últimos 30 dias");
   const u = { kind: "sale" as const, docId: "x", docTitle: "", date: "2026-10-01", detail: "" };
   expect(usageSummary({ exchange: [], ranking: [], sale: [u, u] })).toBe("Entrou 2 vezes nos últimos 30 dias");
+});
+
+describe("andar liberado na Recarga/Consumo", () => {
+  const tiered: ItemRule = { id: "r2", item_id: "600", item_name: "Asa", allowed: ["recharge"], forbidden: [], note: null, min_tiers: { recharge: "8.000" } };
+
+  it("lista os andares e compara com o andar mínimo", () => {
+    expect(TIER_CATEGORIES.recharge[0]).toBe("500");
+    expect(TIER_CATEGORIES.consume).toContain("400.000");
+    expect(tierAllowed(tiered, "recharge", "5000")).toBe(false);
+    expect(tierAllowed(tiered, "recharge", "8.000")).toBe(true);
+    expect(tierAllowed(tiered, "recharge", "15.000")).toBe(true);
+    expect(tierAllowed(tiered, "consume", "1.000")).toBe(true);
+  });
+
+  it("avisa o item colocado abaixo do andar liberado", () => {
+    const recharge = newSection(getLayout("recharge-13")!, "s1-s401");
+    recharge.sets.tiers = [
+      { fields: { value: "5.000" }, groups: { items: [newItem({ id: "600", name: "Asa" })] } },
+      { fields: { value: "8.000" }, groups: { items: [newItem({ id: "600", name: "Asa" })] } },
+    ];
+    const doc: EventDocument = { id: "d", title: "t", theme: null, servers: "s1-s401", start_date: null, end_date: null, status: "draft", sections: [recharge] };
+    expect(ruleIssues(doc, new Map([["600", tiered]]))).toEqual([
+      { level: "warning", where: "1. " + getLayout("recharge-13")!.label, message: "Asa (ID 600) só está liberado a partir do andar 8.000 em Recarga (está no andar 5.000)" },
+    ]);
+  });
 });

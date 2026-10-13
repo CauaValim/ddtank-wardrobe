@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Loader2, Plus } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
+import { searchItems, type ItemSearchResult } from "@/lib/eventTemplate/itemSearch";
 import { usageSummary, type ItemUsage, type UsageKind } from "@/lib/eventTemplate/usage";
 import { categoryLabel, ruleStatus, type ItemRule } from "@/lib/eventTemplate/itemRules";
 import { ItemRuleBadge } from "@/components/events/ItemRuleBadge";
@@ -23,31 +23,7 @@ interface Props {
 
 const RANK = { allowed: 0, null: 1, forbidden: 2 } as const;
 
-type Result = { id: string; name: string; imageUrl: string };
-
-const LIMIT = 30;
-
-// Busca direto na tabela `items` do painel, para não depender do catálogo
-// carregado no navegador (que chega aos poucos e pode estar desatualizado).
-async function searchItems(term: string): Promise<Result[]> {
-  const pattern = `%${term.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
-  const byName = supabase.from("items").select("id, name, image_url").ilike("name", pattern).order("id").limit(LIMIT);
-  const byId = /^\d+$/.test(term)
-    ? supabase.from("items").select("id, name, image_url").eq("id", Number(term)).limit(1)
-    : null;
-  const [names, ids] = await Promise.all([byName, byId]);
-  if (names.error) throw names.error;
-  if (ids?.error) throw ids.error;
-  const seen = new Set<string>();
-  const out: Result[] = [];
-  for (const row of [...(ids?.data ?? []), ...(names.data ?? [])]) {
-    const id = String(row.id);
-    if (seen.has(id)) continue;
-    seen.add(id);
-    out.push({ id, name: row.name ?? `Item #${id}`, imageUrl: row.image_url ?? "" });
-  }
-  return out.slice(0, LIMIT);
-}
+type Result = ItemSearchResult;
 
 export function ItemPicker({ getImage, getUsage, category, getRule, suggestions, onPick, disabled }: Props) {
   const [q, setQ] = useState("");
