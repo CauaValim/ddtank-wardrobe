@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { getLayout, newItem, newSection } from "./model";
-import { TIER_CATEGORIES, categoryLabel, ruleIssues, ruleStatus, tierAllowed, type ItemRule } from "./itemRules";
+import { TIER_CATEGORIES, categoryLabel, mergeRuleRows, ruleIssues, ruleStatus, tierAllowed, type ItemRule } from "./itemRules";
 import { recentText, usageSummary } from "./usage";
 import type { EventDocument } from "./types";
 
@@ -56,4 +56,13 @@ describe("andar liberado na Recarga/Consumo", () => {
       { level: "warning", where: "1. " + getLayout("recharge-13")!.label, message: "Asa (ID 600) só está liberado a partir do andar 8.000 em Recarga (está no andar 5.000)" },
     ]);
   });
+});
+
+it("cadastros das duas bases: fica o alterado por último", () => {
+  const merged = mergeRuleRows([
+    { item_id: "1", updated_at: "2026-10-01", note: "antigo" },
+    { item_id: "1", updated_at: "2026-10-10", note: "novo" },
+    { item_id: "2", updated_at: "2026-10-05", note: "só um" },
+  ]);
+  expect(merged.map((r) => r.note).sort()).toEqual(["novo", "só um"]);
 });

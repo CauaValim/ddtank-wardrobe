@@ -92,7 +92,7 @@ export function ItemRulesPanel({ group, canEdit }: { group: ServerGroup; canEdit
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <p className="flex-1 text-sm text-muted-foreground">
-          Itens com as categorias em que podem ou não podem entrar ({SERVER_GROUPS[group].label.toLowerCase()}). Na criação do documento,
+          Itens com as categorias em que podem ou não podem entrar. Os cadastros valem para as duas bases (antigos e novos). Na criação do documento,
           isso aparece ao lado do nome do item quando ele é procurado na seção.{canEdit ? "" : " Só quem tem a permissão “Editar categorias de itens” pode cadastrar."}
         </p>
         {canEdit && !draft && (
@@ -163,7 +163,7 @@ export function ItemRulesPanel({ group, canEdit }: { group: ServerGroup; canEdit
           {canEdit && (
             <>
               <Button size="icon" variant="ghost" title="Editar" onClick={() => setDraft({ ...r })}><Pencil className="h-4 w-4" /></Button>
-              <Button size="icon" variant="ghost" title="Excluir" onClick={() => confirm(`Excluir o cadastro de "${r.item_name}"?`) && remove(r.id)}><Trash2 className="h-4 w-4" /></Button>
+              <Button size="icon" variant="ghost" title="Excluir" onClick={() => confirm(`Excluir o cadastro de "${r.item_name}"?`) && remove(r)}><Trash2 className="h-4 w-4" /></Button>
             </>
           )}
         </Card>

@@ -3,6 +3,7 @@ import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { imageCandidates, isJpeg, repairImage } from "./images.ts";
 import { accessOf, allows } from "../_shared/permissions.ts";
 import { BOX_SOURCE, packageRows, syncPackageContents } from "./packages.ts";
+import { TITLE_SOURCE, syncTitleImages } from "./titles.ts";
 import { GAME_BASE } from "../_shared/gameApi.ts";
 
 const SOURCE = `${GAME_BASE}TemplateAllList.xml`;
@@ -120,6 +121,14 @@ Deno.serve(async (req) => {
       packages = { error: (e as Error).message };
     }
 
+    // Imagens dos títulos (aba Títulos em Dados do jogo). Uma falha aqui não impede o resto.
+    let titles: { titles: number; uploaded: number; missing: number } | { error: string };
+    try {
+      titles = await syncTitleImages(admin, parseItems(await loadXml(TITLE_SOURCE)), startedAt + 60_000);
+    } catch (e) {
+      titles = { error: (e as Error).message };
+    }
+
     const started = startedAt; // o tempo das imagens conta desde o início da função
     for (const r of missing ?? []) {
       if (Date.now() - started > 110_000) break;
@@ -143,7 +152,7 @@ Deno.serve(async (req) => {
     }
     const { count: stillMissing } = await admin.from("items").select("id", { count: "exact", head: true }).is("image_url", null);
 
-    return json({ totalGame: raw.length, added: rows.length, newIds: rows.map((r) => r.id), images, stillMissing, packages });
+    return json({ totalGame: raw.length, added: rows.length, newIds: rows.map((r) => r.id), images, stillMissing, packages, titles });
   } catch (e) {
     return json({ error: (e as Error).message }, 500);
   }

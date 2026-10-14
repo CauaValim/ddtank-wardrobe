@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useGameData, n, type GameRow } from "@/hooks/useGameData";
 import { QuestsTab } from "@/components/QuestsTab";
+import { supabase } from "@/integrations/supabase/client";
 
 export interface ItemLookup {
   (id: string): { name: string; image: string } | null;
@@ -25,6 +26,17 @@ function Thumb({ id, lookup }: { id: string; lookup: ItemLookup }) {
       <span className="truncate text-[11px] text-card-foreground">{it?.name ?? `ID ${id}`}</span>
     </div>
   );
+}
+
+/**
+ * Imagem do título no jogo (Pic do NewTitleInfo), copiada para o Storage do painel pela
+ * sincronização com o jogo. Títulos só de texto (Pic 0) ou ainda sem cópia não mostram imagem.
+ */
+function TitleImage({ pic, name }: { pic?: string; name?: string }) {
+  const [failed, setFailed] = useState(false);
+  if (!pic || pic === "0" || failed) return null;
+  const src = supabase.storage.from("item-images").getPublicUrl(`titles/${pic}.png`).data.publicUrl;
+  return <img src={src} alt={name ?? ""} loading="lazy" className="h-7 max-w-[120px] shrink-0 object-contain" onError={() => setFailed(true)} />;
 }
 
 function Stats({ items }: { items: [string, number][] }) {
@@ -149,7 +161,10 @@ export function GameDataModal({ open, onClose, lookup }: Props) {
               <TabsContent value="titles" className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {(data.NewTitleInfo ?? []).filter((t) => match(query, t.Name, t.Desc)).map((t) => (
                   <div key={t.ID} className="space-y-1 rounded-lg border border-border p-2">
-                    <p className="text-xs font-bold text-card-foreground">{t.Name}</p>
+                    <div className="flex items-center gap-2">
+                      <TitleImage pic={t.Pic} name={t.Name} />
+                      <p className="text-xs font-bold text-card-foreground">{t.Name}</p>
+                    </div>
                     {t.Desc && <p className="text-[10px] text-muted-foreground">{t.Desc}</p>}
                     <Stats items={[["Ataque", n(t.Att)], ["Defesa", n(t.Def)], ["Agilidade", n(t.Agi)], ["Sorte", n(t.Luck)]]} />
                   </div>

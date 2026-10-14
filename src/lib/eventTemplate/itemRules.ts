@@ -20,6 +20,19 @@ export interface ItemRule {
 
 export type RuleStatus = "allowed" | "forbidden" | null;
 
+/**
+ * Os cadastros valem para as duas bases (antigos e novos). Se o mesmo item foi cadastrado nas
+ * duas antes disso, fica o cadastro alterado por último.
+ */
+export function mergeRuleRows<T extends { item_id: string; updated_at?: string | null }>(rows: T[]): T[] {
+  const latest = new Map<string, T>();
+  for (const r of rows) {
+    const cur = latest.get(r.item_id);
+    if (!cur || (r.updated_at ?? "") > (cur.updated_at ?? "")) latest.set(r.item_id, r);
+  }
+  return [...latest.values()];
+}
+
 export const CATEGORIES = LAYOUT_GROUPS;
 
 export const categoryLabel = (type: string) => CATEGORIES.find((c) => c.type === type)?.label ?? type;
