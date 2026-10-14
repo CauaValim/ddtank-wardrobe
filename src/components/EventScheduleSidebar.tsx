@@ -15,7 +15,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Badge } from "@/components/ui/badge";
-import { isCurrentPeriod, periodTitle, useSchedule, type ScheduleCategory, type SchedulePeriod } from "@/hooks/useSchedule";
+import { dayLabel, isCurrentPeriod, periodTitle, toIsoDay, useSchedule, type PeriodEntries, type ScheduleCategory, type SchedulePeriod } from "@/hooks/useSchedule";
 import { ScheduleManager } from "@/components/schedule/ScheduleManager";
 import { PendenciesPanel } from "@/components/schedule/PendenciesPanel";
 import { usePendencies } from "@/hooks/usePendencies";
@@ -41,7 +41,48 @@ function PeriodHeader({ period, current }: { period: SchedulePeriod; current: bo
   );
 }
 
-function CategoryEvents({ category, events }: { category: ScheduleCategory; events: string[] }) {
+/**
+ * Atividades do período: primeiro dia a dia (o dia de hoje em destaque), com a categoria de cada
+ * atividade; depois as sem data, agrupadas por categoria.
+ */
+function PeriodAgenda({ categories, byCat }: { categories: ScheduleCategory[]; byCat: PeriodEntries }) {
+  const today = toIsoDay(new Date());
+  const byDay = new Map<string, { category: ScheduleCategory; text: string }[]>();
+  for (const c of categories) {
+    for (const it of byCat[c.id] ?? []) {
+      if (!it.date) continue;
+      const list = byDay.get(it.date) ?? [];
+      list.push({ category: c, text: it.text });
+      byDay.set(it.date, list);
+    }
+  }
+  const days = [...byDay.keys()].sort();
+  return (
+    <>
+      {days.map((day) => (
+        <div key={day}>
+          <p className={`mb-0.5 text-[10px] font-semibold uppercase tracking-wide ${day === today ? "text-primary" : "text-muted-foreground"}`}>
+            {dayLabel(day)}{day === today ? " · hoje" : ""}
+          </p>
+          <ul className="space-y-0.5">
+            {byDay.get(day)!.map((e, i) => (
+              <li key={i} className="flex items-start gap-1.5 pl-1 text-[11px] leading-tight text-muted-foreground">
+                <span className="mt-1 inline-block h-1.5 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: e.category.color }} title={e.category.name} />
+                <span><span className="font-medium" style={{ color: e.category.color }}>{e.category.name}:</span> {e.text}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+      {categories.map((c) => {
+        const undated = (byCat[c.id] ?? []).filter((it) => !it.date).map((it) => it.text);
+        return undated.length ? <CategoryEvents key={c.id} category={c} events={undated} label={days.length ? "Sem data" : undefined} /> : null;
+      })}
+    </>
+  );
+}
+
+function CategoryEvents({ category, events, label }: { category: ScheduleCategory; events: string[]; label?: string }) {
   return (
     <div>
       <Badge
@@ -49,7 +90,7 @@ function CategoryEvents({ category, events }: { category: ScheduleCategory; even
         className="text-[10px] font-medium mb-1 border-0"
         style={{ backgroundColor: `${category.color}26`, color: category.color }}
       >
-        {category.name}
+        {category.name}{label ? ` · ${label}` : ""}
       </Badge>
       <ul className="space-y-0.5">
         {events.map((event, i) => (
@@ -149,7 +190,7 @@ export function EventScheduleSidebar({ canEdit = false, userId = null }: { canEd
                               </CollapsibleTrigger>
                               <CollapsibleContent>
                                 <div className="ml-3 border-l border-border pl-3 pb-1 space-y-2 mt-1">
-                                  {cats.map((c) => (byCat[c.id]?.length ? <CategoryEvents key={c.id} category={c} events={byCat[c.id]} /> : null))}
+                                  <PeriodAgenda categories={cats} byCat={byCat} />
                                   {period.notes && <p className="text-[11px] italic text-muted-foreground">{period.notes}</p>}
                                 </div>
                               </CollapsibleContent>

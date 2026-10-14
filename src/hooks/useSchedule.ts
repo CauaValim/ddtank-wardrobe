@@ -7,8 +7,14 @@ export type ScheduleCategory = Tables<"schedule_categories">;
 export type SchedulePeriod = Tables<"schedule_periods">;
 export type ScheduleEntry = Tables<"schedule_entries">;
 
-/** Eventos de um período, por categoria (um texto por evento, na ordem). */
-export type PeriodEntries = Record<string, string[]>;
+/** Atividade do cronograma: o texto e o dia em que deve entrar (null = sem data). */
+export interface ScheduleItem {
+  text: string;
+  date: string | null;
+}
+
+/** Atividades de um período, por categoria (na ordem). */
+export type PeriodEntries = Record<string, ScheduleItem[]>;
 
 export const CATEGORY_COLORS = ["#ef4444", "#3b82f6", "#22c55e", "#a855f7", "#eab308", "#06b6d4", "#f97316", "#ec4899", "#6366f1", "#64748b"];
 
@@ -30,6 +36,17 @@ const shortDate = (iso: string) => {
 /** Nome do período: o escrito pela equipe ou "05/10 - 11/10". */
 export const periodTitle = (p: Pick<SchedulePeriod, "label" | "start_date" | "end_date">) =>
   p.label.trim() || (p.start_date === p.end_date ? shortDate(p.start_date) : `${shortDate(p.start_date)} - ${shortDate(p.end_date)}`);
+
+/** Dias do período ("2026-10-13", "2026-10-14"...), no máximo 62. */
+export function periodDays(p: Pick<SchedulePeriod, "start_date" | "end_date">): string[] {
+  const days: string[] = [];
+  for (let d = p.start_date; d <= p.end_date && days.length < 62; d = addDays(d, 1)) days.push(d);
+  return days;
+}
+
+const WEEKDAYS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+/** "Qui 17/10". */
+export const dayLabel = (iso: string) => `${WEEKDAYS[parseDay(iso).getDay()]} ${shortDate(iso)}`;
 
 export const isCurrentPeriod = (p: Pick<SchedulePeriod, "start_date" | "end_date">, today = toIsoDay(new Date())) =>
   p.start_date <= today && today <= p.end_date;
@@ -76,7 +93,9 @@ export function useSchedule() {
     const map = new Map<string, PeriodEntries>();
     for (const e of entries) {
       const per = map.get(e.period_id) ?? {};
-      (per[e.category_id] ??= []).push(e.text);
+      // entry_date: coluna nova (data da atividade); sem ela no banco, tudo fica "sem data".
+      const date = (e as ScheduleEntry & { entry_date?: string | null }).entry_date ?? null;
+      (per[e.category_id] ??= []).push({ text: e.text, date });
       map.set(e.period_id, per);
     }
     return map;
@@ -137,9 +156,21 @@ export function useSchedule() {
       id = data.id;
     }
     await run(supabase.from("schedule_entries").delete().eq("period_id", id));
-    const rows = Object.entries(byCategory).flatMap(([category_id, texts]) =>
-      texts.map((text, position) => ({ period_id: id as string, category_id, text, position })));
-    if (rows.length) await run(supabase.from("schedule_entries").insert(rows));
+    const dated = Object.values(byCategory).some((items) => items.some((it) => it.date));
+    const rows = Object.entries(byCategory).flatMap(([category_id, items]) =>
+      items.map((it, position) => ({
+        period_id: id as string, category_id, text: it.text, position,
+        // Só manda a data quando há alguma: o banco sem a coluna nova continua aceitando o resto.
+        ...(dated ? { entry_date: it.date } : {}),
+      })));
+    if (rows.length) {
+      const { error } = await (supabase.from("schedule_entries") as unknown as { insert: (r: unknown[]) => PromiseLike<{ error: { message: string } | null }> }).insert(rows);
+      if (error) {
+        throw new Error(/entry_date/.test(error.message)
+          ? "A data das atividades ainda não existe no banco de dados. Peça para aplicar a migração das datas do cronograma."
+          : error.message);
+      }
+    }
     await reload();
     return id;
   }, [run, reload]);
@@ -148,7 +179,11 @@ export function useSchedule() {
   const duplicatePeriod = useCallback(async (period: SchedulePeriod) => {
     const length = Math.round((parseDay(period.end_date).getTime() - parseDay(period.start_date).getTime()) / 86_400_000);
     const start = addDays(period.end_date, 1);
-    return savePeriod({ start_date: start, end_date: addDays(start, length), label: "", theme: period.theme, notes: period.notes }, entriesByPeriod.get(period.id) ?? {});
+    // As datas das atividades andam junto com o período.
+    const shift = length + 1;
+    const shifted = Object.fromEntries(Object.entries(entriesByPeriod.get(period.id) ?? {}).map(([cat, items]) =>
+      [cat, items.map((it) => ({ ...it, date: it.date ? addDays(it.date, shift) : null }))]));
+    return savePeriod({ start_date: start, end_date: addDays(start, length), label: "", theme: period.theme, notes: period.notes }, shifted);
   }, [savePeriod, entriesByPeriod]);
 
   return {

@@ -1,7 +1,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { describe, expect, it, vi } from "vitest";
-import { addDays, isCurrentPeriod, periodTitle, type ScheduleApi } from "@/hooks/useSchedule";
+import { addDays, dayLabel, isCurrentPeriod, periodDays, periodTitle, type ScheduleApi } from "@/hooks/useSchedule";
 import { ScheduleManager } from "./ScheduleManager";
 import { SchedulePeriodDialog } from "./SchedulePeriodDialog";
 import { PendenciesPanel } from "./PendenciesPanel";
@@ -27,7 +27,7 @@ function fakeSchedule(): ScheduleApi {
     sections: [{ id: "s1", name: "Cronograma de Eventos", position: 0, created_at: "", updated_at: "" }],
     categories: [{ id: "c1", section_id: "s1", name: "Faça se Puder", color: "#ef4444", position: 0, created_at: "", updated_at: "" }],
     periods: [period],
-    entriesByPeriod: new Map([["p1", { c1: ["Dinâmica Halloween (07/10)"] }]]),
+    entriesByPeriod: new Map([["p1", { c1: [{ text: "Dinâmica Halloween (07/10)", date: "2026-10-07" }, { text: "Sem dia definido", date: null }] }]]),
     loading: false,
     available: true,
     reload: vi.fn(),
@@ -51,13 +51,15 @@ describe("cronograma", () => {
     expect(addDays("2026-12-29", 6)).toBe("2027-01-04");
     expect(isCurrentPeriod(period, "2026-10-11")).toBe(true);
     expect(isCurrentPeriod(period, "2026-10-12")).toBe(false);
+    expect(periodDays(period)).toEqual(["2026-10-05", "2026-10-06", "2026-10-07", "2026-10-08", "2026-10-09", "2026-10-10", "2026-10-11"]);
+    expect(dayLabel("2026-10-17")).toBe("Sáb 17/10");
   });
 
   it("mostra seções, categorias e os eventos do período para edição", () => {
     const schedule = fakeSchedule();
     const close = render(<ScheduleManager schedule={schedule} open onOpenChange={() => {}} />);
     expect(hasText("05/10 - 11/10")).toBe(true);
-    expect(hasText("1 evento(s)")).toBe(true);
+    expect(hasText("2 evento(s)")).toBe(true);
     close();
     const close2 = render(<SchedulePeriodDialog schedule={schedule} period={period} onClose={() => {}} />);
     expect(hasValue("Dinâmica Halloween (07/10)")).toBe(true);
