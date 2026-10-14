@@ -27,7 +27,9 @@ interface IndexProps {
 
 /** Botões da barra do topo: todos com a mesma altura e o texto numa linha só. */
 const TOOLBAR_BUTTON = "flex h-8 items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-secondary px-3 text-xs font-medium text-secondary-foreground transition-colors hover:bg-muted";
-const TOOLBAR_ICON = "flex h-8 w-8 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors hover:bg-muted";
+const TOOLBAR_ICON = "flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-background hover:text-foreground";
+/** Páginas do painel: abas dentro de um mesmo fundo. */
+const NAV_BUTTON = "flex h-8 items-center gap-1.5 whitespace-nowrap rounded-md px-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-background hover:text-foreground";
 
 const Index = ({ auth, realm = "br" }: IndexProps) => {
   const navigate = useNavigate();
@@ -186,7 +188,7 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
     <div className="flex min-h-screen flex-col bg-background">
       {/* Header */}
       <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
-        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-4 gap-y-3 px-4 py-3 sm:px-6">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <SidebarTrigger className="-ml-1" />
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary">
@@ -220,69 +222,71 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
             </div>
           </div>
 
-          {/* Barra de ações: botões da mesma altura, texto numa linha só, agrupados por função. */}
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {(auth.can("items.manage") || (realm === "br" && auth.can("items.game_sync"))) && (
-              <div className="flex items-center gap-1.5">
-                {auth.can("items.manage") && (
-                  <button
-                    onClick={() => {
-                      setSelectionMode(!selectionMode);
-                      if (selectionMode) setSelectedIds(new Set());
-                    }}
-                    className={`${TOOLBAR_BUTTON} ${selectionMode ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90" : ""}`}
-                  >
-                    <MousePointerClick className="h-3.5 w-3.5" />
-                    {selectionMode ? "Selecionando" : "Selecionar"}
-                  </button>
-                )}
-                {auth.can("items.manage") && selectionMode && (
-                  <button onClick={selectAllVisible} className={TOOLBAR_BUTTON}>
-                    <CheckSquare className="h-3.5 w-3.5" />
-                    Todos ({filteredItems.length})
-                  </button>
-                )}
-                {realm === "br" && auth.can("items.game_sync") && <GameSyncButton />}
-              </div>
+          {/* Ferramentas e conta: ícones num bloco só, sempre na linha do título. */}
+          <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-border bg-secondary/60 p-0.5">
+            {auth.can("tools.id_filler") && (
+              <button onClick={() => setIdFillerOpen(true)} className={TOOLBAR_ICON} title="Preencher IDs no Documento" aria-label="Preencher IDs no Documento">
+                <FileSpreadsheet className="h-4 w-4" />
+              </button>
             )}
-
-            <div className="flex items-center gap-1.5">
-              {auth.can("events.access") && (
-                <button onClick={() => navigate("/eventos")} className={TOOLBAR_BUTTON}>
-                  <FileSpreadsheet className="h-3.5 w-3.5" /> Criação de Eventos
-                </button>
-              )}
-              {(auth.can("codes.request") || auth.can("codes.manage")) && (
-                <button onClick={() => navigate("/codigos")} className={TOOLBAR_BUTTON} title="Solicitações de códigos (KickSub, Lives e Torneios)">
-                  <Ticket className="h-3.5 w-3.5" /> Códigos
-                </button>
-              )}
-              <button onClick={() => setGameDataOpen(true)} className={TOOLBAR_BUTTON} title="Conjuntos, Cartas, Títulos, Pets, Runas e Pedras">
-                <Database className="h-3.5 w-3.5" /> Dados do Jogo
+            {auth.can("tools.validator") && (
+              <button onClick={() => setValidatorOpen(true)} className={TOOLBAR_ICON} title="Verificar Itens (ID, Nome e Imagem)" aria-label="Verificar Itens">
+                <ClipboardCheck className="h-4 w-4" />
               </button>
-            </div>
-
-            <div className="flex items-center gap-1.5">
-              {auth.can("tools.id_filler") && (
-                <button onClick={() => setIdFillerOpen(true)} className={TOOLBAR_ICON} title="Preencher IDs no Documento" aria-label="Preencher IDs no Documento">
-                  <FileSpreadsheet className="h-4 w-4" />
-                </button>
-              )}
-              {auth.can("tools.validator") && (
-                <button onClick={() => setValidatorOpen(true)} className={TOOLBAR_ICON} title="Verificar Itens (ID, Nome e Imagem)" aria-label="Verificar Itens">
-                  <ClipboardCheck className="h-4 w-4" />
-                </button>
-              )}
-              {(auth.can("users.manage") || auth.can("roles.manage")) && (
-                <button onClick={() => navigate("/users")} className={TOOLBAR_ICON} title="Gerenciar Usuários" aria-label="Gerenciar Usuários">
-                  <Users className="h-4 w-4" />
-                </button>
-              )}
-              <button onClick={auth.signOut} className={TOOLBAR_ICON} title="Sair" aria-label="Sair">
-                <LogOut className="h-4 w-4" />
+            )}
+            {(auth.can("users.manage") || auth.can("roles.manage")) && (
+              <button onClick={() => navigate("/users")} className={TOOLBAR_ICON} title="Gerenciar Usuários" aria-label="Gerenciar Usuários">
+                <Users className="h-4 w-4" />
               </button>
-            </div>
+            )}
+            <span className="mx-0.5 h-5 w-px bg-border" aria-hidden />
+            <button onClick={auth.signOut} className={`${TOOLBAR_ICON} hover:text-destructive`} title="Sair" aria-label="Sair">
+              <LogOut className="h-4 w-4" />
+            </button>
           </div>
+        </div>
+
+        {/* Segunda linha: páginas do painel à esquerda e ações dos itens à direita. */}
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-4 pb-3 sm:px-6">
+          <nav className="flex items-center gap-0.5 rounded-lg border border-border bg-secondary/60 p-0.5" aria-label="Páginas do painel">
+            {auth.can("events.access") && (
+              <button onClick={() => navigate("/eventos")} className={NAV_BUTTON}>
+                <FileSpreadsheet className="h-3.5 w-3.5" /> Criação de Eventos
+              </button>
+            )}
+            {(auth.can("codes.request") || auth.can("codes.manage")) && (
+              <button onClick={() => navigate("/codigos")} className={NAV_BUTTON} title="Solicitações de códigos (KickSub, Lives e Torneios)">
+                <Ticket className="h-3.5 w-3.5" /> Códigos
+              </button>
+            )}
+            <button onClick={() => setGameDataOpen(true)} className={NAV_BUTTON} title="Conjuntos, Cartas, Títulos, Pets, Runas e Pedras">
+              <Database className="h-3.5 w-3.5" /> Dados do Jogo
+            </button>
+          </nav>
+
+          {(auth.can("items.manage") || (realm === "br" && auth.can("items.game_sync"))) && (
+            <div className="flex items-center gap-1.5">
+              {auth.can("items.manage") && (
+                <button
+                  onClick={() => {
+                    setSelectionMode(!selectionMode);
+                    if (selectionMode) setSelectedIds(new Set());
+                  }}
+                  className={`${TOOLBAR_BUTTON} ${selectionMode ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90" : ""}`}
+                >
+                  <MousePointerClick className="h-3.5 w-3.5" />
+                  {selectionMode ? "Selecionando" : "Selecionar"}
+                </button>
+              )}
+              {auth.can("items.manage") && selectionMode && (
+                <button onClick={selectAllVisible} className={TOOLBAR_BUTTON}>
+                  <CheckSquare className="h-3.5 w-3.5" />
+                  Todos ({filteredItems.length})
+                </button>
+              )}
+              {realm === "br" && auth.can("items.game_sync") && <GameSyncButton />}
+            </div>
+          )}
         </div>
       </header>
 
