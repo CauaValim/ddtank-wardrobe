@@ -12,6 +12,7 @@ import { PackageContentsModal } from "@/components/PackageContentsModal";
 import { BulkTypeMover } from "@/components/BulkTypeMover";
 import { IdFillerModal } from "@/components/IdFillerModal";
 import { ItemValidatorModal } from "@/components/ItemValidatorModal";
+import { NotificationBell } from "@/components/NotificationBell";
 import { GameSyncButton } from "@/components/GameSyncButton";
 import { GameDataModal } from "@/components/GameDataModal";
 import { FugurasModal } from "@/components/FugurasModal";
@@ -224,6 +225,7 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
 
           {/* Ferramentas e conta: ícones num bloco só, sempre na linha do título. */}
           <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-border bg-secondary/60 p-0.5">
+            <NotificationBell userId={auth.user?.id ?? null} canSendWeekly={auth.can("schedule.edit")} className={TOOLBAR_ICON} />
             {auth.can("tools.id_filler") && (
               <button onClick={() => setIdFillerOpen(true)} className={TOOLBAR_ICON} title="Preencher IDs no Documento" aria-label="Preencher IDs no Documento">
                 <FileSpreadsheet className="h-4 w-4" />

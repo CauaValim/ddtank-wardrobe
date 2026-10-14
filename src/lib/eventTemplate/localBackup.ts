@@ -49,45 +49,50 @@ async function run<T>(mode: IDBTransactionMode, fn: (store: IDBObjectStore) => I
   });
 }
 
-export async function writeBackup(backup: DocumentBackup): Promise<void> {
+/** Guarda qualquer cópia local pela chave (documentos usam o id; códigos, "code:<id>"). */
+export async function writeLocal<T>(key: string, value: T): Promise<void> {
   try {
-    await run("readwrite", (s) => s.put(backup, backup.doc.id));
+    await run("readwrite", (s) => s.put(value, key));
   } catch {
     try {
-      localStorage.setItem(LS_PREFIX + backup.doc.id, JSON.stringify(backup));
+      localStorage.setItem(LS_PREFIX + key, JSON.stringify(value));
     } catch {
       // Sem espaço ou sem armazenamento: o salvamento no servidor continua valendo.
     }
   }
 }
 
-export async function readBackup(id: string): Promise<DocumentBackup | null> {
+export async function readLocal<T>(key: string): Promise<T | null> {
   try {
-    const found = await run<DocumentBackup | undefined>("readonly", (s) => s.get(id));
+    const found = await run<T | undefined>("readonly", (s) => s.get(key));
     if (found) return found;
   } catch {
     // segue para o localStorage
   }
   try {
-    const raw = localStorage.getItem(LS_PREFIX + id);
-    return raw ? (JSON.parse(raw) as DocumentBackup) : null;
+    const raw = localStorage.getItem(LS_PREFIX + key);
+    return raw ? (JSON.parse(raw) as T) : null;
   } catch {
     return null;
   }
 }
 
-export async function deleteBackup(id: string): Promise<void> {
+export async function deleteLocal(key: string): Promise<void> {
   try {
-    await run("readwrite", (s) => s.delete(id));
+    await run("readwrite", (s) => s.delete(key));
   } catch {
     // ignora
   }
   try {
-    localStorage.removeItem(LS_PREFIX + id);
+    localStorage.removeItem(LS_PREFIX + key);
   } catch {
     // ignora
   }
 }
+
+export const writeBackup = (backup: DocumentBackup) => writeLocal(backup.doc.id, backup);
+export const readBackup = (id: string) => readLocal<DocumentBackup>(id);
+export const deleteBackup = (id: string) => deleteLocal(id);
 
 /** Conteúdo que importa para comparar duas versões do documento. */
 export function documentContent(doc: EventDocument): string {

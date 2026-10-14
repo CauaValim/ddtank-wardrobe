@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Download, Plus, Save, Send, ShieldCheck, Ticket, Trash2 } from "lucide-react";
+import { ArrowLeft, Download, History, Plus, Save, Send, ShieldCheck, Ticket, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import type { Json, Tables } from "@/integrations/supabase/types";
@@ -22,6 +22,7 @@ import { downloadBlob, loadImageForWorkbook } from "@/lib/eventTemplate/browserI
 import { validateEventDocument, type ValidationIssue } from "@/lib/eventTemplate/validate";
 import { validationOptions } from "@/lib/eventTemplate/itemLookup";
 import type { EventDocument, EventItem, EventSection } from "@/lib/eventTemplate/types";
+import { deleteLocal, readLocal, writeLocal } from "@/lib/eventTemplate/localBackup";
 
 type CodeRow = Tables<"code_documents">;
 
@@ -33,6 +34,20 @@ const STATUS: Record<string, { label: string; className: string }> = {
 };
 
 const table = () => supabase.from("code_documents");
+
+/** Backup automático do editor de códigos (cópia neste computador e salvamento no servidor). */
+const AUTOSAVE_MS = 60_000;
+interface CodeBackup {
+  title: string;
+  servers: string;
+  staff_note: string;
+  sections: EventSection[];
+  savedAt: string;
+}
+const backupKey = (id: string) => `code:${id}`;
+const codeContent = (b: Pick<CodeBackup, "title" | "servers" | "staff_note" | "sections">) =>
+  JSON.stringify({ title: b.title, servers: b.servers, staff_note: b.staff_note ?? "", sections: b.sections });
+const hhmm = (d: Date) => d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 
 /** Documento de códigos no formato do editor de eventos (para reaproveitar editor e exportação). */
 function asEventDocument(row: CodeRow, sections: EventSection[]): EventDocument {
@@ -135,14 +150,90 @@ function CodeEditor({ id }: { id: string }) {
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const doc = row ? asEventDocument(row, sections) : null;
   const { idStatus, getImage, ensure } = useEventItemLookup(doc);
+  /** Cópia deste computador com alterações que não chegaram ao servidor (queda de internet ou energia). */
+  const [recovery, setRecovery] = useState<CodeBackup | null>(null);
+  const [autoSaved, setAutoSaved] = useState<{ at: Date; where: "server" | "local" } | null>(null);
+  // Estado mais recente para o salvamento automático (o intervalo não reinicia a cada tecla).
+  const rowRef = useRef<CodeRow | null>(null);
+  const sectionsRef = useRef<EventSection[]>([]);
+  const dirtyRef = useRef(false);
+  const editableRef = useRef(false);
+  const editVersion = useRef(0);
+  const savingRef = useRef(false);
+  rowRef.current = row;
+  sectionsRef.current = sections;
+  dirtyRef.current = dirty;
+  editableRef.current = !!row && (manager || (row.created_by === user?.id && (row.status === "rascunho" || row.status === "enviada")));
 
   useEffect(() => {
-    table().select("*").eq("id", id).single().then(({ data, error }) => {
+    table().select("*").eq("id", id).single().then(async ({ data, error }) => {
       if (error) return toast.error(error.message);
+      const loaded = normalizeSections(data.sections).sections;
       setRow(data);
-      setSections(normalizeSections(data.sections).sections);
+      setSections(loaded);
+      const backup = await readLocal<CodeBackup>(backupKey(id));
+      if (backup && codeContent(backup) !== codeContent({ ...data, sections: loaded })) setRecovery(backup);
+      else if (backup) deleteLocal(backupKey(id));
     });
   }, [id]);
+
+  /** Grava no servidor; `extra` muda campos (ex.: status ao enviar); `auto` = sem avisos. */
+  const persist = useCallback(async (extra: Partial<CodeRow>, auto: boolean): Promise<boolean> => {
+    const current = rowRef.current;
+    if (!current || savingRef.current) return false;
+    savingRef.current = true;
+    if (!auto) setBusy("save");
+    const version = editVersion.current;
+    const next = { ...current, ...extra };
+    const { error } = await table().update({
+      title: next.title, servers: next.servers, status: next.status, staff_note: next.staff_note,
+      sections: sectionsRef.current as unknown as Json, template_version: codesManifest.version,
+    }).eq("id", current.id);
+    savingRef.current = false;
+    if (!auto) setBusy(null);
+    if (error) {
+      if (!auto) toast.error(error.message);
+      return false;
+    }
+    setRow((r) => (r ? { ...r, ...extra } : r));
+    // Alterações feitas enquanto salvava ficam para o próximo salvamento.
+    if (editVersion.current === version) {
+      setDirty(false);
+      deleteLocal(backupKey(current.id));
+    }
+    return true;
+  }, []);
+
+  const backupNow = useCallback(async () => {
+    const current = rowRef.current;
+    if (!current || !dirtyRef.current || !editableRef.current) return false;
+    await writeLocal<CodeBackup>(backupKey(current.id), {
+      title: current.title, servers: current.servers, staff_note: current.staff_note ?? "",
+      sections: sectionsRef.current, savedAt: new Date().toISOString(),
+    });
+    return true;
+  }, []);
+
+  // A cada 1 minuto com alterações: cópia neste computador e, com internet, salva no servidor.
+  useEffect(() => {
+    const tick = async () => {
+      if (!(await backupNow())) return;
+      const online = typeof navigator === "undefined" || navigator.onLine;
+      const ok = online && (await persist({}, true));
+      setAutoSaved({ at: new Date(), where: ok ? "server" : "local" });
+    };
+    const timer = window.setInterval(tick, AUTOSAVE_MS);
+    const onHide = () => { if (document.visibilityState === "hidden") backupNow(); };
+    document.addEventListener("visibilitychange", onHide);
+    window.addEventListener("pagehide", backupNow);
+    window.addEventListener("online", tick);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onHide);
+      window.removeEventListener("pagehide", backupNow);
+      window.removeEventListener("online", tick);
+    };
+  }, [backupNow, persist]);
 
   useEffect(() => {
     if (!dirty) return;
@@ -156,24 +247,19 @@ function CodeEditor({ id }: { id: string }) {
   const mine = row.created_by === user?.id;
   // Quem pediu edita enquanto está em rascunho ou enviada; a equipe edita sempre.
   const editable = manager || (mine && (row.status === "rascunho" || row.status === "enviada"));
-  const patchRow = (patch: Partial<CodeRow>) => { setRow({ ...row, ...patch }); setDirty(true); };
-  const patchSections = (next: EventSection[]) => { setSections(next); setDirty(true); };
+  const patchRow = (patch: Partial<CodeRow>) => { setRow({ ...row, ...patch }); setDirty(true); editVersion.current += 1; };
+  const patchSections = (next: EventSection[]) => { setSections(next); setDirty(true); editVersion.current += 1; };
 
-  const save = async (extra: Partial<CodeRow> = {}) => {
-    setBusy("save");
-    const next = { ...row, ...extra };
-    const { error } = await table().update({
-      title: next.title, servers: next.servers, status: next.status, staff_note: next.staff_note,
-      sections: sections as unknown as Json, template_version: codesManifest.version,
-    }).eq("id", row.id);
-    setBusy(null);
-    if (error) {
-      toast.error(error.message);
-      return false;
-    }
-    setRow(next);
-    setDirty(false);
-    return true;
+  const save = (extra: Partial<CodeRow> = {}) => persist(extra, false);
+
+  const restoreBackup = () => {
+    if (!recovery) return;
+    setRow({ ...row, title: recovery.title, servers: recovery.servers, staff_note: recovery.staff_note });
+    setSections(normalizeSections(recovery.sections).sections);
+    setDirty(true);
+    editVersion.current += 1;
+    setRecovery(null);
+    toast.success("Cópia de segurança restaurada. Confira e salve.");
   };
 
   const check = async () => {
@@ -239,6 +325,29 @@ function CodeEditor({ id }: { id: string }) {
         {manager && <Button className="gap-1" disabled={busy !== null} onClick={exportXlsx}><Download className="h-4 w-4" /> {busy === "export" ? "Exportando..." : "Exportar .xlsx"}</Button>}
         {(manager || (mine && row.status === "rascunho")) && <Button variant="ghost" size="icon" title="Excluir" onClick={remove}><Trash2 className="h-4 w-4" /></Button>}
       </div>
+
+      {editable && (
+        <p className="-mt-2 text-right text-[11px] text-muted-foreground" title="Backup automático a cada 1 minuto">
+          {dirty
+            ? autoSaved?.where === "local"
+              ? `Sem conexão: cópia guardada neste computador às ${hhmm(autoSaved.at)}. Salva no servidor quando a internet voltar.`
+              : "Alterações não salvas · backup automático a cada 1 minuto"
+            : autoSaved?.where === "server" ? `Salvo automaticamente às ${hhmm(autoSaved.at)}` : "Tudo salvo"}
+        </p>
+      )}
+
+      {recovery && editable && (
+        <Card className="flex flex-wrap items-center gap-3 border-amber-500/50 bg-amber-500/10 p-3 text-sm">
+          <History className="h-4 w-4 shrink-0 text-amber-600" />
+          <span className="min-w-[240px] flex-1">
+            Há uma cópia de segurança desta solicitação feita neste computador em{" "}
+            <strong>{new Date(recovery.savedAt).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</strong>{" "}
+            com alterações que não chegaram a ser salvas (queda de internet ou energia).
+          </span>
+          <Button size="sm" onClick={restoreBackup}>Restaurar cópia</Button>
+          <Button size="sm" variant="ghost" onClick={() => { deleteLocal(backupKey(row.id)); setRecovery(null); }}>Descartar</Button>
+        </Card>
+      )}
 
       {manager && <TemplateBanner canUpload file={codesManifest} what="O modelo de códigos" effect="a exportação .xlsx dos códigos está indisponível" />}
 
