@@ -66,7 +66,6 @@ const CARD_STATS: [string, string, string][] = [
 
 const FILES = [
   "NewTitleInfo",
-  "RuneTemplateList",
   "MagicStoneTemplate",
   "CardTemplateInfo",
   "CardBuffList",
@@ -114,7 +113,6 @@ export function GameDataModal({ open, onClose, lookup }: Props) {
               <TabsTrigger value="cards">Cartas ({cards.length})</TabsTrigger>
               <TabsTrigger value="buffs">Efeitos de Cartas ({buffs.length})</TabsTrigger>
               <TabsTrigger value="titles">Títulos ({data.NewTitleInfo?.length ?? 0})</TabsTrigger>
-              <TabsTrigger value="runes">Runas ({data.RuneTemplateList?.length ?? 0})</TabsTrigger>
               <TabsTrigger value="stones">Pedras Mágicas ({stones.length})</TabsTrigger>
               <TabsTrigger value="quests">Missões ({data.QuestList?.length ?? 0})</TabsTrigger>
             </TabsList>
@@ -167,17 +165,6 @@ export function GameDataModal({ open, onClose, lookup }: Props) {
                     </div>
                     {t.Desc && <p className="text-[10px] text-muted-foreground">{t.Desc}</p>}
                     <Stats items={[["Ataque", n(t.Att)], ["Defesa", n(t.Def)], ["Agilidade", n(t.Agi)], ["Sorte", n(t.Luck)]]} />
-                  </div>
-                ))}
-              </TabsContent>
-              <TabsContent value="runes" className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {(data.RuneTemplateList ?? []).filter((r) => match(query, r.Name, r.TemplateID)).map((r) => (
-                  <div key={r.TemplateID} className="space-y-1 rounded-lg border border-border p-2">
-                    <Thumb id={r.TemplateID} lookup={lookup} />
-                    <p className="text-[10px] text-muted-foreground">
-                      {r.Name} · Nível {r.BaseLevel}–{r.MaxLevel}
-                      {[1, 2, 3].map((i) => (r[`Type${i}`] && r[`Type${i}`] !== "0" ? ` · Atributo ${i}: ${r[`Attribute${i}`]}` : "")).join("")}
-                    </p>
                   </div>
                 ))}
               </TabsContent>
