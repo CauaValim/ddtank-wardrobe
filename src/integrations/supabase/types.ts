@@ -640,6 +640,39 @@ export type Database = {
         }
         Relationships: []
       }
+      notifications: {
+        Row: {
+          body: string
+          created_at: string
+          id: string
+          kind: string
+          link: string | null
+          read_at: string | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          body?: string
+          created_at?: string
+          id?: string
+          kind: string
+          link?: string | null
+          read_at?: string | null
+          title: string
+          user_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          id?: string
+          kind?: string
+          link?: string | null
+          read_at?: string | null
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       package_contents: {
         Row: {
           content_item_id: number
@@ -982,6 +1015,7 @@ export type Database = {
           updated_by_email: string
         }[]
       }
+      send_weekly_schedule_notification_now: { Args: never; Returns: number }
     }
     Enums: {
       app_role:
