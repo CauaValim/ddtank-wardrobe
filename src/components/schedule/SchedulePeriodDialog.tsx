@@ -23,9 +23,8 @@ const NO_DATE = "__none__";
 /** Atividades de uma categoria: cada uma com o dia em que deve ser inserida e a descrição. */
 function ItemsEditor({ items, days, onChange, label }: { items: ScheduleItem[]; days: string[]; onChange: (items: ScheduleItem[]) => void; label: string }) {
   const set = (i: number, patch: Partial<ScheduleItem>) => onChange(items.map((it, k) => (k === i ? { ...it, ...patch } : it)));
-  // Novo item: o dia seguinte ao da última atividade com data (ou o primeiro dia do período).
-  const lastDate = [...items].reverse().find((it) => it.date)?.date;
-  const nextDate = lastDate ? days[Math.min(days.indexOf(lastDate) + 1, days.length - 1)] ?? null : days[0] ?? null;
+  // Nova atividade: sempre a segunda-feira da semana (ou o primeiro dia, em períodos antigos sem segunda).
+  const nextDate = days.find((d) => d === mondayOf(d)) ?? days[0] ?? null;
   return (
     <div className="space-y-1.5">
       {items.map((it, i) => (
