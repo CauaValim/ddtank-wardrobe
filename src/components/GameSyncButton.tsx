@@ -31,7 +31,7 @@ export function GameSyncButton() {
     <button
       onClick={run}
       disabled={busy}
-      className="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-muted transition-all disabled:opacity-50"
+      className="flex h-8 items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-secondary px-3 text-xs font-medium text-secondary-foreground transition-colors hover:bg-muted disabled:opacity-50"
       title="Sincronizar com o Jogo"
     >
       <RefreshCw className={`h-3.5 w-3.5 ${busy ? "animate-spin" : ""}`} />

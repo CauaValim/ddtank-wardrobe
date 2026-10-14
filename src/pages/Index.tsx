@@ -25,6 +25,10 @@ interface IndexProps {
   realm?: "br" | "turco";
 }
 
+/** Botões da barra do topo: todos com a mesma altura e o texto numa linha só. */
+const TOOLBAR_BUTTON = "flex h-8 items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-secondary px-3 text-xs font-medium text-secondary-foreground transition-colors hover:bg-muted";
+const TOOLBAR_ICON = "flex h-8 w-8 items-center justify-center rounded-md border border-border bg-secondary text-secondary-foreground transition-colors hover:bg-muted";
+
 const Index = ({ auth, realm = "br" }: IndexProps) => {
   const navigate = useNavigate();
   const {
@@ -182,21 +186,21 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
     <div className="flex min-h-screen flex-col bg-background">
       {/* Header */}
       <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-md">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6">
-          <div className="flex items-center gap-3">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-x-4 gap-y-3 px-4 py-3 sm:px-6">
+          <div className="flex min-w-0 items-center gap-3">
             <SidebarTrigger className="-ml-1" />
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary">
               <Gamepad2 className="h-5 w-5 text-primary-foreground" />
             </div>
-            <div>
-              <h1 className="text-lg font-bold leading-tight text-foreground">
+            <div className="min-w-0">
+              <h1 className="truncate text-lg font-bold leading-tight text-foreground">
                 {realm === "turco" ? "Painel Staff DDTank Turco" : "Painel Staff DDTank 337"}
               </h1>
-              <p className="text-xs text-muted-foreground">
+              <p className="truncate text-xs text-muted-foreground">
                 {auth.user?.email}
               </p>
             </div>
-            <div className="ml-2 flex items-center gap-1 rounded-md border border-border bg-secondary p-0.5">
+            <div className="ml-1 flex shrink-0 items-center gap-1 rounded-md border border-border bg-secondary p-0.5">
               <button
                 onClick={() => navigate("/")}
                 className={`rounded px-2 py-0.5 text-xs font-semibold transition-colors ${
@@ -216,94 +220,68 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            {auth.can("items.manage") && (
-              <>
-                <button
-                  onClick={() => {
-                    setSelectionMode(!selectionMode);
-                    if (selectionMode) setSelectedIds(new Set());
-                  }}
-                  className={`flex items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-all ${
-                    selectionMode
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border bg-secondary text-secondary-foreground hover:bg-muted"
-                  }`}
-                >
-                  <MousePointerClick className="h-3.5 w-3.5" />
-                  {selectionMode ? "Selecionando" : "Selecionar"}
-                </button>
-                {selectionMode && (
+          {/* Barra de ações: botões da mesma altura, texto numa linha só, agrupados por função. */}
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {(auth.can("items.manage") || (realm === "br" && auth.can("items.game_sync"))) && (
+              <div className="flex items-center gap-1.5">
+                {auth.can("items.manage") && (
                   <button
-                    onClick={selectAllVisible}
-                    className="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-muted transition-all"
+                    onClick={() => {
+                      setSelectionMode(!selectionMode);
+                      if (selectionMode) setSelectedIds(new Set());
+                    }}
+                    className={`${TOOLBAR_BUTTON} ${selectionMode ? "border-primary bg-primary text-primary-foreground hover:bg-primary/90" : ""}`}
                   >
+                    <MousePointerClick className="h-3.5 w-3.5" />
+                    {selectionMode ? "Selecionando" : "Selecionar"}
+                  </button>
+                )}
+                {auth.can("items.manage") && selectionMode && (
+                  <button onClick={selectAllVisible} className={TOOLBAR_BUTTON}>
                     <CheckSquare className="h-3.5 w-3.5" />
                     Todos ({filteredItems.length})
                   </button>
                 )}
-              </>
+                {realm === "br" && auth.can("items.game_sync") && <GameSyncButton />}
+              </div>
             )}
-            {realm === "br" && auth.can("items.game_sync") && <GameSyncButton />}
-            {auth.can("events.access") && (
-              <button
-                onClick={() => navigate("/eventos")}
-                className="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-muted transition-all"
-              >
-                <FileSpreadsheet className="h-3.5 w-3.5" /> Criação de Eventos
+
+            <div className="flex items-center gap-1.5">
+              {auth.can("events.access") && (
+                <button onClick={() => navigate("/eventos")} className={TOOLBAR_BUTTON}>
+                  <FileSpreadsheet className="h-3.5 w-3.5" /> Criação de Eventos
+                </button>
+              )}
+              {(auth.can("codes.request") || auth.can("codes.manage")) && (
+                <button onClick={() => navigate("/codigos")} className={TOOLBAR_BUTTON} title="Solicitações de códigos (KickSub, Lives e Torneios)">
+                  <Ticket className="h-3.5 w-3.5" /> Códigos
+                </button>
+              )}
+              <button onClick={() => setGameDataOpen(true)} className={TOOLBAR_BUTTON} title="Conjuntos, Cartas, Títulos, Pets, Runas e Pedras">
+                <Database className="h-3.5 w-3.5" /> Dados do Jogo
               </button>
-            )}
-            {(auth.can("codes.request") || auth.can("codes.manage")) && (
-              <button
-                onClick={() => navigate("/codigos")}
-                className="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-muted transition-all"
-                title="Solicitações de códigos (KickSub, Lives e Torneios)"
-              >
-                <Ticket className="h-3.5 w-3.5" /> Solicitação de Códigos
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              {auth.can("tools.id_filler") && (
+                <button onClick={() => setIdFillerOpen(true)} className={TOOLBAR_ICON} title="Preencher IDs no Documento" aria-label="Preencher IDs no Documento">
+                  <FileSpreadsheet className="h-4 w-4" />
+                </button>
+              )}
+              {auth.can("tools.validator") && (
+                <button onClick={() => setValidatorOpen(true)} className={TOOLBAR_ICON} title="Verificar Itens (ID, Nome e Imagem)" aria-label="Verificar Itens">
+                  <ClipboardCheck className="h-4 w-4" />
+                </button>
+              )}
+              {(auth.can("users.manage") || auth.can("roles.manage")) && (
+                <button onClick={() => navigate("/users")} className={TOOLBAR_ICON} title="Gerenciar Usuários" aria-label="Gerenciar Usuários">
+                  <Users className="h-4 w-4" />
+                </button>
+              )}
+              <button onClick={auth.signOut} className={TOOLBAR_ICON} title="Sair" aria-label="Sair">
+                <LogOut className="h-4 w-4" />
               </button>
-            )}
-            <button
-              onClick={() => setGameDataOpen(true)}
-              className="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-muted transition-all"
-              title="Conjuntos, Cartas, Títulos, Pets, Runas e Pedras"
-            >
-              <Database className="h-3.5 w-3.5" />
-              Dados do Jogo
-            </button>
-            {auth.can("tools.id_filler") && (
-              <button
-                onClick={() => setIdFillerOpen(true)}
-                className="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-muted transition-all"
-                title="Preencher IDs no Documento"
-              >
-                <FileSpreadsheet className="h-3.5 w-3.5" />
-              </button>
-            )}
-            {auth.can("tools.validator") && (
-              <button
-                onClick={() => setValidatorOpen(true)}
-                className="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-muted transition-all"
-                title="Verificar Itens (ID, Nome e Imagem)"
-              >
-                <ClipboardCheck className="h-3.5 w-3.5" />
-              </button>
-            )}
-            {(auth.can("users.manage") || auth.can("roles.manage")) && (
-              <button
-                onClick={() => navigate("/users")}
-                className="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-muted transition-all"
-                title="Gerenciar Usuários"
-              >
-                <Users className="h-3.5 w-3.5" />
-              </button>
-            )}
-            <button
-              onClick={auth.signOut}
-              className="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-muted transition-all"
-              title="Sair"
-            >
-              <LogOut className="h-3.5 w-3.5" />
-            </button>
+            </div>
           </div>
         </div>
       </header>
