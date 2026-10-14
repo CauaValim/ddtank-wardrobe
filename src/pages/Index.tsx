@@ -13,7 +13,6 @@ import { BulkTypeMover } from "@/components/BulkTypeMover";
 import { IdFillerModal } from "@/components/IdFillerModal";
 import { ItemValidatorModal } from "@/components/ItemValidatorModal";
 import { GameSyncButton } from "@/components/GameSyncButton";
-import { ExportItemImagesButton } from "@/components/ExportItemImagesButton";
 import { GameDataModal } from "@/components/GameDataModal";
 import { FugurasModal } from "@/components/FugurasModal";
 import { Database } from "lucide-react";
@@ -246,22 +245,12 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
               </>
             )}
             {realm === "br" && auth.can("items.game_sync") && <GameSyncButton />}
-            {auth.can("items.export_images") && <ExportItemImagesButton realm={realm} />}
             {auth.can("events.access") && (
               <button
                 onClick={() => navigate("/eventos")}
                 className="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-muted transition-all"
               >
                 <FileSpreadsheet className="h-3.5 w-3.5" /> Criação de Eventos
-              </button>
-            )}
-            {auth.can("events.access") && (
-              <button
-                onClick={() => navigate("/eventos/novos")}
-                className="flex items-center gap-1.5 rounded-md border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground hover:bg-muted transition-all"
-                title="Documentos, eventos anteriores e pré-definições dos servidores novos (s402)"
-              >
-                <FileSpreadsheet className="h-3.5 w-3.5" /> Eventos – Servidores Novos
               </button>
             )}
             {(auth.can("codes.request") || auth.can("codes.manage")) && (
