@@ -37,6 +37,18 @@ const shortDate = (iso: string) => {
 export const periodTitle = (p: Pick<SchedulePeriod, "label" | "start_date" | "end_date">) =>
   p.label.trim() || (p.start_date === p.end_date ? shortDate(p.start_date) : `${shortDate(p.start_date)} - ${shortDate(p.end_date)}`);
 
+/** Segunda-feira da semana do dia (as semanas do cronograma começam na segunda). */
+export function mondayOf(iso: string): string {
+  const dow = parseDay(iso).getDay(); // 0 = domingo
+  return addDays(iso, dow === 0 ? -6 : 1 - dow);
+}
+
+/** Primeira segunda-feira no dia ou depois dele. */
+export function nextMonday(iso: string): string {
+  const monday = mondayOf(iso);
+  return monday === iso ? iso : addDays(monday, 7);
+}
+
 /** Dias do período ("2026-10-13", "2026-10-14"...), no máximo 62. */
 export function periodDays(p: Pick<SchedulePeriod, "start_date" | "end_date">): string[] {
   const days: string[] = [];
@@ -178,9 +190,10 @@ export function useSchedule() {
   /** Novo período logo depois deste, com a mesma duração e os mesmos eventos. */
   const duplicatePeriod = useCallback(async (period: SchedulePeriod) => {
     const length = Math.round((parseDay(period.end_date).getTime() - parseDay(period.start_date).getTime()) / 86_400_000);
-    const start = addDays(period.end_date, 1);
+    // A cópia começa na segunda-feira seguinte ao fim do período.
+    const start = nextMonday(addDays(period.end_date, 1));
     // As datas das atividades andam junto com o período.
-    const shift = length + 1;
+    const shift = Math.round((parseDay(start).getTime() - parseDay(period.start_date).getTime()) / 86_400_000);
     const shifted = Object.fromEntries(Object.entries(entriesByPeriod.get(period.id) ?? {}).map(([cat, items]) =>
       [cat, items.map((it) => ({ ...it, date: it.date ? addDays(it.date, shift) : null }))]));
     return savePeriod({ start_date: start, end_date: addDays(start, length), label: "", theme: period.theme, notes: period.notes }, shifted);

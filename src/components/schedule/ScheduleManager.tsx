@@ -6,7 +6,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  CATEGORY_COLORS, addDays, isCurrentPeriod, periodTitle, toIsoDay, type ScheduleApi, type ScheduleCategory, type ScheduleSection,
+  CATEGORY_COLORS, addDays, isCurrentPeriod, mondayOf, nextMonday, periodTitle, toIsoDay, type ScheduleApi, type ScheduleCategory, type ScheduleSection,
 } from "@/hooks/useSchedule";
 import { SchedulePeriodDialog, type PeriodDraft } from "./SchedulePeriodDialog";
 
@@ -32,7 +32,8 @@ export function ScheduleManager({ schedule, open, onOpenChange }: Props) {
 
   const newPeriod = () => {
     const last = schedule.periods[schedule.periods.length - 1];
-    const start = last ? addDays(last.end_date, 1) : toIsoDay(new Date());
+    // Semanas de segunda a domingo: depois do último período ou a semana atual.
+    const start = last ? nextMonday(addDays(last.end_date, 1)) : mondayOf(toIsoDay(new Date()));
     setPeriod({ start_date: start, end_date: addDays(start, 6), label: "", theme: "", notes: "" });
   };
 
@@ -133,7 +134,7 @@ function SectionEditor({ schedule, section, isFirst, isLast }: { schedule: Sched
       <div className="space-y-1 pl-2">
         {cats.map((c, i) => <CategoryRow key={c.id} schedule={schedule} category={c} isFirst={i === 0} isLast={i === cats.length - 1} />)}
         <NewNameForm
-          placeholder="Nova categoria (ex.: Faça se Puder)"
+          placeholder="Nova semana (Ex: Dia das mães)"
           label="Adicionar categoria"
           onAdd={(n) => attempt(() => schedule.saveCategory({ section_id: section.id, name: n, color: CATEGORY_COLORS[cats.length % CATEGORY_COLORS.length] }))}
         />

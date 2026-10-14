@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { dayLabel, periodDays, periodTitle, type PeriodEntries, type ScheduleApi, type ScheduleItem, type SchedulePeriod } from "@/hooks/useSchedule";
+import { addDays, dayLabel, mondayOf, periodDays, periodTitle, type PeriodEntries, type ScheduleApi, type ScheduleItem, type SchedulePeriod } from "@/hooks/useSchedule";
 
 export type PeriodDraft = Omit<SchedulePeriod, "id" | "created_at" | "updated_at"> & { id?: string };
 
@@ -107,7 +107,17 @@ export function SchedulePeriodDialog({ schedule, period, onClose }: Props) {
         <div className="grid gap-3 sm:grid-cols-4">
           <div className="space-y-1">
             <Label htmlFor="sp-start">Início</Label>
-            <Input id="sp-start" type="date" value={draft.start_date} onChange={(e) => set({ start_date: e.target.value })} />
+            <Input
+              id="sp-start"
+              type="date"
+              value={draft.start_date}
+              onChange={(e) => {
+                // A semana sempre começa na segunda-feira e vai até o domingo.
+                const start = e.target.value ? mondayOf(e.target.value) : "";
+                set({ start_date: start, end_date: start ? addDays(start, 6) : draft.end_date });
+              }}
+            />
+            <p className="text-[10px] text-muted-foreground">Sempre segunda-feira</p>
           </div>
           <div className="space-y-1">
             <Label htmlFor="sp-end">Fim</Label>

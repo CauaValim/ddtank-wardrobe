@@ -1,7 +1,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { describe, expect, it, vi } from "vitest";
-import { addDays, dayLabel, isCurrentPeriod, periodDays, periodTitle, type ScheduleApi } from "@/hooks/useSchedule";
+import { addDays, dayLabel, isCurrentPeriod, mondayOf, nextMonday, periodDays, periodTitle, type ScheduleApi } from "@/hooks/useSchedule";
 import { ScheduleManager } from "./ScheduleManager";
 import { SchedulePeriodDialog } from "./SchedulePeriodDialog";
 import { PendenciesPanel } from "./PendenciesPanel";
@@ -53,6 +53,12 @@ describe("cronograma", () => {
     expect(isCurrentPeriod(period, "2026-10-12")).toBe(false);
     expect(periodDays(period)).toEqual(["2026-10-05", "2026-10-06", "2026-10-07", "2026-10-08", "2026-10-09", "2026-10-10", "2026-10-11"]);
     expect(dayLabel("2026-10-17")).toBe("Sáb 17/10");
+    // Semanas sempre de segunda a domingo.
+    expect(mondayOf("2026-10-14")).toBe("2026-10-12");
+    expect(mondayOf("2026-10-18")).toBe("2026-10-12");
+    expect(mondayOf("2026-10-12")).toBe("2026-10-12");
+    expect(nextMonday("2026-10-13")).toBe("2026-10-19");
+    expect(nextMonday("2026-10-19")).toBe("2026-10-19");
   });
 
   it("mostra seções, categorias e os eventos do período para edição", () => {
