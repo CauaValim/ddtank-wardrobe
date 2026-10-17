@@ -13,6 +13,7 @@ import { BulkTypeMover } from "@/components/BulkTypeMover";
 import { IdFillerModal } from "@/components/IdFillerModal";
 import { ItemValidatorModal } from "@/components/ItemValidatorModal";
 import { NotificationBell } from "@/components/NotificationBell";
+import { HeaderSearch } from "@/components/HeaderSearch";
 import { GameSyncButton } from "@/components/GameSyncButton";
 import { GameDataModal } from "@/components/GameDataModal";
 import { FugurasModal } from "@/components/FugurasModal";
@@ -51,6 +52,8 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
   const [selectedItem, setSelectedItem] = useState<GameItem | null>(null);
   const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set());
   const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
+  /** Começo da busca e da lista de itens (a lupa do topo rola até aqui ao buscar). */
+  const resultsTopRef = useRef<HTMLDivElement>(null);
   const [onlyChests, setOnlyChests] = useState(false);
   const [idFillerOpen, setIdFillerOpen] = useState(false);
   const [validatorOpen, setValidatorOpen] = useState(false);
@@ -250,6 +253,7 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
 
         {/* Segunda linha: páginas do painel à esquerda e ações dos itens à direita. */}
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-2 px-4 pb-3 sm:px-6">
+          <div className="flex flex-wrap items-center gap-2">
           <nav className="flex items-center gap-0.5 rounded-lg border border-border bg-secondary/60 p-0.5" aria-label="Páginas do painel">
             {auth.can("events.access") && (
               <button onClick={() => navigate("/eventos")} className={NAV_BUTTON}>
@@ -265,6 +269,8 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
               <Database className="h-3.5 w-3.5" /> Dados do Jogo
             </button>
           </nav>
+          <HeaderSearch value={searchQuery} onChange={setSearchQuery} resultsTop={resultsTopRef} />
+          </div>
 
           {(auth.can("items.manage") || (realm === "br" && auth.can("items.game_sync"))) && (
             <div className="flex items-center gap-1.5">
@@ -293,7 +299,7 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
       </header>
 
       {/* Search & Types */}
-      <div className="mx-auto w-full max-w-7xl px-4 py-4 sm:px-6 space-y-3">
+      <div ref={resultsTopRef} className="mx-auto w-full max-w-7xl px-4 py-4 sm:px-6 space-y-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="relative max-w-md flex-1">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
