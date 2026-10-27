@@ -356,6 +356,7 @@ export type Database = {
           defence: number | null
           desc: string | null
           floor_price: number | null
+          game_added_at: string | null
           id: number
           image_url: string | null
           is_callback: boolean | null
@@ -406,6 +407,7 @@ export type Database = {
           defence?: number | null
           desc?: string | null
           floor_price?: number | null
+          game_added_at?: string | null
           id: number
           image_url?: string | null
           is_callback?: boolean | null
@@ -456,6 +458,7 @@ export type Database = {
           defence?: number | null
           desc?: string | null
           floor_price?: number | null
+          game_added_at?: string | null
           id?: number
           image_url?: string | null
           is_callback?: boolean | null
