@@ -90,6 +90,17 @@ const NOVIDADES_WINDOW_MS = 60 * 24 * 60 * 60 * 1000; // 2 meses
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const PAGE_SIZE = 1000;
 
+/** Mais novo no jogo primeiro: data do jogo, depois a data no painel e, por fim, o ID maior. */
+export function newestInGameFirst(a: GameItem, b: GameItem): number {
+  const ga = a.attributes.game_added_at ?? "";
+  const gb = b.attributes.game_added_at ?? "";
+  if (ga !== gb) return gb.localeCompare(ga);
+  const ca = a.createdAt ?? "";
+  const cb = b.createdAt ?? "";
+  if (ca !== cb) return cb.localeCompare(ca);
+  return Number(b.id) - Number(a.id);
+}
+
 function parseRows(rows: any[]): { items: GameItem[]; images: Map<string, string> } {
   const parsed: GameItem[] = [];
   const loadedImages = new Map<string, string>();
@@ -196,12 +207,14 @@ export function useItemStore(realm: Realm = "br") {
   const [crossRealmIds, setCrossRealmIds] = useState<Set<string>>(new Set());
   const novidadesKey = `novidades-${realm}`;
   const [manualNovidades, setNovidadesIds] = useState<Set<string>>(() => loadNovidades(realm));
-  // Novidades: itens adicionados nos últimos 2 meses (pelo botão do jogo ou planilha)
+  // Novidades: itens adicionados nos últimos 2 meses. Vale a data em que o item entrou no jogo
+  // (AddTime, gravado pela sincronização); sem ela, a data em que entrou no painel.
   const novidadesIds = useMemo(() => {
     const cutoff = Date.now() - NOVIDADES_WINDOW_MS;
     const set = new Set<string>();
     items.forEach((i) => {
-      if (!i.createdAt || new Date(i.createdAt).getTime() >= cutoff) set.add(i.id);
+      const at = i.attributes.game_added_at || i.createdAt;
+      if (!at || new Date(at).getTime() >= cutoff) set.add(i.id);
     });
     return set;
   }, [items]);
@@ -594,7 +607,8 @@ export function useItemStore(realm: Realm = "br") {
     if (showFuguras && fugurasIds.size > 0) {
       result = result.filter((item) => fugurasIds.has(item.id));
     } else if (showNovidades && novidadesIds.size > 0) {
-      result = result.filter((item) => novidadesIds.has(item.id));
+      // Na ordem em que entraram no jogo, do mais novo para o mais antigo.
+      result = result.filter((item) => novidadesIds.has(item.id)).sort(newestInGameFirst);
     }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();

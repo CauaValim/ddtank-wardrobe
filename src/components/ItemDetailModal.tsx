@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { getTypeName } from "@/lib/itemTypes";
 import type { GameItem } from "@/types/item";
 import { hasParsableContents, isOpenablePackage } from "@/lib/packageDescParser";
-import { accessoryExp, isSoldByQuantity, itemStats, renewalOffers } from "@/lib/itemDetail";
+import { accessoryExp, gameText, isSoldByQuantity, itemStats, renewalOffers } from "@/lib/itemDetail";
 import { useGameData } from "@/hooks/useGameData";
 import { MountStats, SuitInfo } from "@/components/ItemGameExtras";
 import { useItemGameExtras } from "@/hooks/useItemGameExtras";
@@ -114,7 +114,7 @@ export function ItemDetailModal({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-h-[85vh] max-w-sm overflow-y-auto border-border bg-card p-4">
+      <DialogContent className="max-h-[85vh] max-w-sm overflow-y-auto overflow-x-hidden border-border bg-card p-4 [&>*]:min-w-0">
         <DialogTitle className="sr-only">{item.name}</DialogTitle>
         <div className="flex flex-col items-center gap-2">
           <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-lg bg-secondary">
@@ -130,7 +130,7 @@ export function ItemDetailModal({
             )}
             <span className="rounded border border-border bg-secondary px-1.5 py-0.5 text-[10px] font-semibold uppercase text-muted-foreground">{typeName}</span>
           </div>
-          <h2 className="text-center text-sm font-bold text-card-foreground">{item.name}</h2>
+          <h2 className="text-center text-sm font-bold text-card-foreground [overflow-wrap:anywhere]">{gameText(item.name)}</h2>
         </div>
 
         <Tabs value={tab} onValueChange={setTab} className="mt-2">
@@ -165,7 +165,7 @@ export function ItemDetailModal({
             )}
             <div className="w-full rounded-md bg-secondary px-2 py-1.5">
               <span className="text-[10px] text-muted-foreground">Descrição</span>
-              <p className="text-xs text-card-foreground whitespace-pre-wrap">{item.attributes.desc?.trim() || "Descrição não disponível no jogo."}</p>
+              <p className="text-xs text-card-foreground whitespace-pre-wrap [overflow-wrap:anywhere]">{gameText(item.attributes.desc ?? "").trim() || "Descrição não disponível no jogo."}</p>
             </div>
             {exp && (
               <div className="w-full rounded-md border border-primary/30 bg-primary/10 px-2 py-1.5">

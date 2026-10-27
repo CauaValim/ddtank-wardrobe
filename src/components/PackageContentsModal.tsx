@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { PackageOpen, X, Package } from "lucide-react";
+import { gameText } from "@/lib/itemDetail";
 import { supabase } from "@/integrations/supabase/client";
 import type { GameItem } from "@/types/item";
 import type { Realm } from "@/hooks/useItemStore";
@@ -154,7 +155,7 @@ export function PackageContentsModal({
       aria-labelledby="package-contents-title"
     >
       <div
-        className="bg-card w-full max-w-md rounded-3xl overflow-hidden shadow-2xl border border-border relative p-6 flex flex-col max-h-[85vh]"
+        className="bg-card w-full max-w-md rounded-3xl overflow-hidden shadow-2xl border border-border relative p-6 flex flex-col max-h-[85vh] [overflow-wrap:anywhere]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="absolute top-4 right-4 flex items-center gap-2 z-10">
@@ -176,7 +177,7 @@ export function PackageContentsModal({
               id="package-contents-title"
               className="text-xl font-black text-card-foreground leading-tight line-clamp-2"
             >
-              {packageItem.name}
+              {gameText(packageItem.name)}
             </h3>
             <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-500">
               Conteúdo do Baú
@@ -210,11 +211,12 @@ export function PackageContentsModal({
                  (contentItem ? getItemImage(String(contentItem.id)) : "") ||
                  entry.imageUrl;
               // Moedas e pontos do jogo (IDs negativos) não estão na lista de itens: usa o nome do jogo.
-              const name =
+              const name = gameText(
                 contentItem?.name ??
                 entry.content_name ??
                 entry.name ??
-                `Item #${entry.content_item_id}`;
+                `Item #${entry.content_item_id}`,
+              );
 
               return (
                 <div

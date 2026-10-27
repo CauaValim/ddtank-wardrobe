@@ -1,5 +1,11 @@
 import type { GameItem } from "@/types/item";
 
+/**
+ * Texto do jogo para mostrar no painel: alguns itens vêm com espaços que não quebram linha
+ * (U+00A0) no lugar dos espaços, o que deixava a descrição numa linha só e quebrava a janela.
+ */
+export const gameText = (text: string) => text.replace(/[\u00a0\u2007\u202f]/g, " ");
+
 // ------------------------------------------------------------------ renovação (ShopItemList.xml)
 
 export interface RenewalOption {
