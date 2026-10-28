@@ -354,6 +354,8 @@ export type Database = {
           created_at: string
           data: string | null
           defence: number | null
+          deleted_at: string | null
+          deleted_by: string | null
           desc: string | null
           floor_price: number | null
           game_added_at: string | null
@@ -405,6 +407,8 @@ export type Database = {
           created_at?: string
           data?: string | null
           defence?: number | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           desc?: string | null
           floor_price?: number | null
           game_added_at?: string | null
@@ -456,6 +460,8 @@ export type Database = {
           created_at?: string
           data?: string | null
           defence?: number | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           desc?: string | null
           floor_price?: number | null
           game_added_at?: string | null
@@ -510,6 +516,8 @@ export type Database = {
           created_at: string
           data: string | null
           defence: number | null
+          deleted_at: string | null
+          deleted_by: string | null
           desc: string | null
           floor_price: number | null
           id: number
@@ -560,6 +568,8 @@ export type Database = {
           created_at?: string
           data?: string | null
           defence?: number | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           desc?: string | null
           floor_price?: number | null
           id: number
@@ -610,6 +620,8 @@ export type Database = {
           created_at?: string
           data?: string | null
           defence?: number | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           desc?: string | null
           floor_price?: number | null
           id?: number
