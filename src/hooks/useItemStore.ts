@@ -91,11 +91,12 @@ const NOVIDADES_WINDOW_MS = 60 * 24 * 60 * 60 * 1000; // 2 meses
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const PAGE_SIZE = 1000;
 
-/** Mais novo no jogo primeiro: data do jogo, depois a data no painel e, por fim, o ID maior. */
+/**
+ * Mais novo primeiro: data em que o item entrou no painel (a sincronização o encontrou no jogo) e,
+ * na mesma sincronização, o ID maior (os IDs do jogo crescem conforme os itens são criados).
+ * O AddTime do jogo não serve: o servidor reescreve a data de quase todos os itens a cada recarga.
+ */
 export function newestInGameFirst(a: GameItem, b: GameItem): number {
-  const ga = a.attributes.game_added_at ?? "";
-  const gb = b.attributes.game_added_at ?? "";
-  if (ga !== gb) return gb.localeCompare(ga);
   const ca = a.createdAt ?? "";
   const cb = b.createdAt ?? "";
   if (ca !== cb) return cb.localeCompare(ca);
@@ -208,8 +209,7 @@ export function useItemStore(realm: Realm = "br") {
   const [crossRealmIds, setCrossRealmIds] = useState<Set<string>>(new Set());
   const novidadesKey = `novidades-${realm}`;
   const [manualNovidades, setNovidadesIds] = useState<Set<string>>(() => loadNovidades(realm));
-  // Novidades: itens adicionados nos últimos 2 meses. Vale a data em que o item entrou no jogo
-  // (AddTime, gravado pela sincronização); sem ela, a data em que entrou no painel.
+  // Novidades: itens que entraram no painel nos últimos 2 meses (pela sincronização com o jogo ou planilha).
   /** Itens visíveis (sem os marcados como excluídos) e os da Lixeira. */
   const activeItems = useMemo(() => items.filter((i) => !i.attributes.deleted_at), [items]);
   const deletedItems = useMemo(() => items.filter((i) => !!i.attributes.deleted_at), [items]);
@@ -219,8 +219,7 @@ export function useItemStore(realm: Realm = "br") {
     const cutoff = Date.now() - NOVIDADES_WINDOW_MS;
     const set = new Set<string>();
     activeItems.forEach((i) => {
-      const at = i.attributes.game_added_at || i.createdAt;
-      if (!at || new Date(at).getTime() >= cutoff) set.add(i.id);
+      if (!i.createdAt || new Date(i.createdAt).getTime() >= cutoff) set.add(i.id);
     });
     return set;
   }, [activeItems]);

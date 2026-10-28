@@ -40,16 +40,6 @@ function parseItems(xml: string) {
 const num = (v?: string) => (v == null || v === "" || isNaN(Number(v)) ? null : Number(v));
 const bool = (v?: string) => (v == null ? null : v === "true" || v === "1");
 
-/** AddTime do jogo ("2026/9/24 5:19:21") -> "2026-09-24 05:19:21" (data em que o item entrou no jogo). */
-export function gameAddedAt(v?: string): string | null {
-  const m = /^(\d{4})\/(\d{1,2})\/(\d{1,2})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/.exec((v ?? "").trim());
-  if (!m) return null;
-  const p2 = (x?: string) => (x ?? "0").padStart(2, "0");
-  return `${m[1]}-${p2(m[2])}-${p2(m[3])} ${p2(m[4])}:${p2(m[5])}:${p2(m[6])}`;
-}
-/** Por execução: itens antigos que ganham a data do jogo (o resto entra nas próximas). */
-const MAX_BACKFILL_GROUPS = 400;
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   try {
@@ -74,25 +64,13 @@ Deno.serve(async (req) => {
     // Nomes de todos os itens do jogo, inclusive moedas e pontos (IDs negativos), para os pacotes.
     const names = new Map(all.filter((a) => a.TemplateID && a.Name).map((a) => [Number(a.TemplateID), a.Name]));
 
-    // IDs existentes (append-only) e quais ainda não têm a data do jogo.
+    // IDs existentes (append-only)
     const existing = new Set<number>();
-    const withoutDate = new Set<number>();
-    // Banco sem a coluna game_added_at (migração ainda não aplicada): segue sem a data.
-    let hasDateColumn = true;
-    const page = (from: number) =>
-      admin.from("items").select(hasDateColumn ? "id, game_added_at" : "id").order("id", { ascending: true }).range(from, from + 999);
     for (let from = 0; ; from += 1000) {
-      let { data, error } = await page(from);
-      if (error && from === 0 && hasDateColumn) {
-        hasDateColumn = false;
-        ({ data, error } = await page(from));
-      }
+      const { data, error } = await admin.from("items").select("id").order("id", { ascending: true }).range(from, from + 999);
       if (error) throw error;
-      (data ?? []).forEach((r: { id: number; game_added_at?: string | null }) => {
-        existing.add(Number(r.id));
-        if (hasDateColumn && !r.game_added_at) withoutDate.add(Number(r.id));
-      });
-      if (!data || data.length < 1000) break;
+      data.forEach((r) => existing.add(Number(r.id)));
+      if (data.length < 1000) break;
     }
 
     const fresh = raw.filter((a) => !existing.has(Number(a.TemplateID)));
@@ -123,33 +101,11 @@ Deno.serve(async (req) => {
       can_transfer: bool(a.CanTransfer),
       attribute1: a.Property1 ?? null, attribute2: a.Property2 ?? null, attribute3: a.Property3 ?? null, attribute4: a.Property4 ?? null,
       attribute5: a.Property5 ?? null, attribute6: a.Property6 ?? null, attribute7: a.Property7 ?? null, attribute8: a.Property8 ?? null,
-      ...(hasDateColumn ? { game_added_at: gameAddedAt(a.AddTime) } : {}),
     }));
 
     for (let i = 0; i < rows.length; i += 500) {
       const { error } = await admin.from("items").upsert(rows.slice(i, i + 500), { onConflict: "id", ignoreDuplicates: true });
       if (error) throw error;
-    }
-
-    // Itens antigos sem a data do jogo: atualiza em grupos com a mesma data (poucas chamadas).
-    let datesFilled = 0;
-    if (hasDateColumn && withoutDate.size) {
-      const byDate = new Map<string, number[]>();
-      for (const a of raw) {
-        const id = Number(a.TemplateID);
-        const at = gameAddedAt(a.AddTime);
-        if (!at || !withoutDate.has(id)) continue;
-        const list = byDate.get(at);
-        if (list) list.push(id);
-        else byDate.set(at, [id]);
-      }
-      for (const [at, ids] of [...byDate].slice(0, MAX_BACKFILL_GROUPS)) {
-        if (Date.now() - startedAt > 40_000) break;
-        for (let i = 0; i < ids.length; i += 500) {
-          const { error } = await admin.from("items").update({ game_added_at: at }).in("id", ids.slice(i, i + 500));
-          if (!error) datesFilled += Math.min(500, ids.length - i);
-        }
-      }
     }
 
     // Verificação de imagens: todos os itens sem imagem (novos e antigos)
@@ -196,7 +152,7 @@ Deno.serve(async (req) => {
     }
     const { count: stillMissing } = await admin.from("items").select("id", { count: "exact", head: true }).is("image_url", null);
 
-    return json({ totalGame: raw.length, added: rows.length, newIds: rows.map((r) => r.id), images, stillMissing, packages, titles, datesFilled });
+    return json({ totalGame: raw.length, added: rows.length, newIds: rows.map((r) => r.id), images, stillMissing, packages, titles });
   } catch (e) {
     return json({ error: (e as Error).message }, 500);
   }
