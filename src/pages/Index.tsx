@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import { Search, Package, Gamepad2, MousePointerClick, CheckSquare, LogOut, Users, FileSpreadsheet, Sparkles, Shapes, ClipboardCheck, Ticket, PackageOpen, Filter, X } from "lucide-react";
+import { Search, Package, Gamepad2, MousePointerClick, CheckSquare, LogOut, Users, FileSpreadsheet, Sparkles, Shapes, ClipboardCheck, Ticket, PackageOpen, Filter, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { CategoryFilterDialog } from "@/components/CategoryFilterDialog";
 import { isOpenablePackage } from "@/lib/packageDescParser";
@@ -47,7 +47,13 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
     novidadesCount,
     showNovidades,
     setShowNovidades,
+    deletedCount,
+    showTrash,
+    setShowTrash,
+    deleteItems,
+    restoreItems,
   } = useItemStore(realm);
+  const canManageItems = auth.can("items.manage");
 
   const [selectedItem, setSelectedItem] = useState<GameItem | null>(null);
   const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set());
@@ -181,6 +187,20 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
     setSelectedIds(new Set());
     setSelectionMode(false);
   }, []);
+
+  /** Excluir do painel (vai para a Lixeira) ou restaurar, com confirmação. */
+  const changeDeleted = useCallback(async (ids: string[], deleted: boolean) => {
+    if (ids.length === 0) return false;
+    const what = ids.length === 1 ? "este item" : `estes ${ids.length} itens`;
+    if (deleted && !confirm(`Excluir ${what} do painel? Ele(s) vai(ão) para a Lixeira e pode(m) ser restaurado(s) depois.`)) return false;
+    const error = deleted ? await deleteItems(ids) : await restoreItems(ids);
+    if (error) {
+      toast.error(error);
+      return false;
+    }
+    toast.success(deleted ? `${ids.length} item(ns) movido(s) para a Lixeira` : `${ids.length} item(ns) restaurado(s)`);
+    return true;
+  }, [deleteItems, restoreItems]);
 
   const handleBulkMove = useCallback(async (targetType: number) => {
     const ids = Array.from(selectedIds);
@@ -354,6 +374,18 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
               <Shapes className="h-4 w-4" />
               Fuguras
             </button>
+            {canManageItems && (deletedCount > 0 || showTrash) && (
+              <button
+                onClick={() => setShowTrash(!showTrash)}
+                className={`flex items-center gap-1.5 rounded-lg border px-3 py-2.5 text-sm font-medium transition-all ${
+                  showTrash ? "border-destructive bg-destructive text-destructive-foreground" : "border-border bg-secondary text-secondary-foreground hover:bg-muted"
+                }`}
+                title="Itens excluídos do painel (podem ser restaurados)"
+              >
+                <Trash2 className="h-4 w-4" />
+                Lixeira ({deletedCount})
+              </button>
+            )}
           </div>
           {totalCount > 0 && (
             <span className="text-sm text-muted-foreground">
@@ -450,6 +482,10 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
         selectedCount={selectedIds.size}
         onBulkMove={handleBulkMove}
         onClearSelection={clearSelection}
+        trash={showTrash}
+        onBulkDelete={canManageItems ? async () => {
+          if (await changeDeleted(Array.from(selectedIds), !showTrash)) clearSelection();
+        } : undefined}
       />
 
       {/* Detail Modal */}
@@ -475,6 +511,8 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
           setSelectedItem(null);
           setPackageItem(item);
         }}
+        onDelete={canManageItems ? async (item) => { if (await changeDeleted([item.id], true)) setSelectedItem(null); } : undefined}
+        onRestore={canManageItems ? async (item) => { if (await changeDeleted([item.id], false)) setSelectedItem(null); } : undefined}
       />
 
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Package, Copy, Check, PackageOpen, FileText, Swords, RefreshCw, Layers } from "lucide-react";
+import { Package, Copy, Check, PackageOpen, FileText, Swords, RefreshCw, Layers, RotateCcw, Trash2 } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,6 +21,9 @@ interface ItemDetailModalProps {
   realm?: "br" | "turco";
   onViewPackageContents?: (item: GameItem) => void;
   lookup?: ItemLookup;
+  /** Quem edita itens: excluir do painel (ou restaurar, se já estiver na Lixeira). */
+  onDelete?: (item: GameItem) => Promise<void>;
+  onRestore?: (item: GameItem) => Promise<void>;
 }
 
 /** Aba Renovação: preços da loja do jogo (só baixa a lista quando a aba é aberta). */
@@ -65,6 +68,8 @@ export function ItemDetailModal({
   realm = "br",
   onViewPackageContents,
   lookup,
+  onDelete,
+  onRestore,
 }: ItemDetailModalProps) {
   const [copied, setCopied] = useState(false);
   const [hasContents, setHasContents] = useState(false);
@@ -173,6 +178,28 @@ export function ItemDetailModal({
                 <p className="text-sm font-bold text-primary tabular-nums">{exp.exp.toLocaleString("pt-BR")}</p>
               </div>
             )}
+            {item.attributes.deleted_at && (
+              <p className="rounded-md bg-destructive/10 px-2 py-1.5 text-center text-[11px] text-destructive">
+                Este item está na Lixeira desde {new Date(item.attributes.deleted_at).toLocaleDateString("pt-BR")}.
+              </p>
+            )}
+            {item.attributes.deleted_at
+              ? onRestore && (
+                <button
+                  onClick={() => onRestore(item)}
+                  className="mx-auto flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-card-foreground hover:bg-muted transition-colors"
+                >
+                  <RotateCcw className="h-3.5 w-3.5" /> Restaurar item
+                </button>
+              )
+              : onDelete && (
+                <button
+                  onClick={() => onDelete(item)}
+                  className="mx-auto flex items-center gap-1.5 rounded-md border border-destructive/40 px-3 py-1.5 text-xs font-semibold text-destructive hover:bg-destructive/10 transition-colors"
+                >
+                  <Trash2 className="h-3.5 w-3.5" /> Excluir do painel
+                </button>
+              )}
           </TabsContent>
 
           <TabsContent value="stats">

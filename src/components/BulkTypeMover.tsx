@@ -1,16 +1,21 @@
-import { ArrowRightLeft, X } from "lucide-react";
+import { ArrowRightLeft, RotateCcw, Trash2, X } from "lucide-react";
 import { getTypeGroups, ITEM_TYPE_MAP } from "@/lib/itemTypes";
 
 interface BulkTypeMoverProps {
   selectedCount: number;
   onBulkMove: (targetTypeNumber: number) => Promise<void>;
   onClearSelection: () => void;
+  /** Excluir do painel os selecionados (ou restaurar, na Lixeira). */
+  onBulkDelete?: () => Promise<void>;
+  trash?: boolean;
 }
 
 export function BulkTypeMover({
   selectedCount,
   onBulkMove,
   onClearSelection,
+  onBulkDelete,
+  trash = false,
 }: BulkTypeMoverProps) {
   if (selectedCount === 0) return null;
 
@@ -39,6 +44,18 @@ export function BulkTypeMover({
             </button>
           ))}
         </div>
+
+        {onBulkDelete && (
+          <button
+            onClick={onBulkDelete}
+            className={`flex items-center gap-1 rounded-md border px-2.5 py-1.5 text-xs font-medium transition-all ${
+              trash ? "border-border bg-secondary text-secondary-foreground hover:bg-muted" : "border-destructive/40 text-destructive hover:bg-destructive/10"
+            }`}
+          >
+            {trash ? <RotateCcw className="h-3.5 w-3.5" /> : <Trash2 className="h-3.5 w-3.5" />}
+            {trash ? "Restaurar" : "Excluir"}
+          </button>
+        )}
 
         <button
           onClick={onClearSelection}

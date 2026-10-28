@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import type { ImportedImage } from "@/lib/fileParser";
@@ -209,15 +210,20 @@ export function useItemStore(realm: Realm = "br") {
   const [manualNovidades, setNovidadesIds] = useState<Set<string>>(() => loadNovidades(realm));
   // Novidades: itens adicionados nos últimos 2 meses. Vale a data em que o item entrou no jogo
   // (AddTime, gravado pela sincronização); sem ela, a data em que entrou no painel.
+  /** Itens visíveis (sem os marcados como excluídos) e os da Lixeira. */
+  const activeItems = useMemo(() => items.filter((i) => !i.attributes.deleted_at), [items]);
+  const deletedItems = useMemo(() => items.filter((i) => !!i.attributes.deleted_at), [items]);
+  const [showTrash, setShowTrash] = useState(false);
+
   const novidadesIds = useMemo(() => {
     const cutoff = Date.now() - NOVIDADES_WINDOW_MS;
     const set = new Set<string>();
-    items.forEach((i) => {
+    activeItems.forEach((i) => {
       const at = i.attributes.game_added_at || i.createdAt;
       if (!at || new Date(at).getTime() >= cutoff) set.add(i.id);
     });
     return set;
-  }, [items]);
+  }, [activeItems]);
   void manualNovidades;
   const [showNovidades, setShowNovidades] = useState(false);
   const [fugurasIds, setFugurasIds] = useState<Set<string>>(() => loadFuguras(realm));
@@ -603,8 +609,10 @@ export function useItemStore(realm: Realm = "br") {
   };
 
   const filteredItems = useMemo(() => {
-    let result = items;
-    if (showFuguras && fugurasIds.size > 0) {
+    let result = showTrash ? deletedItems : activeItems;
+    if (showTrash) {
+      // Lixeira: só a busca vale.
+    } else if (showFuguras && fugurasIds.size > 0) {
       result = result.filter((item) => fugurasIds.has(item.id));
     } else if (showNovidades && novidadesIds.size > 0) {
       // Na ordem em que entraram no jogo, do mais novo para o mais antigo.
@@ -621,7 +629,38 @@ export function useItemStore(realm: Realm = "br") {
       );
     }
     return result;
-  }, [items, searchQuery, crossRealmIds, showNovidades, novidadesIds, showFuguras, fugurasIds]);
+  }, [activeItems, deletedItems, showTrash, searchQuery, crossRealmIds, showNovidades, novidadesIds, showFuguras, fugurasIds]);
+
+  /**
+   * Excluir (ou restaurar) itens do painel: marca deleted_at em vez de apagar, para a sincronização
+   * com o jogo não recolocar o item. Devolve o erro, se houver.
+   */
+  const setItemsDeleted = async (itemIds: string[], deleted: boolean): Promise<string | null> => {
+    const { data: auth } = await supabase.auth.getUser();
+    const patch = deleted ? { deleted_at: new Date().toISOString(), deleted_by: auth.user?.id ?? null } : { deleted_at: null, deleted_by: null };
+    const numericIds = itemIds.map(Number);
+    for (let i = 0; i < numericIds.length; i += 500) {
+      // Colunas novas: até a Lovable gerar os tipos, a gravação é sem tipos do banco.
+      const { error } = await (supabase as unknown as SupabaseClient).from(tableName).update(patch).in("id", numericIds.slice(i, i + 500));
+      if (error) {
+        return /deleted_at|deleted_by/.test(error.message)
+          ? "A exclusão de itens ainda não existe no banco de dados. Peça para aplicar a migração da Lixeira."
+          : error.message;
+      }
+    }
+    const ids = new Set(itemIds);
+    setItems((prev) =>
+      prev.map((item) => {
+        if (!ids.has(item.id)) return item;
+        const attributes = { ...item.attributes };
+        if (deleted) attributes.deleted_at = patch.deleted_at as string;
+        else delete attributes.deleted_at;
+        return { ...item, attributes };
+      }),
+    );
+    invalidateRealmCache(realm);
+    return null;
+  };
 
   // Fonte única de imagens para cards, detalhes e conteúdo de pacotes.
   // O fallback no próprio item cobre URLs recém-carregadas da tabela antes
@@ -640,7 +679,12 @@ export function useItemStore(realm: Realm = "br") {
   return {
     items: filteredItems,
     allItems: items,
-    totalCount: items.length,
+    totalCount: activeItems.length,
+    deletedCount: deletedItems.length,
+    showTrash,
+    setShowTrash,
+    deleteItems: (ids: string[]) => setItemsDeleted(ids, true),
+    restoreItems: (ids: string[]) => setItemsDeleted(ids, false),
     searchQuery,
     setSearchQuery,
     addItems,
