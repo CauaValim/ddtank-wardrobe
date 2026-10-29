@@ -22,8 +22,13 @@ describe("registro de entrada nos eventos", () => {
       { item_id: 11804, entry_date: "2026-10-26", event_name: "Recarga", event_kind: "Recarga", source_key: "act:id-Recarga:2026-10-26 00:00:00", cost: "5.000 cupons" },
       // Na troca, a Compota é o item entregue: vira o custo, e só o item recebido entra.
       { item_id: 6488, entry_date: "2026-10-19", event_name: "Compota - A", event_kind: "Troca", source_key: "act:id-Compota - A:2026-10-19 00:00:00", cost: "3x Compota de morango" },
-      { item_id: 1122190, entry_date: "2026-10-26", event_name: "Venda", event_kind: "Venda de Munição", source_key: "act:id-Venda:2026-10-26 00:00:00", cost: "120.000 L.Cupons" },
+      { item_id: 1122190, entry_date: "2026-10-26", event_name: "Venda", event_kind: "Venda de Munição", source_key: "act:id-Venda:2026-10-26 00:00:00", cost: "120.000 L.Cupons por 1 unidade" },
     ]);
+  });
+
+  it("mostra o preço do pacote e quantas unidades vêm nele na Venda de Munição", () => {
+    const xml = activity("Venda", "19", "5", "2026-10-26", "2026-11-01", cond("g1", 2, -8) + cond("g1", 3, 15000) + reward(12262, 0, "g1", 100));
+    expect(activityEntries(xml, "2026-10-28")[0].cost).toBe("15.000 L.Cupons por 100 unidades");
   });
 
   it("junta os custos quando o item sai em mais de um andar do mesmo evento", () => {

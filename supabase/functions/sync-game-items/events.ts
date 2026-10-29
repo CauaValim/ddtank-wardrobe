@@ -54,13 +54,22 @@ const day = (v?: string) => (/^\d{4}-\d{2}-\d{2}/.test(v ?? "") ? v!.slice(0, 10
 const thousands = (v: string | number) => String(Math.round(Number(v))).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 
 /**
+ * Venda de Munição: o preço do jogo (condição 3) é por compra, e cada compra entrega o pacote
+ * inteiro (count). Ex.: "15.000 L.Cupons por 100 unidades".
+ */
+function ammoCost(price: number, currency: string, count: number): string | null {
+  if (!price) return null;
+  return `${thousands(price)} ${currency} por ${thousands(count)} ${count === 1 ? "unidade" : "unidades"}`;
+}
+
+/**
  * Custo de um prêmio pelo tipo da atividade e pelas condições do pacote dele (giftbag): itens
  * entregues na troca, valor mínimo do andar na recarga/consumo, valor por dia na recarga contínua e
  * preço na Venda de Munição. Nos outros tipos (login, missões...) não há custo.
  */
-function rewardCost(kindKey: string, cond: Record<string, string>, given: string[]): string | null {
+function rewardCost(kindKey: string, cond: Record<string, string>, given: string[], count: number): string | null {
   if (kindKey === "2/0") return given.length ? given.join(" + ") : null;
-  if (kindKey === "19/5") return Number(cond["3"]) ? `${thousands(cond["3"])} ${AMMO_CURRENCY[cond["2"]] ?? "Cupons"}` : null;
+  if (kindKey === "19/5") return ammoCost(Number(cond["3"]), AMMO_CURRENCY[cond["2"]] ?? "Cupons", count);
   if (kindKey === "0/6" || kindKey === "0/2" || kindKey === "1/1") return Number(cond["0"]) ? `${thousands(cond["0"])} cupons` : null;
   if (kindKey === "60/0") return Number(cond["2"]) ? `${thousands(cond["2"])} cupons por dia` : null;
   return null;
@@ -107,7 +116,7 @@ export function activityEntries(xml: string, today: string, names: Map<number, s
         event_name: (a.activityName ?? "").trim() || "Atividade sem nome",
         event_kind: KINDS[kindKey] ?? null,
         source_key: `act:${a.activityId}:${a.beginTime}`,
-        cost: rewardCost(kindKey, conds.get(x.giftId) ?? {}, given.get(x.giftId) ?? []),
+        cost: rewardCost(kindKey, conds.get(x.giftId) ?? {}, given.get(x.giftId) ?? [], Number(x.count) || 1),
       });
     }
   }
