@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from "react";
-import { Search, Package, Gamepad2, MousePointerClick, CheckSquare, LogOut, Users, FileSpreadsheet, Sparkles, Shapes, ClipboardCheck, Ticket, PackageOpen, Filter, Trash2, X } from "lucide-react";
+import { Search, Package, Gamepad2, MousePointerClick, CheckSquare, LogOut, Users, FileSpreadsheet, Sparkles, Shapes, ClipboardCheck, Ticket, PackageOpen, Filter, Trash2, Wallet, X } from "lucide-react";
 import { toast } from "sonner";
 import { CategoryFilterDialog } from "@/components/CategoryFilterDialog";
 import { isOpenablePackage } from "@/lib/packageDescParser";
@@ -246,6 +246,14 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
             </div>
           </div>
 
+          <div className="flex shrink-0 items-center gap-2">
+          {auth.can("finance.view") && (
+            <nav className="flex items-center rounded-lg border border-border bg-secondary/60 p-0.5" aria-label="Financeiro">
+              <button onClick={() => navigate("/financeiro")} className={NAV_BUTTON} title="Vendas da Venda de Munição, cupons e R$">
+                <Wallet className="h-3.5 w-3.5" /> Financeiro
+              </button>
+            </nav>
+          )}
           {/* Ferramentas e conta: ícones num bloco só, sempre na linha do título. */}
           <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-border bg-secondary/60 p-0.5">
             <NotificationBell userId={auth.user?.id ?? null} canSendWeekly={auth.can("schedule.edit")} className={TOOLBAR_ICON} />
@@ -268,6 +276,7 @@ const Index = ({ auth, realm = "br" }: IndexProps) => {
             <button onClick={auth.signOut} className={`${TOOLBAR_ICON} hover:text-destructive`} title="Sair" aria-label="Sair">
               <LogOut className="h-4 w-4" />
             </button>
+          </div>
           </div>
         </div>
 

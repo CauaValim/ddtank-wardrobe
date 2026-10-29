@@ -47,6 +47,12 @@ export const PERMISSION_GROUPS = [
     ],
   },
   {
+    label: "Financeiro",
+    permissions: [
+      { key: "finance.view", label: "Ver financeiro", description: "Abre a aba Financeiro: vendas da Venda de Munição, valores em cupons e em R$." },
+    ],
+  },
+  {
     label: "Usuários e cargos",
     permissions: [
       { key: "users.manage", label: "Gerenciar usuários", description: "Criar e remover contas e dar ou tirar cargos abaixo do seu cargo mais alto." },

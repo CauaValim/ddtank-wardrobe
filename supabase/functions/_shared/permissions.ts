@@ -4,7 +4,7 @@ export const PERMISSIONS = [
   "administrator",
   "items.view_ids", "items.manage", "items.game_sync", "items.export_images", "tools.id_filler", "tools.validator",
   "events.access", "events.presets", "events.item_rules", "events.history", "events.templates",
-  "schedule.edit", "codes.request", "codes.manage", "users.manage", "roles.manage",
+  "schedule.edit", "codes.request", "codes.manage", "finance.view", "users.manage", "roles.manage",
 ];
 
 export interface CallerAccess {
