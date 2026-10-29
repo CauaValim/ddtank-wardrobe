@@ -334,6 +334,36 @@ export type Database = {
           },
         ]
       }
+      item_event_entries: {
+        Row: {
+          created_at: string
+          entry_date: string
+          event_kind: string | null
+          event_name: string
+          id: string
+          item_id: number
+          source_key: string
+        }
+        Insert: {
+          created_at?: string
+          entry_date: string
+          event_kind?: string | null
+          event_name: string
+          id?: string
+          item_id: number
+          source_key: string
+        }
+        Update: {
+          created_at?: string
+          entry_date?: string
+          event_kind?: string | null
+          event_name?: string
+          id?: string
+          item_id?: number
+          source_key?: string
+        }
+        Relationships: []
+      }
       items: {
         Row: {
           agility: number | null
