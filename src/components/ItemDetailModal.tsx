@@ -31,6 +31,8 @@ interface EventEntry {
   entry_date: string;
   event_name: string;
   event_kind: string | null;
+  /** Quanto custou: itens entregues na troca, andar da recarga/consumo ou preço na Venda de Munição. */
+  cost?: string | null;
 }
 
 /** Aba Eventos: registro de quando o item entrou em cada evento (gravado pela sincronização). */
@@ -42,16 +44,20 @@ function EventsTab({ itemId }: { itemId: string }) {
     setEntries(null);
     setFailed(false);
     (async () => {
-      // Tabela nova: até a Lovable gerar os tipos, a leitura é sem tipos do banco.
-      const { data, error } = await (supabase as unknown as SupabaseClient)
-        .from("item_event_entries")
-        .select("entry_date, event_name, event_kind")
-        .eq("item_id", Number(itemId))
-        .order("entry_date", { ascending: false })
-        .limit(200);
+      // Coluna nova (cost): até a Lovable gerar os tipos, a leitura é sem tipos do banco; se a coluna
+      // ainda não existe, lê o registro sem ela.
+      const query = (columns: string) =>
+        (supabase as unknown as SupabaseClient)
+          .from("item_event_entries")
+          .select(columns)
+          .eq("item_id", Number(itemId))
+          .order("entry_date", { ascending: false })
+          .limit(200);
+      let { data, error } = await query("entry_date, event_name, event_kind, cost");
+      if (error) ({ data, error } = await query("entry_date, event_name, event_kind"));
       if (cancelled) return;
       if (error) setFailed(true);
-      else setEntries((data ?? []) as EventEntry[]);
+      else setEntries((data ?? []) as unknown as EventEntry[]);
     })();
     return () => {
       cancelled = true;
@@ -65,11 +71,14 @@ function EventsTab({ itemId }: { itemId: string }) {
   return (
     <div className="space-y-1">
       {entries.map((e, i) => (
-        <div key={i} className="flex items-center gap-2 rounded-md bg-secondary px-2 py-1.5">
+        <div key={i} className="flex items-start gap-2 rounded-md bg-secondary px-2 py-1.5">
           <span className="shrink-0 font-mono text-[11px] font-semibold text-card-foreground tabular-nums">
             {e.entry_date.split("-").reverse().join("/")}
           </span>
-          <span className="min-w-0 flex-1 text-xs text-card-foreground [overflow-wrap:anywhere]">{gameText(e.event_name)}</span>
+          <span className="min-w-0 flex-1 text-xs text-card-foreground [overflow-wrap:anywhere]">
+            {gameText(e.event_name)}
+            {e.cost && <span className="block text-[11px] text-muted-foreground">Custo: {gameText(e.cost)}</span>}
+          </span>
           {e.event_kind && <span className="shrink-0 text-[10px] uppercase text-muted-foreground">{e.event_kind}</span>}
         </div>
       ))}

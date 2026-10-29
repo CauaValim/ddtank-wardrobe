@@ -135,7 +135,7 @@ Deno.serve(async (req) => {
     try {
       const today = new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10); // horário de Brasília
       const [activities, quests] = await Promise.all([loadXml(ACTIVITY_SOURCE), loadXml(QUEST_SOURCE)]);
-      events = await syncEventEntries(admin, [...activityEntries(activities, today), ...questEntries(quests, today)]);
+      events = await syncEventEntries(admin, [...activityEntries(activities, today, names), ...questEntries(quests, today)]);
     } catch (e) {
       events = { error: (e as Error).message };
     }
