@@ -4,6 +4,7 @@ import { imageCandidates, isJpeg, repairImage } from "./images.ts";
 import { accessOf, allows } from "../_shared/permissions.ts";
 import { BOX_SOURCE, packageRows, syncPackageContents } from "./packages.ts";
 import { TITLE_SOURCE, syncTitleImages } from "./titles.ts";
+import { ACTIVITY_SOURCE, QUEST_SOURCE, activityEntries, questEntries, syncEventEntries } from "./events.ts";
 import { GAME_BASE } from "../_shared/gameApi.ts";
 
 const SOURCE = `${GAME_BASE}TemplateAllList.xml`;
@@ -16,7 +17,7 @@ async function loadXml(source = SOURCE): Promise<string> {
   const resp = await fetch(source);
   if (!resp.ok) throw new Error(`Jogo respondeu HTTP ${resp.status}`);
   const buf = new Uint8Array(await resp.arrayBuffer());
-  if (buf[0] === 0x3c) return new TextDecoder().decode(buf);
+  if (buf[0] === 0x3c || buf[0] === 0xef) return new TextDecoder().decode(buf);
   const ds = new DecompressionStream("deflate");
   const stream = new Blob([buf]).stream().pipeThrough(ds);
   return await new Response(stream).text();
@@ -129,6 +130,16 @@ Deno.serve(async (req) => {
       titles = { error: (e as Error).message };
     }
 
+    // Registro de entrada dos itens nos eventos (atividades e missões). Uma falha aqui não impede o resto.
+    let events: { entries: number } | { error: string };
+    try {
+      const today = new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10); // horário de Brasília
+      const [activities, quests] = await Promise.all([loadXml(ACTIVITY_SOURCE), loadXml(QUEST_SOURCE)]);
+      events = await syncEventEntries(admin, [...activityEntries(activities, today), ...questEntries(quests, today)]);
+    } catch (e) {
+      events = { error: (e as Error).message };
+    }
+
     const started = startedAt; // o tempo das imagens conta desde o início da função
     for (const r of missing ?? []) {
       if (Date.now() - started > 110_000) break;
@@ -152,7 +163,7 @@ Deno.serve(async (req) => {
     }
     const { count: stillMissing } = await admin.from("items").select("id", { count: "exact", head: true }).is("image_url", null);
 
-    return json({ totalGame: raw.length, added: rows.length, newIds: rows.map((r) => r.id), images, stillMissing, packages, titles });
+    return json({ totalGame: raw.length, added: rows.length, newIds: rows.map((r) => r.id), images, stillMissing, packages, titles, events });
   } catch (e) {
     return json({ error: (e as Error).message }, 500);
   }

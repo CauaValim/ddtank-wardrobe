@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { Package, Copy, Check, PackageOpen, FileText, Swords, RefreshCw, Layers, RotateCcw, Trash2 } from "lucide-react";
+import { Package, Copy, Check, PackageOpen, FileText, Swords, RefreshCw, Layers, RotateCcw, Trash2, CalendarDays } from "lucide-react";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
@@ -24,6 +25,56 @@ interface ItemDetailModalProps {
   /** Quem edita itens: excluir do painel (ou restaurar, se já estiver na Lixeira). */
   onDelete?: (item: GameItem) => Promise<void>;
   onRestore?: (item: GameItem) => Promise<void>;
+}
+
+interface EventEntry {
+  entry_date: string;
+  event_name: string;
+  event_kind: string | null;
+}
+
+/** Aba Eventos: registro de quando o item entrou em cada evento (gravado pela sincronização). */
+function EventsTab({ itemId }: { itemId: string }) {
+  const [entries, setEntries] = useState<EventEntry[] | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    let cancelled = false;
+    setEntries(null);
+    setFailed(false);
+    (async () => {
+      // Tabela nova: até a Lovable gerar os tipos, a leitura é sem tipos do banco.
+      const { data, error } = await (supabase as unknown as SupabaseClient)
+        .from("item_event_entries")
+        .select("entry_date, event_name, event_kind")
+        .eq("item_id", Number(itemId))
+        .order("entry_date", { ascending: false })
+        .limit(200);
+      if (cancelled) return;
+      if (error) setFailed(true);
+      else setEntries((data ?? []) as EventEntry[]);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [itemId]);
+  if (failed) return <p className="text-xs text-destructive">Não foi possível ler o registro de eventos.</p>;
+  if (!entries) return <p className="text-xs text-muted-foreground">Carregando o registro de eventos...</p>;
+  if (entries.length === 0) {
+    return <p className="rounded-md bg-secondary px-2 py-4 text-center text-xs text-muted-foreground">Este item ainda não entrou em nenhum evento registrado.</p>;
+  }
+  return (
+    <div className="space-y-1">
+      {entries.map((e, i) => (
+        <div key={i} className="flex items-center gap-2 rounded-md bg-secondary px-2 py-1.5">
+          <span className="shrink-0 font-mono text-[11px] font-semibold text-card-foreground tabular-nums">
+            {e.entry_date.split("-").reverse().join("/")}
+          </span>
+          <span className="min-w-0 flex-1 text-xs text-card-foreground [overflow-wrap:anywhere]">{gameText(e.event_name)}</span>
+          {e.event_kind && <span className="shrink-0 text-[10px] uppercase text-muted-foreground">{e.event_kind}</span>}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 /** Aba Renovação: preços da loja do jogo (só baixa a lista quando a aba é aberta). */
@@ -139,11 +190,12 @@ export function ItemDetailModal({
         </div>
 
         <Tabs value={tab} onValueChange={setTab} className="mt-2">
-          <TabsList className="grid h-auto w-full grid-cols-4">
+          <TabsList className="grid h-auto w-full grid-cols-5">
             <TabsTrigger value="info" className="gap-1 px-1 text-[11px]"><FileText className="h-3 w-3" /> Info</TabsTrigger>
             <TabsTrigger value="stats" className="gap-1 px-1 text-[11px]"><Swords className="h-3 w-3" /> Atributos</TabsTrigger>
             <TabsTrigger value="renewal" className="gap-1 px-1 text-[11px]"><RefreshCw className="h-3 w-3" /> Renovação</TabsTrigger>
             <TabsTrigger value="suit" className="gap-1 px-1 text-[11px]"><Layers className="h-3 w-3" /> Conjunto</TabsTrigger>
+            <TabsTrigger value="events" className="gap-1 px-1 text-[11px]"><CalendarDays className="h-3 w-3" /> Eventos</TabsTrigger>
           </TabsList>
 
           <TabsContent value="info" className="space-y-2">
@@ -229,6 +281,10 @@ export function ItemDetailModal({
             ) : (
               <p className="rounded-md bg-secondary px-2 py-4 text-center text-xs text-muted-foreground">Este item não pertence a nenhum conjunto.</p>
             )}
+          </TabsContent>
+
+          <TabsContent value="events">
+            {tab === "events" && <EventsTab itemId={item.id} />}
           </TabsContent>
         </Tabs>
       </DialogContent>
