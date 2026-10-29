@@ -336,6 +336,7 @@ export type Database = {
       }
       item_event_entries: {
         Row: {
+          cost: string | null
           created_at: string
           entry_date: string
           event_kind: string | null
@@ -345,6 +346,7 @@ export type Database = {
           source_key: string
         }
         Insert: {
+          cost?: string | null
           created_at?: string
           entry_date: string
           event_kind?: string | null
@@ -354,6 +356,7 @@ export type Database = {
           source_key: string
         }
         Update: {
+          cost?: string | null
           created_at?: string
           entry_date?: string
           event_kind?: string | null
