@@ -1,14 +1,5 @@
-User-agent: Googlebot
-Allow: /
-
-User-agent: Bingbot
-Allow: /
-
-User-agent: Twitterbot
-Allow: /
-
-User-agent: facebookexternalhit
-Allow: /
-
+# Painel interno da equipe: as páginas têm "noindex" (meta tag e cabeçalho X-Robots-Tag) para sair
+# do Google e dos outros buscadores. O rastreamento continua liberado de propósito: se for bloqueado
+# aqui, o buscador não consegue ler o "noindex" e pode manter o link nos resultados.
 User-agent: *
 Allow: /

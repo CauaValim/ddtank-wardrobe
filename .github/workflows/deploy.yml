@@ -39,6 +39,9 @@ jobs:
 
           # Nunca cachear o HTML de entrada: garante que a versao nova apareca
           <IfModule mod_headers.c>
+            # Painel interno da equipe: nao aparecer em buscadores.
+            Header always set X-Robots-Tag "noindex, nofollow, noarchive"
+
             <FilesMatch "\.(html)$">
               Header set Cache-Control "no-cache, no-store, must-revalidate"
               Header set Pragma "no-cache"
