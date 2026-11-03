@@ -58,7 +58,7 @@ Deno.serve(async (req) => {
     // DELETE user: não pode ter cargo igual ou acima do seu (exceto Administrador).
     if (req.method === "POST" && action === "delete-user") {
       const { user_id } = await req.json();
-      if (!user_id) return json({ error: "user_id é obrigatório" }, 400);
+      if (typeof user_id !== "string" || !/^[0-9a-f-]{36}$/i.test(user_id)) return json({ error: "user_id é obrigatório" }, 400);
       if (user_id === caller.id) return json({ error: "Você não pode deletar a si mesmo" }, 400);
       const target = await accessOf(supabaseAdmin, user_id);
       if (!access.admin && (target.admin || target.top >= access.top)) {
@@ -74,7 +74,11 @@ Deno.serve(async (req) => {
     // CREATE user, já com cargos (só cargos abaixo do seu, exceto Administrador)
     if (req.method === "POST" && action === "create-user") {
       const { email, password, role_ids } = await req.json();
-      if (!email || !password) return json({ error: "Email e senha são obrigatórios" }, 400);
+      if (typeof email !== "string" || typeof password !== "string" || !email || !password) {
+        return json({ error: "Email e senha são obrigatórios" }, 400);
+      }
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) || email.length > 254) return json({ error: "Email inválido" }, 400);
+      if (password.length < 10) return json({ error: "A senha precisa ter pelo menos 10 caracteres" }, 400);
       const ids: string[] = Array.isArray(role_ids) ? role_ids.filter((x: unknown) => typeof x === "string") : [];
       if (ids.length) {
         const { data: roles, error } = await supabaseAdmin.from("panel_roles").select("id, position").in("id", ids);
@@ -86,9 +90,11 @@ Deno.serve(async (req) => {
       }
 
       const { data: newUser, error: createErr } = await supabaseAdmin.auth.admin.createUser({
-        email,
+        email: email.trim(),
         password,
         email_confirm: true,
+        // Conta da equipe (private.is_panel_member): pode ler os dados do painel mesmo sem cargo.
+        app_metadata: { panel_member: true },
       });
       if (createErr) throw createErr;
       if (ids.length) {

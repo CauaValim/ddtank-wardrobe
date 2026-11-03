@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import { accessOf, allows } from "../_shared/permissions.ts";
+import { fetchPublicImage, parseImageMappings } from "../_shared/safeFetch.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -20,7 +21,12 @@ Deno.serve(async (req) => {
     if (!caller?.user || !allows(await accessOf(supabase, caller.user.id), "items.manage")) {
       return new Response(JSON.stringify({ error: "Sem permissão" }), { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-    const { mappings } = await req.json() as { mappings: Array<{ id: number; url: string }> };
+    let mappings: { id: number; url: string }[];
+    try {
+      mappings = parseImageMappings(await req.json());
+    } catch (e) {
+      return new Response(JSON.stringify({ error: (e as Error).message }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
     // Group ids by URL to dedupe downloads
     const byUrl = new Map<string, number[]>();
@@ -42,14 +48,8 @@ Deno.serve(async (req) => {
         const uniqueDir = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
         const path = `${canonicalId}/${uniqueDir}.png`;
 
-        // Download
-        const resp = await fetch(url);
-        if (!resp.ok) {
-          failed++;
-          errors.push(`${url}: HTTP ${resp.status}`);
-          continue;
-        }
-        const buf = new Uint8Array(await resp.arrayBuffer());
+        // Download só de endereços públicos, até 5 MB e só imagens (sem SSRF).
+        const buf = await fetchPublicImage(url);
 
         // Upload
         const { error: upErr } = await supabase.storage

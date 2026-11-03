@@ -25,3 +25,15 @@ export async function accessOf(client: any, userId: string): Promise<CallerAcces
 }
 
 export const allows = (access: CallerAccess, permission: string) => access.admin || access.permissions.has(permission);
+
+/**
+ * Conta da equipe (mesma regra de private.is_panel_member no banco): tem cargo no painel, tem cargo
+ * antigo ou foi criada por um administrador. Contas criadas pelo cadastro público não passam.
+ */
+export async function isPanelMember(client: any, user: { id: string; app_metadata?: Record<string, unknown> }): Promise<boolean> {
+  if (user.app_metadata?.panel_member === true) return true;
+  const { count: roles } = await client.from("user_panel_roles").select("role_id", { count: "exact", head: true }).eq("user_id", user.id);
+  if (roles) return true;
+  const { count: legacy } = await client.from("user_roles").select("user_id", { count: "exact", head: true }).eq("user_id", user.id);
+  return !!legacy;
+}

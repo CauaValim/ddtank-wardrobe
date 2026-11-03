@@ -93,6 +93,10 @@ export default function UserManagement() {
 
   const handleCreate = async () => {
     if (!newEmail || !newPassword) return;
+    if (newPassword.length < 10) {
+      toast({ title: "Senha curta", description: "A senha precisa ter pelo menos 10 caracteres.", variant: "destructive" });
+      return;
+    }
     setSaving(true);
     try {
       await callManageUsers("create-user", "POST", { email: newEmail, password: newPassword, role_ids: [...newRoles] });
@@ -267,7 +271,7 @@ export default function UserManagement() {
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-foreground" htmlFor="nu-pass">Senha</label>
-              <Input id="nu-pass" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Mínimo 6 caracteres" />
+              <Input id="nu-pass" type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Mínimo 10 caracteres" />
             </div>
             <div className="space-y-1.5">
               <p className="text-sm font-medium text-foreground">Cargos</p>

@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { GAME_BASE } from "../_shared/gameApi.ts";
+import { isPanelMember } from "../_shared/permissions.ts";
 
 const BASE = GAME_BASE;
 const ALLOWED = new Set([
@@ -144,6 +145,9 @@ Deno.serve(async (req) => {
     const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_ANON_KEY")!);
     const { data, error } = await sb.auth.getUser(token);
     if (error || !data.user) return json({ error: "Não autenticado" }, 401);
+    // Só contas da equipe (o cadastro público não dá acesso aos dados do jogo).
+    const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    if (!(await isPanelMember(admin, data.user))) return json({ error: "Sem permissão" }, 403);
 
     const body = await req.json().catch(() => ({}));
     const files: unknown = body?.files;
