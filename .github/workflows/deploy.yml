@@ -46,7 +46,7 @@ jobs:
             Header always set Referrer-Policy "strict-origin-when-cross-origin"
             Header always set Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=(), usb=()"
             Header always set Cross-Origin-Opener-Policy "same-origin"
-            Header always set Content-Security-Policy-Report-Only "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https: wss://zzuvcsskhqkuyjmiuqro.supabase.co; worker-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
+            Header always set Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https: wss://zzuvcsskhqkuyjmiuqro.supabase.co; worker-src 'self' blob:; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
             Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains" env=HTTPS
 
             <FilesMatch "\.(html)$">
